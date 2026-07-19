@@ -1,0 +1,24 @@
+{
+  "_comment": "Configuration morfAnalytics. Copier en 'morfanalytics.json' et adapter. Le service la lit via --config, ou la cherche dans le dossier courant, a cote du binaire, ou dans /etc/morfanalytics/.",
+
+  "app_name": "morfAnalytics",
+  "http_port": 8799,
+  "bind_address": "0.0.0.0",
+
+  "beacon": {
+    "_comment": "Annonce de presence sur le LAN (protocole morfBeacon, port du parc).",
+    "enabled": true,
+    "udp_port": 45454,
+    "interval_ms": 15000
+  },
+
+  "modules": [
+    {
+      "_comment": "Moteur d'analyse. Maintient un cache de travail (copie synchronisee via morfSync) et execute les analyses a la demande.",
+      "type": "analytics",
+      "id": "analytics-1",
+      "maintenance_ms": 60000,
+      "cache_dir": "cache"
+    }
+  ]
+}
