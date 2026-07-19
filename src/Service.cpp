@@ -50,6 +50,10 @@ bool Service::start() {
         pc.appName             = m_config.appName;
         pc.version             = morfanalytics::version();
         pc.instanceId          = m_config.instanceId;
+        // Capacite annoncee : c'est par elle que MeteoHub reconnait un service
+        // d'analyse, et non par son nom — que l'utilisateur peut changer.
+        // Renommer l'application n'interrompt donc pas l'integration.
+        pc.capabilities        = {QStringLiteral("advanced_analysis")};
         pc.udpPort             = m_config.beaconUdpPort;
         pc.broadcastIntervalMs = m_config.beaconIntervalMs;
         pc.statusPort          = m_http ? m_http->port() : 0;

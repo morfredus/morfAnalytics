@@ -6,7 +6,7 @@
 # __RUN_USER__ et __APP_DIR__.
 
 [Unit]
-Description=morfAnalytics — service morfSystem (a adapter)
+Description=morfAnalytics — moteur d'analyse morfSystem
 After=local-fs.target network-online.target
 Wants=network-online.target
 

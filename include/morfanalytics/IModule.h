@@ -14,17 +14,16 @@ namespace morfanalytics {
 // -----------------------------------------------------------------------------
 // IModule : LE point d'extension du service. C'est ICI que vit le METIER.
 //
-// Un "module" est une unite enfichable du service : un capteur (comme dans
-// morfSensor), une destination de notification (comme dans morfNotify), une
-// tache de collecte, etc. Chaque module :
+// Un "module" est une unite enfichable du service : une tache de collecte, un
+// moteur de calcul, une passerelle. Chaque module :
 //   - porte un id() unique et un type() (identifiant de fabrique) ;
 //   - demarre / s'arrete proprement (start / stop) ;
 //   - expose son etat courant en JSON (statusJson), agrege dans /modules ;
 //   - signale ses mises a jour (updated) pour une reaction eventuelle.
 //
-// >>> POUR CODER VOTRE SERVICE : creez une ou plusieurs sous-classes d'IModule,
-//     enregistrez-les dans ModuleFactory, adaptez les routes HTTP si besoin. <<<
-// Voir ExampleModule pour un squelette minimal fonctionnel.
+// Pour ajouter un module : creer une sous-classe d'IModule et l'enregistrer
+// dans ModuleFactory. Voir AnalyticsModule, qui detient le cache de travail,
+// pilote le collecteur et expose le registre d'analyses.
 // -----------------------------------------------------------------------------
 class IModule : public QObject {
     Q_OBJECT

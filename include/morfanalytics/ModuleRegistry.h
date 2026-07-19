@@ -38,6 +38,11 @@ public:
     QJsonArray  modulesJson() const;                 // [ {id,type,status}, ... ]
     QJsonObject moduleJson(const QString& id, bool* found) const;
 
+    // Premier module d'un type donne, ou nullptr. Permet aux routes HTTP de
+    // joindre le module competent sans que le serveur ait a le connaitre a
+    // l'avance ni a en detenir un pointeur propre.
+    IModule* firstOfType(const QString& type) const;
+
     // --- morfbeacon::IMetricsProvider ------------------------------------
     QJsonObject metrics() const override;            // resume pour /status
     QString     state() const override;              // ok | warning | starting

@@ -20,8 +20,8 @@
       "maintenance_ms": 60000,
       "cache_dir": "cache",
 
-      "_comment_source": "URL de base de MeteoHub, par exemple http://meteohub.local (mDNS) ou http://192.168.1.42. Laisse VIDE, aucune collecte n'est lancee : le service se contente d'exposer le cache deja constitue. Volontairement vide par defaut, pour qu'une valeur d'exemple ne soit jamais prise pour une adresse reelle.",
-      "source_url": "",
+      "_comment_source": "URL de base de MeteoHub. Sans ce parametre, aucune collecte n'est lancee : le service se contente d'exposer le cache deja constitue.",
+      "source_url": "http://meteohub.local",
 
       "_comment_altitude": "Altitude de la station, en metres (environ 0,12 hPa par metre). A adapter. Une altitude nulle est une valeur valide : c'est l'absence de ce parametre qui est signalee dans les analyses de pression.",
       "altitude_m": 8

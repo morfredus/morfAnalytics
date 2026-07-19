@@ -36,6 +36,14 @@ QJsonArray ModuleRegistry::modulesJson() const {
     return arr;
 }
 
+IModule* ModuleRegistry::firstOfType(const QString& type) const {
+    for (IModule* m : m_modules) {
+        if (m->type() == type)
+            return m;
+    }
+    return nullptr;
+}
+
 QJsonObject ModuleRegistry::moduleJson(const QString& id, bool* found) const {
     for (const IModule* m : m_modules) {
         if (m->id() == id) {

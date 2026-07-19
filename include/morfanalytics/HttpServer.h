@@ -21,6 +21,7 @@ class ModuleRegistry;
 // HttpServer : serveur HTTP/1.1 minimal, gerant GET *et* POST (avec corps).
 //
 // Routes fournies (a ADAPTER selon votre metier) :
+//   GET  /             -> page d'accueil HTML (etat du service et de la collecte)
 //   GET  /status        -> compatible morfBeacon (app, version, uptime, metrics)
 //   GET  /healthz       -> { "status": "ok" }
 //   GET  /modules       -> etat de tous les modules
@@ -45,7 +46,9 @@ private:
                        const QByteArray& path, const QByteArray& body);
     QByteArray handleAnalyzePost(const QByteArray& body, int& code, QByteArray& reason) const;
     QByteArray buildStatusJson() const;
-    void reply(QTcpSocket* sock, int code, const QByteArray& reason, const QByteArray& body);
+    void reply(QTcpSocket* sock, int code, const QByteArray& reason, const QByteArray& body,
+               const QByteArray& contentType = "application/json; charset=utf-8");
+    static QByteArray landingPage();
 
     ServiceConfig   m_config;
     ModuleRegistry* m_registry;

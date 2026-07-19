@@ -25,7 +25,13 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
     if (type == QLatin1String("analytics")) {
         const int maintenanceMs = def.params.value("maintenance_ms").toInt(60000);
         const QString cacheDir  = def.params.value("cache_dir").toString();
-        return new AnalyticsModule(def.id, maintenanceMs, cacheDir, parent);
+        const QString sourceUrl = def.params.value("source_url").toString();
+        // Une altitude nulle etant legitime, c'est la PRESENCE de la cle qui
+        // distingue "station au bord de mer" de "parametre oublie".
+        const bool altitudeKnown = def.params.contains("altitude_m");
+        const double altitudeM   = def.params.value("altitude_m").toDouble(0.0);
+        return new AnalyticsModule(def.id, maintenanceMs, cacheDir, sourceUrl,
+                                   altitudeM, altitudeKnown, parent);
     }
 
     // >>> AJOUTER D'AUTRES TYPES ICI (au fur et à mesure des analyses) <<<

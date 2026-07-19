@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# install-service.sh — Installe morfSensor en service systemd robuste.
+# install-service.sh — Installe morfAnalytics en service systemd robuste.
 #
 # Compile le service (si besoin), copie le binaire + la configuration dans un
 # dossier FIXE (par defaut /opt/morfanalytics), hors du clone git, puis installe et
@@ -9,8 +9,11 @@
 #
 # Usage :
 #   sudo ./scripts/linux/install-service.sh
-#   sudo MT_APP_DIR=/opt/msensor ./scripts/linux/install-service.sh   # autre dossier
-#   sudo ./scripts/linux/install-service.sh --uninstall
+#   sudo MT_APP_DIR=/opt/autre ./scripts/linux/install-service.sh   # autre dossier
+#   sudo ./scripts/linux/install-service.sh --uninstall   # retirer l'unite seule
+#
+# Pour une desinstallation COMPLETE (unite + dossier + cache), en vue d'une
+# reinstallation propre : ./scripts/linux/uninstall-service.sh
 
 set -euo pipefail
 

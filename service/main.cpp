@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Charge une configuration JSON, demarre les modules, ouvre l'API HTTP et
- * annonce sa presence sur le LAN (morfBeacon). Squelette reutilisable : le
- * comportement propre au service vit dans les modules (voir IModule).
+ * annonce sa presence sur le LAN (morfBeacon). Le comportement metier vit dans
+ * les modules (voir IModule) et, pour les calculs, dans les analyses.
  */
 
 #include <QCoreApplication>
@@ -79,8 +79,8 @@ int main(int argc, char** argv) {
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
-        QStringLiteral("morfAnalytics — squelette de service morfSystem "
-                       "(API HTTP + annonce LAN, modules enfichables)."));
+        QStringLiteral("morfAnalytics — moteur d'analyse morfSystem "
+                       "(collecte incrementale, analyses a la demande)."));
     parser.addHelpOption();
     parser.addVersionOption();
     QCommandLineOption configOpt({"c", "config"},

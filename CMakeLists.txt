@@ -1,18 +1,16 @@
 cmake_minimum_required(VERSION 3.21)
 
 # =============================================================================
-#  morfAnalytics — squelette reutilisable de service morfSystem.
+#  morfAnalytics — moteur d'analyse de l'ecosysteme morfSystem.
 #
-#  POUR CREER UN NOUVEAU SERVICE : le plus simple est le script de clonage
-#      scripts/new-service.sh   morfmonservice MorfMonService   (Linux/macOS)
-#      scripts/new-service.ps1  morfmonservice MorfMonService   (Windows)
-#  qui copie ce projet en remplacant les noms. Sinon, remplacer a la main :
-#      morfAnalytics  (nom du projet / bibliotheque)
-#      morfanalytics         (namespace, dossier include, binaire, unite systemd)
-#      MORFANALYTICS         (prefixe de macro)
+#  Recopie l'historique d'un equipement dans un cache de travail local, puis
+#  execute a la demande des analyses sur cette copie. L'equipement reste la
+#  source de verite : le service n'emet que des requetes de lecture.
 #
-#  Ensuite : coder le metier dans src/ExampleModule.* (ou de nouveaux modules),
-#  adapter la fabrique (src/ModuleFactory.cpp) et la liste de sources ci-dessous.
+#  Organisation des sources :
+#      src/collect/    recopie incrementale depuis l'equipement
+#      src/data/       cache de travail (SQLite) et serie temporelle generique
+#      src/analysis/   moteur d'analyse et jeu d'analyses meteo
 # =============================================================================
 
 # Version pilotee par le fichier VERSION (convention morfSystem).
@@ -30,9 +28,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # --- Qt : generation automatique du moc (classes QObject) -----------------
 set(CMAKE_AUTOMOC ON)
 
-# Core + Network : serveur HTTP entrant, client HTTP sortant, JSON. Ajouter
-# ici les modules Qt dont le METIER a besoin (SerialPort, Sql, ...).
-find_package(Qt6 REQUIRED COMPONENTS Core Network)
+# Core + Network : serveur HTTP entrant, client HTTP sortant, JSON.
+# Sql : cache de travail local en SQLite (pilote QSQLITE, fourni avec Qt — aucune
+# dependance supplementaire a installer sur le Raspberry Pi).
+find_package(Qt6 REQUIRED COMPONENTS Core Network Sql)
 
 # --- Dependance morfBeacon (annonce de presence sur le LAN) ---------------
 # morfBeacon est EMBARQUE (copie vendoree) dans third_party/morf/beacon, lie
@@ -44,13 +43,24 @@ if(NOT TARGET morfBeacon::morfBeacon)
 endif()
 
 # --- Bibliotheque ---------------------------------------------------------
-# >>> A ADAPTER : ajouter/retirer ici les sources de VOS modules metier. <<<
+
 add_library(morfAnalytics STATIC
     src/ModuleRegistry.cpp
     src/HttpServer.cpp
     src/Service.cpp
     src/ModuleFactory.cpp
     src/AnalyticsModule.cpp               # logique metier : moteur d'analyse
+    src/data/SampleStore.cpp              # cache de travail local (SQLite)
+    src/collect/MeteoHubCollector.cpp     # collecte incrementale depuis MeteoHub
+    src/analysis/AnalysisRegistry.cpp     # moteur d'analyse (generique)
+    src/analysis/MeteoMath.cpp            # formules meteorologiques (pures)
+    src/analysis/MeteoAnalyses.cpp        # jeu d'analyses meteo
+    include/morfanalytics/analysis/IAnalysis.h
+    include/morfanalytics/analysis/AnalysisRegistry.h
+    include/morfanalytics/analysis/MeteoMath.h
+    include/morfanalytics/data/Series.h
+    include/morfanalytics/data/SampleStore.h
+    include/morfanalytics/collect/MeteoHubCollector.h
     include/morfanalytics/IModule.h
     include/morfanalytics/ModuleRegistry.h
     include/morfanalytics/ServiceConfig.h
@@ -68,7 +78,7 @@ target_include_directories(morfAnalytics PUBLIC
 )
 
 target_link_libraries(morfAnalytics
-    PUBLIC  Qt6::Core Qt6::Network
+    PUBLIC  Qt6::Core Qt6::Network Qt6::Sql
     PRIVATE morfBeacon::morfBeacon)
 
 # Numero de version accessible depuis le code.
