@@ -13,11 +13,11 @@ scripts/new-service.sh morfwatch morfWatch        # Linux/macOS
 # scripts\new-service.ps1 morfwatch morfWatch     # Windows
 ```
 
-Un nouveau dossier `../morfWatch_travail` est créé, tous les noms remplacés. Il
+Un nouveau dossier `../morfWatch` est créé, tous les noms remplacés. Il
 **compile déjà** :
 
 ```sh
-cd ../morfWatch_travail
+cd ../morfWatch
 cmake --preset mingw && cmake --build --preset mingw
 ```
 

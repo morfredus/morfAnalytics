@@ -21,8 +21,8 @@ function Sync-One($name, $srcDir, $dstDir) {
 }
 
 # morfAnalytics n'embarque que morfBeacon. Le depot source peut s'appeler
-# « morfBeacon » ou « morfBeacon_travail » : on prend le premier trouve.
-$beaconSrc = if (Test-Path "$srcBase\morfBeacon") { "$srcBase\morfBeacon" } else { "$srcBase\morfBeacon_travail" }
+# « morfBeacon » ou « morfBeacon » : on prend le premier trouve.
+$beaconSrc = if (Test-Path "$srcBase\morfBeacon") { "$srcBase\morfBeacon" } else { "$srcBase\morfBeacon" }
 
 Sync-One "morfBeacon" $beaconSrc "$root\third_party\morf\beacon"
 Write-Output "Synchronisation terminee. Le CMakeLists vendore n'est pas modifie."
