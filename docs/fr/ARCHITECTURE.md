@@ -13,9 +13,10 @@ Service Qt (Core, Network, Sql), sans interface graphique. Le socle ne contient
 ```
 Service (façade : câble tout à partir d'une ServiceConfig)
 ├── ModuleRegistry     -> collectionne les IModule, agrège leur état
-│     └── IModule (interface, QObject)   ◀── POINT D'EXTENSION (VOTRE MÉTIER)
-│            └── ExampleModule  (démo : compteur ; à remplacer)
-├── HttpServer         -> API HTTP (GET /status /healthz /modules ; POST /example)
+│     └── IModule (interface, QObject)   ◀── POINT D'EXTENSION
+│            └── AnalyticsModule  (type « analytics » : collecte et analyses)
+├── HttpServer         -> API HTTP (GET /status /healthz /modules /analyses ;
+│                         POST /analyze)
 └── morfbeacon::Heartbeat -> annonce UDP (découverte LAN)
         ▲ IMetricsProvider
         └── ModuleRegistry expose un résumé (nombre de modules, ...)
@@ -48,7 +49,9 @@ et fournit un résumé à `/status` (via `IMetricsProvider`).
 ### `HttpServer` (QObject)
 
 Serveur HTTP/1.1 minimal gérant **GET et POST** (lecture du corps via
-`Content-Length`). Routes fournies à titre d'exemple : à adapter à votre API.
+`Content-Length`). Il expose `GET /analyses` (analyses disponibles) et
+`POST /analyze`, ainsi que les routes de service `/status`, `/healthz` et
+`/modules`.
 
 ### `Service` (façade)
 

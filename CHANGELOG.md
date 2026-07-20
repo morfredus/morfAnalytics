@@ -5,6 +5,15 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.4.1] – 2026-07-20
+
+### Corrigé
+
+- **`docs/fr/ARCHITECTURE.md` décrivait le template et non morfAnalytics** :
+  le schéma citait `ExampleModule` (inexistant ici) et les routes HTTP étaient
+  données « à titre d'exemple ». Le document décrit désormais `AnalyticsModule`
+  (type `analytics`) et les routes réelles `GET /analyses` et `POST /analyze`.
+
 ## [0.4.0] – 2026-07-19
 
 ### Ajouté
