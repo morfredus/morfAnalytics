@@ -82,7 +82,8 @@ fi
 rm -f "$NEW_UNIT"
 
 # --- Completer la configuration ------------------------------------------
-CONFIG_FILE="$APP_DIR/$SERVICE_NAME.json"
+# La configuration vit dans /etc, plus a cote du binaire.
+CONFIG_FILE="${MORF_CONFIG_DIR:-/etc/$SERVICE_NAME}/$SERVICE_NAME.json"
 EXAMPLE_FILE="$REPO_ROOT/config/$SERVICE_NAME.example.json"
 if [[ $NO_CONFIG -eq 0 && -f "$CONFIG_FILE" && -f "$EXAMPLE_FILE" ]]; then
     if command -v python3 >/dev/null 2>&1; then

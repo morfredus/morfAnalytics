@@ -13,8 +13,16 @@
   "configs": [
     {
       "source": "config/morfanalytics.json",
-      "dest": "morfanalytics.json"
+      "dest": "morfanalytics.json",
+      "migrate_from": [
+        "/opt/morfanalytics/morfanalytics.json"
+      ]
     }
   ],
-  "status_url": "http://127.0.0.1:8799/status"
+  "status_url": "http://127.0.0.1:8799/status",
+  "_comment_config_dir": "La configuration vit dans /etc, pas a cote du binaire : c'est ou un administrateur Linux regarde en premier, et la FHS est explicite la-dessus. Effacer /opt/<service> pour reinstaller proprement n'emporte donc plus les reglages.",
+  "config_dir": {
+    "linux": "/etc/morfanalytics",
+    "windows": "%ProgramData%/morfanalytics"
+  }
 }
