@@ -54,6 +54,16 @@ bool Service::start() {
         // d'analyse, et non par son nom — que l'utilisateur peut changer.
         // Renommer l'application n'interrompt donc pas l'integration.
         pc.capabilities        = {QStringLiteral("advanced_analysis")};
+
+        // morfAnalytics sert une page d'accueil : il la declare, et « web_ui »
+        // s'ajoute automatiquement aux capacites emises. Un observateur peut
+        // alors proposer un lien vers les analyses sans rien connaitre de
+        // morfAnalytics — c'est deja ainsi que MeteoHub le detecte, par capacite
+        // et jamais par nom.
+        pc.webUiPath        = QStringLiteral("/");
+        pc.webUiLabel       = QStringLiteral("Analyses");
+        pc.webUiDescription = QStringLiteral(
+            "Statistiques longue periode et correlations sur l'historique des equipements.");
         pc.udpPort             = m_config.beaconUdpPort;
         pc.broadcastIntervalMs = m_config.beaconIntervalMs;
         pc.statusPort          = m_http ? m_http->port() : 0;

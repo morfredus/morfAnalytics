@@ -667,6 +667,20 @@ QByteArray HttpServer::buildStatusJson() const {
     o["uptime_s"] = static_cast<double>(m_uptime.isValid() ? m_uptime.elapsed() / 1000 : 0);
     o["ts"]       = static_cast<double>(QDateTime::currentSecsSinceEpoch());
     o["metrics"]  = m_registry ? m_registry->metrics() : QJsonObject{};
+
+    // Detail de l'interface Web, attendu par tout consommateur ayant vu passer
+    // la capacite « web_ui » dans le heartbeat. morfAnalytics sert son PROPRE
+    // /status au lieu d'utiliser le StatusServer de morfBeacon : il doit donc
+    // publier ce bloc lui-meme, sans quoi il annoncerait une capacite dont le
+    // detail resterait introuvable.
+    QJsonObject ui;
+    ui["path"]        = QStringLiteral("/");
+    ui["label"]       = QStringLiteral("Analyses");
+    ui["port"]        = static_cast<int>(port());
+    ui["description"] = QStringLiteral(
+        "Statistiques longue periode et correlations sur l'historique des equipements.");
+    o["web_ui"] = ui;
+
     return toJson(o);
 }
 

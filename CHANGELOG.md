@@ -3,6 +3,22 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.5.0] – 2026-07-21
+
+### Ajouté
+
+- **Déclaration de l'interface Web (capacité `web_ui`).** morfAnalytics sert une
+  page d'accueil ; il l'annonce désormais, et un observateur peut proposer un
+  lien vers les analyses **sans rien connaître de morfAnalytics**.
+
+  La capacité `advanced_analysis` est conservée : c'est par elle que MeteoHub
+  détecte ce service, par capacité et jamais par nom.
+
+- Le bloc `web_ui` est publié dans `/status`. morfAnalytics sert son **propre**
+  `/status` plutôt que le `StatusServer` de morfBeacon : il doit donc fournir ce
+  détail lui-même, sans quoi il annoncerait une capacité dont le moyen
+  d'ouverture resterait introuvable.
+
 ## [Non publié]
 
 ## [0.4.1] – 2026-07-20
