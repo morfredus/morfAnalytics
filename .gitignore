@@ -144,3 +144,13 @@ Desktop.ini
 
 build/
 build-*/
+
+# Cache de travail : reconstructible depuis l'equipement, jamais source de
+# verite. Le versionner produisait un fichier modifie a CHAQUE execution du
+# service (SQLite reecrit -shm et -wal), et un clone neuf heritait du cache
+# d'une autre machine au lieu de partir vide. Le service cree le dossier au
+# demarrage (QDir::mkpath), son absence n'est donc pas un probleme.
+cache/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

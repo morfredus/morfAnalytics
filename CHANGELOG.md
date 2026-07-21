@@ -3,6 +3,41 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.5.1] – 2026-07-21
+
+### Corrigé
+
+- **Le cache de travail était versionné.** `cache/meteohub-cache.sqlite` et ses
+  fichiers `-shm` / `-wal` étaient suivis par Git. SQLite réécrivant ces deux
+  derniers à chaque ouverture, le dépôt affichait un fichier modifié **à chaque
+  exécution du service** — un bruit permanent sans aucune information.
+
+  Plus gênant : un clone neuf héritait du cache d'une autre machine au lieu de
+  partir vide. Cela contredit le principe du projet, qui pose que morfAnalytics
+  ne possède jamais la vérité des données et travaille sur une copie
+  reconstructible depuis l'équipement.
+
+  Les fichiers restent sur disque, ne sont plus suivis, et `cache/` est ignoré.
+  Le service crée le dossier au démarrage (`QDir::mkpath`) : vérifié en
+  démarrant depuis un emplacement sans cache — dossier et base créés seuls,
+  `/status` répond.
+
+## [0.5.0] – 2026-07-21
+
+### Ajouté
+
+- **Déclaration de l'interface Web (capacité `web_ui`).** morfAnalytics sert une
+  page d'accueil ; il l'annonce désormais, et un observateur peut proposer un
+  lien vers les analyses **sans rien connaître de morfAnalytics**.
+
+  La capacité `advanced_analysis` est conservée : c'est par elle que MeteoHub
+  détecte ce service, par capacité et jamais par nom.
+
+- Le bloc `web_ui` est publié dans `/status`. morfAnalytics sert son **propre**
+  `/status` plutôt que le `StatusServer` de morfBeacon : il doit donc fournir ce
+  détail lui-même, sans quoi il annoncerait une capacité dont le moyen
+  d'ouverture resterait introuvable.
+
 ## [Non publié]
 
 ## [0.4.1] – 2026-07-20
