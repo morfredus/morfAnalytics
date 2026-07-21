@@ -154,15 +154,20 @@ starts with a default `analytics` module, with no source, hence no collection.
 ## Install as a service
 
 ```sh
-# Linux (systemd)
-sudo ./scripts/linux/install-service.sh     # install
-sudo ./scripts/linux/update-service.sh      # update (git pull + build)
-sudo ./scripts/linux/uninstall-service.sh   # remove everything, for a clean reinstall
-
-# Windows (Task Scheduler, Administrator PowerShell)
-powershell -ExecutionPolicy Bypass -File scripts\windows\install-service.ps1
-powershell -ExecutionPolicy Bypass -File scripts\windows\uninstall-service.ps1
+# Any platform: Linux, Windows, Raspberry Pi
+sudo ./service.py install      # build if needed, install, start
+sudo ./service.py update       # rebuild, replace the binary, restart
+sudo ./service.py uninstall    # deregister, keeping your configuration
+./service.py status            # what the system says about it
 ```
+
+One entry point everywhere. What this service is — its name, its directory,
+its configurations — is declared in `service.json` beside it. The four install
+steps live once for the whole parc; only the service manager differs by
+platform.
+
+The former `scripts/linux/` and `scripts/windows/` scripts still work,
+unchanged.
 
 Updating never replaces values already present in the configuration, but **adds
 the parameters introduced since installation** and reports them. Without that, a

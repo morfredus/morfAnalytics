@@ -159,15 +159,20 @@ module `analytics` par défaut, sans source, donc sans collecte.
 ## Installer en service
 
 ```sh
-# Linux (systemd)
-sudo ./scripts/linux/install-service.sh     # installer
-sudo ./scripts/linux/update-service.sh      # mettre à jour (git pull + build)
-sudo ./scripts/linux/uninstall-service.sh   # tout supprimer, pour repartir de zéro
-
-# Windows (Planificateur de tâches, PowerShell Administrateur)
-powershell -ExecutionPolicy Bypass -File scripts\windows\install-service.ps1
-powershell -ExecutionPolicy Bypass -File scripts\windows\uninstall-service.ps1
+# Toutes plateformes : Linux, Windows, Raspberry Pi
+sudo ./service.py install      # compile si besoin, installe, demarre
+sudo ./service.py update       # recompile, remplace le binaire, redemarre
+sudo ./service.py uninstall    # desinscrit, en conservant votre configuration
+./service.py status            # ce que le systeme en dit
 ```
+
+Un seul point d'entree partout. Ce qu'est ce service — son nom, son dossier,
+ses configurations — est declare dans `service.json` a cote. Les quatre etapes
+d'installation vivent une seule fois pour tout le parc ; seul le gestionnaire
+de services change selon la plateforme.
+
+Les anciens scripts `scripts/linux/` et `scripts/windows/` fonctionnent
+toujours, inchanges.
 
 La mise à jour ne remplace jamais les valeurs déjà présentes dans la
 configuration, mais y **ajoute les paramètres apparus depuis l'installation** et
