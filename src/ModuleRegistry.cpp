@@ -7,6 +7,8 @@
 #include "morfanalytics/ModuleRegistry.h"
 #include "morfanalytics/IModule.h"
 
+#include <QDebug>
+
 namespace morfanalytics {
 
 ModuleRegistry::ModuleRegistry(QObject* parent) : QObject(parent) {}
@@ -20,7 +22,17 @@ void ModuleRegistry::add(IModule* module) {
     connect(module, &IModule::updated, this, &ModuleRegistry::updated);
 }
 
-void ModuleRegistry::startAll() { for (IModule* m : m_modules) m->start(); }
+void ModuleRegistry::startAll() {
+    // Le retour de start() etait ignore : un module en echec restait compte
+    // dans « N module(s) » et le service paraissait sain. Un module qui ne
+    // demarre pas est une information de premier ordre — elle va au journal.
+    for (IModule* m : m_modules) {
+        if (!m->start())
+            qCritical().noquote() << QStringLiteral(
+                "module '%1' : demarrage EN ECHEC — le service tourne mais ce "
+                "module ne fera rien (voir les messages precedents).").arg(m->id());
+    }
+}
 void ModuleRegistry::stopAll()  { for (IModule* m : m_modules) m->stop(); }
 int  ModuleRegistry::count() const { return m_modules.size(); }
 

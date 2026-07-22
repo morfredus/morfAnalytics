@@ -11,6 +11,7 @@
 #include <QTimer>
 #include <QDateTime>
 #include <QDir>
+#include <QDebug>
 
 namespace morfanalytics {
 
@@ -48,7 +49,17 @@ bool AnalyticsModule::start() {
     m_store = std::make_unique<SampleStore>(dbPath, kChannels);
     if (!m_store->open()) {
         // Sans cache, le module ne peut rien faire d'utile : on échoue franchement
-        // plutôt que de tourner en apparence tout en n'accumulant rien.
+        // plutôt que de tourner en apparence tout en n'accumulant rien. Et on le
+        // DIT : cet échec est resté muet une fois — dossier /opt possédé par
+        // root, cache incréable — et l'interface renvoyait vers source_url
+        // pendant que la vraie cause, une permission, ne figurait nulle part.
+        // Un diagnostic complet a coûté une enquête là où une ligne de journal
+        // aurait suffi.
+        qCritical().noquote()
+            << QStringLiteral("module analytics : impossible d'ouvrir le cache %1 : %2")
+                   .arg(dbPath, m_store->lastError())
+            << QStringLiteral("— verifier les droits du dossier (le service tourne en User=, "
+                              "le dossier doit lui appartenir) ; aucune mesure ne sera collectee.");
         m_store.reset();
         return false;
     }

@@ -40,6 +40,18 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+
+## [0.5.3] – 2026-07-22
+
+### Corrigé
+
+- **Un module qui ne démarre pas se voit dans le journal.** L'échec d'ouverture
+  du cache SQLite restait muet : le service affichait « 1 module(s) », l'interface
+  renvoyait vers `source_url`, et la vraie cause — un dossier `/opt` possédé par
+  root où le cache était incréable — ne figurait nulle part. Le module logue
+  désormais le chemin et la raison (`qCritical`), et le registre signale tout
+  `start()` en échec. L'enquête d'aujourd'hui aurait tenu en une ligne de
+  `journalctl`.
 ## [0.5.2] – 2026-07-22
 ### Modifié
 
