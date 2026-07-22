@@ -120,6 +120,17 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             out = handleAnalyzePost(body, code, reason);
         }
     }
+    // ---- Nettoyage du cache local (POST) ---------------------------------
+    // N'agit QUE sur la copie de travail : les mesures d'origine, sur
+    // l'appareil, ne sont jamais touchees (le collecteur n'emet que des GET).
+    else if (path == "/data/cleanup") {
+        if (method != "POST") {
+            code = 405; reason = "Method Not Allowed";
+            out = "{\"error\":\"use POST /data/cleanup\"}";
+        } else {
+            out = handleCleanupPost(body, code, reason);
+        }
+    }
     // ---- Routes GET ------------------------------------------------------
     else if (method != "GET") {
         code = 405; reason = "Method Not Allowed";
@@ -185,6 +196,24 @@ QByteArray HttpServer::handleAnalyzePost(const QByteArray& body, int& code, QByt
     // Reserver les codes d'erreur aux vrais problemes de requete garde les
     // diagnostics lisibles.
     return toJson(module->analyze(doc.object()));
+}
+
+QByteArray HttpServer::handleCleanupPost(const QByteArray& body, int& code, QByteArray& reason) const {
+    QJsonParseError pe{};
+    const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+    if (pe.error != QJsonParseError::NoError || !doc.isObject()) {
+        code = 400; reason = "Bad Request";
+        return "{\"error\":\"corps JSON invalide\"}";
+    }
+
+    auto* module = m_registry
+        ? qobject_cast<AnalyticsModule*>(m_registry->firstOfType(QStringLiteral("analytics")))
+        : nullptr;
+    if (!module) {
+        code = 503; reason = "Service Unavailable";
+        return "{\"error\":\"aucun module d'analyse actif\"}";
+    }
+    return toJson(module->cleanupData(doc.object()));
 }
 
 QByteArray HttpServer::landingPage() {
@@ -278,6 +307,27 @@ QByteArray HttpServer::landingPage() {
   .bar-track { background: color-mix(in srgb, var(--muted) 15%, transparent);
                border-radius: 999px; }
 
+  button { font: inherit; font-size: .88rem; border-radius: .45rem; cursor: pointer;
+           padding: .4rem .85rem; border: 1px solid var(--line);
+           background: var(--card); color: var(--fg); }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.danger { color: var(--bad);
+                  border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+  button.danger:hover { background: color-mix(in srgb, var(--bad) 10%, transparent); }
+  .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center;
+             margin-top: .6rem; }
+  .field { display: flex; flex-direction: column; gap: .2rem; font-size: .82rem;
+           color: var(--muted); }
+  input[type="datetime-local"], select {
+    font: inherit; font-size: .88rem; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--line); border-radius: .45rem; padding: .35rem .5rem; }
+  .cleanup-result { font-size: .88rem; margin-top: .6rem; }
+  .cleanup-result.ok { color: var(--ok); }
+  .cleanup-result.err { color: var(--bad); }
+  .refresh-line { display: flex; align-items: center; gap: .6rem; margin-top: .5rem;
+                  font-size: .82rem; color: var(--muted); }
+
   .anomaly { font-size: 2rem; font-weight: 600; letter-spacing: -.02em; }
   .anomaly.warm { color: var(--warm); }
   .anomaly.cold { color: var(--cold); }
@@ -294,6 +344,10 @@ QByteArray HttpServer::landingPage() {
     <a id="backlink" class="back" href="#" hidden>&larr; Retour à MeteoHub</a>
     <h1>morfAnalytics</h1>
     <p class="sub">Analyses avancées &mdash; <span id="hostline">…</span></p>
+    <div class="refresh-line">
+      <span>Analyses actualisées : <span id="refreshed">…</span></span>
+      <button id="refresh-btn" type="button">Actualiser</button>
+    </div>
   </header>
 
   <h2 class="section">Service et collecte</h2>
@@ -319,6 +373,57 @@ QByteArray HttpServer::landingPage() {
   </div>
 
   <div id="groups"></div>
+
+  <h2 class="section">Gestion du cache</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Mesures aberrantes</h3>
+      <p class="note" style="margin-top:0">Relevés portant une pression physiquement
+        impossible (capteur en panne : 0&nbsp;hPa, 0&nbsp;°C…). La ligne entière est
+        neutralisée, le relevé n'étant pas une mesure.</p>
+      <div class="actions">
+        <button id="scan-faults" type="button">Rechercher</button>
+        <button id="fix-faults" type="button" hidden>Neutraliser</button>
+        <span id="faults-count" class="unavailable"></span>
+      </div>
+      <div id="faults-result" class="cleanup-result"></div>
+    </div>
+    <div class="card">
+      <h3>Neutraliser une plage</h3>
+      <p class="note" style="margin-top:0">Marque comme manquantes les valeurs d'une
+        période (capteur resté en défaut, valeurs douteuses…). Les lignes restent en
+        place : rien n'est re-téléchargé depuis l'appareil.</p>
+      <div class="actions">
+        <label class="field">Du <input type="datetime-local" id="inv-from"></label>
+        <label class="field">Au <input type="datetime-local" id="inv-to"></label>
+        <label class="field">Canal
+          <select id="inv-channel">
+            <option value="">tous</option>
+            <option value="temp">température</option>
+            <option value="hum">humidité</option>
+            <option value="pres">pression</option>
+          </select>
+        </label>
+      </div>
+      <div class="actions">
+        <button id="inv-preview" type="button">Compter</button>
+        <button id="inv-apply" type="button" class="danger" hidden>Neutraliser</button>
+      </div>
+      <div id="inv-result" class="cleanup-result"></div>
+    </div>
+    <div class="card">
+      <h3>Purge totale</h3>
+      <p class="note" style="margin-top:0">Vide entièrement le cache local. Il se
+        reconstruit depuis l'appareil au prochain cycle de collecte — les mesures
+        d'origine, sur l'appareil, ne sont jamais touchées. Les neutralisations
+        manuelles sont alors perdues (les pannes capteur, elles, restent filtrées
+        à l'import).</p>
+      <div class="actions">
+        <button id="purge-all" type="button" class="danger">Vider le cache</button>
+      </div>
+      <div id="purge-result" class="cleanup-result"></div>
+    </div>
+  </div>
 
   <footer>
     État détaillé au format JSON : <code>/status</code>, <code>/modules</code>,
@@ -386,11 +491,20 @@ function sparkline(values) {
   </svg>`;
 }
 
+const fmtTime = (ts) => (!ts || ts <= 0) ? ''
+  : new Date(ts * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const signed = (v, unit) => (v === undefined || v === null)
+  ? null : `${v > 0 ? '+' : ''}${num(v, unit)}`;
+
 const RENDERERS = {
   current: (r) => {
     let html = `<div class="hero">${num(r.temperature)}<span class="unit"> °C</span></div>`;
+    const heroSub = [];
     if (r.humidex !== undefined && r.humidex > r.temperature + 0.4)
-      html += `<div class="hero-sub">ressenti ${num(r.humidex, '°C')}</div>`;
+      heroSub.push(`ressenti ${num(r.humidex, '°C')}`);
+    if (r.ts) heroSub.push(`mesuré à ${fmtTime(r.ts)}`);
+    if (heroSub.length)
+      html += `<div class="hero-sub">${heroSub.join(' — ')}</div>`;
     const chips = [];
     if (r.humidity !== undefined) chips.push(['Humidité', num(r.humidity, '%')]);
     if (r.dew_point !== undefined) chips.push(['Point de rosée', num(r.dew_point, '°C')]);
@@ -411,11 +525,19 @@ const RENDERERS = {
 
   pressure_trend: (r) => dl([
     ['Pression (niveau mer)', num(r.pressure_sea_level, 'hPa')],
-    ['Variation 1 h', r.delta_1h === undefined ? null : `${r.delta_1h > 0 ? '+' : ''}${num(r.delta_1h, 'hPa')}`],
-    ['Variation 3 h', `${r.delta_3h > 0 ? '+' : ''}${num(r.delta_3h, 'hPa')}`],
+    ['Variation 1 h', signed(r.delta_1h, 'hPa')],
+    ['Variation 3 h', signed(r.delta_3h, 'hPa')],
     ['Tendance', esc(r.tendency || '')],
     ['Alerte orage', r.storm_warning === undefined ? null :
       (r.storm_warning ? '<span class="badge bad">oui</span>' : '<span class="badge ok">non</span>')]
+  ]) + notes(r),
+
+  temp_trend: (r) => dl([
+    ['Température', num(r.temperature, '°C')],
+    ['Variation 1 h', signed(r.delta_1h, '°C')],
+    ['Variation 3 h', signed(r.delta_3h, '°C')],
+    ['Écart avec hier même heure', signed(r.delta_24h, '°C')],
+    ['Tendance', esc(r.tendency || '')]
   ]) + notes(r),
 
   fog_risk: (r) => `<div>${riskBadge(r.risk || '—')}</div>` + dl([
@@ -428,6 +550,8 @@ const RENDERERS = {
     ['Température actuelle', num(r.temperature, '°C')],
     ['Refroidissement', num(r.cooling_per_hour, '°C/h')],
     ['Minimum projeté', r.projected_min === undefined ? null : num(r.projected_min, '°C')],
+    ['Heures avant l\'aube', r.hours_to_dawn === undefined || r.hours_to_dawn <= 0
+      ? null : num(r.hours_to_dawn, 'h')],
     ['Point de rosée', r.dew_point === undefined ? null : num(r.dew_point, '°C')]
   ]) + notes(r),
 
@@ -483,13 +607,16 @@ const RENDERERS = {
       ['Pression', r.pressure, 'hPa']
     ].filter(([, v]) => v);
     if (!rows.length) return '<p class="unavailable">Aucun record disponible.</p>';
+    const period = (r.from_ts && r.to_ts)
+      ? `<p class="note">Sur l'ensemble de l'historique : du ${fmtDate(r.from_ts)}
+         au ${fmtDate(r.to_ts)}.</p>` : '';
     return `<div class="scroll"><table>
       <thead><tr><th>Grandeur</th><th>Minimum</th><th>Maximum</th></tr></thead>
       <tbody>` + rows.map(([label, v, unit]) =>
         `<tr><td>${esc(label)}</td>
          <td>${num(v.min, unit)}<br><span class="unavailable">${fmtDate(v.min_ts)}</span></td>
          <td>${num(v.max, unit)}<br><span class="unavailable">${fmtDate(v.max_ts)}</span></td></tr>`
-      ).join('') + `</tbody></table></div>` + notes(r);
+      ).join('') + `</tbody></table></div>` + period + notes(r);
   },
 
   streaks: (r) => {
@@ -598,6 +725,8 @@ async function loadAnalyses() {
     `<h2 class="section">${esc(GROUP_LABELS[group] || group)}</h2>
      <div class="grid">${items.map(([m, r]) => renderCard(m, r)).join('')}</div>`
   ).join('');
+  document.getElementById('refreshed').textContent =
+    new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
 
 async function loadStatus() {
@@ -647,6 +776,110 @@ async function loadStatus() {
     document.getElementById('state').textContent = 'service injoignable';
   }
 }
+
+// --- Gestion du cache -------------------------------------------------------
+// Ces actions ne touchent QUE la copie locale : les mesures d'origine restent
+// sur l'appareil, seule source de vérité. La purge exige une double
+// confirmation ; les neutralisations passent d'abord par un comptage.
+async function cleanup(payload) {
+  const resp = await fetch('/data/cleanup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return resp.json();
+}
+
+function showResult(id, r, okText) {
+  const el = document.getElementById(id);
+  el.className = 'cleanup-result ' + (r && r.ok ? 'ok' : 'err');
+  el.textContent = (r && r.ok) ? okText : `Échec : ${(r && r.error) || 'service injoignable'}`;
+}
+
+document.getElementById('scan-faults').addEventListener('click', async () => {
+  const r = await cleanup({ action: 'scan_faults' }).catch(() => null);
+  const fix = document.getElementById('fix-faults');
+  const count = document.getElementById('faults-count');
+  if (!r || !r.ok) { showResult('faults-result', r, ''); return; }
+  document.getElementById('faults-result').textContent = '';
+  if (r.affected > 0) {
+    count.textContent = `${r.affected.toLocaleString('fr-FR')} relevé(s) aberrant(s)`;
+    fix.hidden = false;
+  } else {
+    count.textContent = 'aucun relevé aberrant';
+    fix.hidden = true;
+  }
+});
+
+document.getElementById('fix-faults').addEventListener('click', async () => {
+  const r = await cleanup({ action: 'invalidate_faults' }).catch(() => null);
+  showResult('faults-result', r,
+    r && r.ok ? `${r.affected.toLocaleString('fr-FR')} relevé(s) neutralisé(s).` : '');
+  if (r && r.ok) {
+    document.getElementById('fix-faults').hidden = true;
+    document.getElementById('faults-count').textContent = '';
+    loadAnalyses();
+  }
+});
+
+function invalidatePayload(dryRun) {
+  const from = document.getElementById('inv-from').value;
+  const to   = document.getElementById('inv-to').value;
+  if (!from || !to) return null;
+  const payload = {
+    action: 'invalidate_range',
+    from_ts: Math.floor(new Date(from).getTime() / 1000),
+    to_ts:   Math.floor(new Date(to).getTime() / 1000),
+    dry_run: dryRun
+  };
+  const channel = document.getElementById('inv-channel').value;
+  if (channel) payload.channels = [channel];
+  return payload;
+}
+
+document.getElementById('inv-preview').addEventListener('click', async () => {
+  const payload = invalidatePayload(true);
+  const el = document.getElementById('inv-result');
+  if (!payload) {
+    el.className = 'cleanup-result err';
+    el.textContent = 'Renseigner les deux dates.';
+    return;
+  }
+  const r = await cleanup(payload).catch(() => null);
+  if (!r || !r.ok) { showResult('inv-result', r, ''); return; }
+  el.className = 'cleanup-result';
+  el.textContent = `${r.affected.toLocaleString('fr-FR')} mesure(s) concernée(s).`;
+  document.getElementById('inv-apply').hidden = (r.affected === 0);
+});
+
+document.getElementById('inv-apply').addEventListener('click', async () => {
+  const payload = invalidatePayload(false);
+  if (!payload) return;
+  if (!confirm('Neutraliser ces mesures dans le cache ? Les valeurs resteront '
+    + 'intactes sur l\'appareil.')) return;
+  const r = await cleanup(payload).catch(() => null);
+  showResult('inv-result', r,
+    r && r.ok ? `${r.affected.toLocaleString('fr-FR')} mesure(s) neutralisée(s).` : '');
+  if (r && r.ok) {
+    document.getElementById('inv-apply').hidden = true;
+    loadAnalyses();
+  }
+});
+
+document.getElementById('purge-all').addEventListener('click', async () => {
+  if (!confirm('Vider entièrement le cache local ? Il sera reconstruit depuis '
+    + 'l\'appareil au prochain cycle de collecte.')) return;
+  if (!confirm('Confirmer la purge totale du cache ?')) return;
+  const r = await cleanup({ action: 'purge_all' }).catch(() => null);
+  showResult('purge-result', r,
+    r && r.ok ? 'Cache vidé. Reconstruction au prochain cycle de collecte.' : '');
+  if (r && r.ok) { loadStatus(); loadAnalyses(); }
+});
+
+document.getElementById('refresh-btn').addEventListener('click', () => {
+  loadStatus();
+  loadAnalyses();
+});
 
 loadStatus();
 loadAnalyses();

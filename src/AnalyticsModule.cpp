@@ -114,6 +114,72 @@ QJsonArray AnalyticsModule::analysisCatalog() const {
     return m_analyses.catalogJson();
 }
 
+QJsonObject AnalyticsModule::cleanupData(const QJsonObject& request) {
+    QJsonObject o;
+    if (!m_store || !m_store->isOpen()) {
+        o["ok"] = false;
+        o["error"] = QStringLiteral("cache indisponible");
+        return o;
+    }
+
+    // Bornes de panne capteur : une pression hors de [300, 1200] hPa est
+    // physiquement impossible — c'est la signature du BME280 en défaut (zéros),
+    // et elle disqualifie tout le relevé (le 0 °C associé n'est pas une mesure).
+    // Mêmes bornes que le filtre d'import du collecteur : ce nettoyage rattrape
+    // l'historique entré AVANT que le filtre n'existe.
+    constexpr double kPresMin = 300.0, kPresMax = 1200.0;
+    const QString kPres = QStringLiteral("pres");
+
+    const QString action = request.value(QStringLiteral("action")).toString();
+    qint64 n = -1;
+
+    if (action == QLatin1String("scan_faults") || action == QLatin1String("invalidate_faults")) {
+        const bool dryRun = (action == QLatin1String("scan_faults"));
+        n = m_store->invalidateOutliers(kPres, kPresMin, kPresMax, dryRun);
+    } else if (action == QLatin1String("invalidate_range")) {
+        const auto fromTs = static_cast<qint64>(request.value(QStringLiteral("from_ts")).toDouble());
+        const auto toTs   = static_cast<qint64>(request.value(QStringLiteral("to_ts")).toDouble());
+        if (fromTs <= 0 || toTs <= 0 || toTs < fromTs) {
+            o["ok"] = false;
+            o["error"] = QStringLiteral("plage from_ts / to_ts invalide");
+            return o;
+        }
+        QStringList channels;
+        for (const QJsonValue& v : request.value(QStringLiteral("channels")).toArray())
+            channels << v.toString();
+        if (channels.isEmpty())
+            channels = kChannels; // sans précision, toute la ligne est neutralisée
+        n = m_store->invalidateChannels(fromTs, toTs, channels,
+                                        request.value(QStringLiteral("dry_run")).toBool());
+    } else if (action == QLatin1String("purge_all")) {
+        if (!m_store->purgeAll()) {
+            o["ok"] = false;
+            o["error"] = m_store->lastError();
+            return o;
+        }
+        o["ok"] = true;
+        o["note"] = QStringLiteral(
+            "Cache vidé. Il sera reconstruit intégralement depuis l'appareil au "
+            "prochain cycle de collecte ; les mesures d'origine n'ont pas été touchées.");
+        o["cached_points"] = static_cast<double>(m_store->count());
+        return o;
+    } else {
+        o["ok"] = false;
+        o["error"] = QStringLiteral("action inconnue : %1").arg(action);
+        return o;
+    }
+
+    if (n < 0) {
+        o["ok"] = false;
+        o["error"] = m_store->lastError();
+        return o;
+    }
+    o["ok"] = true;
+    o["affected"] = static_cast<double>(n);
+    o["cached_points"] = static_cast<double>(m_store->count());
+    return o;
+}
+
 void AnalyticsModule::maintainCache() {
     // Le collecteur ignore l'appel si un cycle est déjà en cours : une période de
     // maintenance plus courte qu'un rattrapage complet n'empile donc rien.

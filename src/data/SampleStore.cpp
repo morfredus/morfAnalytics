@@ -218,6 +218,98 @@ bool SampleStore::setCursor(const QString& source, const Cursor& c) {
     return true;
 }
 
+qint64 SampleStore::invalidateChannels(qint64 fromTs, qint64 toTs,
+                                       const QStringList& channels, bool dryRun) {
+    QStringList cols;
+    for (const QString& ch : channels) {
+        // Seuls les canaux connus du store sont acceptes : un nom inconnu vient
+        // d'une requete mal formee, pas d'une intention de nettoyage.
+        if (!m_channels.contains(ch)) {
+            m_lastError = QStringLiteral("canal inconnu : %1").arg(ch);
+            return -1;
+        }
+        cols << column(ch);
+    }
+    if (cols.isEmpty()) {
+        m_lastError = QStringLiteral("aucun canal demandé");
+        return -1;
+    }
+
+    // La clause NOT NULL rend le decompte significatif : on ne compte que les
+    // lignes ou quelque chose a reellement ete neutralise.
+    QStringList notNull;
+    for (const QString& c : cols)
+        notNull << (c + QStringLiteral(" IS NOT NULL"));
+    const QString where = QStringLiteral("ts BETWEEN ? AND ? AND (%1)")
+                              .arg(notNull.join(QStringLiteral(" OR ")));
+
+    QSqlQuery q(m_db);
+    if (dryRun) {
+        q.prepare(QStringLiteral("SELECT COUNT(*) FROM sample WHERE %1").arg(where));
+    } else {
+        QStringList sets;
+        for (const QString& c : cols)
+            sets << (c + QStringLiteral(" = NULL"));
+        q.prepare(QStringLiteral("UPDATE sample SET %1 WHERE %2")
+                      .arg(sets.join(QStringLiteral(",")), where));
+    }
+    q.addBindValue(static_cast<qlonglong>(fromTs));
+    q.addBindValue(static_cast<qlonglong>(toTs));
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        return -1;
+    }
+    if (dryRun)
+        return q.next() ? q.value(0).toLongLong() : 0;
+    return q.numRowsAffected();
+}
+
+qint64 SampleStore::invalidateOutliers(const QString& channel, double lo, double hi,
+                                       bool dryRun) {
+    if (!m_channels.contains(channel)) {
+        m_lastError = QStringLiteral("canal inconnu : %1").arg(channel);
+        return -1;
+    }
+    const QString ref = column(channel);
+    const QString where = QStringLiteral("%1 IS NOT NULL AND (%1 < ? OR %1 > ?)").arg(ref);
+
+    QSqlQuery q(m_db);
+    if (dryRun) {
+        q.prepare(QStringLiteral("SELECT COUNT(*) FROM sample WHERE %1").arg(where));
+    } else {
+        QStringList sets;
+        for (const QString& ch : m_channels)
+            sets << (column(ch) + QStringLiteral(" = NULL"));
+        q.prepare(QStringLiteral("UPDATE sample SET %1 WHERE %2")
+                      .arg(sets.join(QStringLiteral(",")), where));
+    }
+    q.addBindValue(lo);
+    q.addBindValue(hi);
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        return -1;
+    }
+    if (dryRun)
+        return q.next() ? q.value(0).toLongLong() : 0;
+    return q.numRowsAffected();
+}
+
+bool SampleStore::purgeAll() {
+    QSqlQuery q(m_db);
+    if (!q.exec(QStringLiteral("DELETE FROM sample"))) {
+        m_lastError = q.lastError().text();
+        return false;
+    }
+    if (!q.exec(QStringLiteral("DELETE FROM sync_cursor"))) {
+        m_lastError = q.lastError().text();
+        return false;
+    }
+    // VACUUM rend l'espace au systeme de fichiers : une purge sert souvent a
+    // repartir d'un cache leger, autant que le fichier suive.
+    q.exec(QStringLiteral("VACUUM"));
+    return true;
+}
+
 Series SampleStore::range(qint64 fromTs, qint64 toTs) const {
     Series series(m_channels);
 

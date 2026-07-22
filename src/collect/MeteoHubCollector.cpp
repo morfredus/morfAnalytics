@@ -17,6 +17,9 @@
 #include <QUrl>
 #include <QUrlQuery>
 
+#include <cmath>
+#include <limits>
+
 namespace morfanalytics {
 
 namespace {
@@ -32,6 +35,19 @@ constexpr int kChunkLimit = 250;
 constexpr int kTimeoutMs = 45000;
 
 const char* kSource = "meteohub";
+
+// Bornes de plausibilite physique. Un BME280 en defaut renvoie des zeros : un
+// 0 hPa est impossible sur Terre, alors qu'un 0 °C est un vrai releve d'hiver.
+// C'est donc la PRESSION qui sert de sentinelle de panne : hors bornes, tout le
+// releve est suspect et la ligne entiere est marquee manquante. Les autres
+// grandeurs ne sont filtrees qu'individuellement.
+constexpr double kPresMin = 300.0,  kPresMax = 1200.0; // hPa (records terrestres inclus)
+constexpr double kTempMin = -60.0,  kTempMax = 60.0;   // °C
+constexpr double kHumMin  = 0.0,    kHumMax  = 100.0;  // %
+
+double plausible(double v, double lo, double hi) {
+    return (v < lo || v > hi) ? std::numeric_limits<double>::quiet_NaN() : v;
+}
 } // namespace
 
 MeteoHubCollector::MeteoHubCollector(QString baseUrl, SampleStore* store, QObject* parent)
@@ -136,10 +152,26 @@ void MeteoHubCollector::onChunkReply(QNetworkReply* reply) {
         if (row.size() < 4)
             continue;
         timestamps.push_back(static_cast<qint64>(row.at(0).toDouble()));
+
+        // Filtre de plausibilite AVANT insertion : une valeur physiquement
+        // impossible devient "manquante" au lieu de polluer les analyses. On
+        // stocke tout de meme la ligne (avec des NULL) pour que la position de
+        // reprise reste exacte — la ligne existe bien sur l'appareil.
+        double temp = plausible(row.at(1).toDouble(), kTempMin, kTempMax);
+        double hum  = plausible(row.at(2).toDouble(), kHumMin,  kHumMax);
+        const double pres = plausible(row.at(3).toDouble(), kPresMin, kPresMax);
+        if (std::isnan(pres)) {
+            // Pression impossible = capteur hors service au moment du releve :
+            // le 0 °C et le 0 % qui l'accompagnent ne sont pas des mesures,
+            // toute la ligne est marquee manquante.
+            temp = std::numeric_limits<double>::quiet_NaN();
+            hum  = std::numeric_limits<double>::quiet_NaN();
+        }
+
         QHash<QString, double> channels;
-        channels.insert(QStringLiteral("temp"), row.at(1).toDouble());
-        channels.insert(QStringLiteral("hum"),  row.at(2).toDouble());
-        channels.insert(QStringLiteral("pres"), row.at(3).toDouble());
+        channels.insert(QStringLiteral("temp"), temp);
+        channels.insert(QStringLiteral("hum"),  hum);
+        channels.insert(QStringLiteral("pres"), pres);
         values.push_back(channels);
     }
 

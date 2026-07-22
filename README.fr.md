@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.5.3-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -25,7 +25,7 @@ indisponibles.
 
 Voir la vision d'ensemble de l'écosystème dans `../MORFSYSTEM_ARCHITECTURE.md`.
 
-> **État : opérationnel.** Collecte incrémentale, douze analyses météo et page
+> **État : opérationnel.** Collecte incrémentale, treize analyses météo, nettoyage du cache et page
 > web sont en place. Reste à écrire : la publication des résultats vers
 > **morfSync**, et les analyses de corrélation et de détection d'anomalies.
 
@@ -45,7 +45,12 @@ Voir la vision d'ensemble de l'écosystème dans `../MORFSYSTEM_ARCHITECTURE.md`
   externe (consultable sur un réseau local sans accès Internet).
 - **API HTTP** (GET + POST) — `GET /` (page web), `GET /analyses` (catalogue),
   `GET /status` (compatible morfBeacon), `/healthz`, `/modules`, `/modules/{id}`,
-  et `POST /analyze` (analyse à la demande).
+  `POST /analyze` (analyse à la demande) et `POST /data/cleanup` (nettoyage du
+  cache local — jamais de la source).
+- **Nettoyage du cache** — depuis la page ou l'API : neutralisation des relevés
+  de capteur en panne (`0 hPa`, `0 °C`), neutralisation d'une plage, purge
+  totale. N'agit que sur la copie locale ; les mesures d'origine, sur
+  l'appareil, ne sont jamais touchées et le cache purgé se reconstruit seul.
 - **Config** — fichier JSON avec une liste `modules` ; une fabrique les instancie.
 - **Annonce LAN** — heartbeat morfBeacon (embarqué, aucune dépendance externe).
 - **Installation service** — `scripts/linux/` (systemd) et `scripts/windows/`

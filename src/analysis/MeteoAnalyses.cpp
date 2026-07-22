@@ -279,6 +279,53 @@ QJsonObject analyzeZambretti(const AnalysisContext& ctx, const QJsonObject&) {
     return o;
 }
 
+// Tendance de temperature : variations recentes et rythme actuel. Pendant de la
+// tendance barometrique, cote thermometre : dire si l'air se rechauffe ou se
+// refroidit, et a quelle vitesse, sans attendre le bulletin.
+QJsonObject analyzeTempTrend(const AnalysisContext& ctx, const QJsonObject&) {
+    const Series series = ctx.store->range(ctx.now - 25 * kHour, ctx.now);
+    const QVector<double>* temp = series.channel(kTemp);
+    if (!temp)
+        return failure(QStringLiteral("canal température manquant"));
+
+    const int i = lastValidIndex(*temp);
+    if (i < 0)
+        return failure(QStringLiteral("aucune mesure récente"));
+
+    const qint64 nowTs = series.timestamps()[i];
+    const double t = (*temp)[i];
+
+    const double t1  = valueNear(series, *temp, nowTs - 1 * kHour,  30 * 60);
+    const double t3  = valueNear(series, *temp, nowTs - 3 * kHour,  30 * 60);
+    const double t24 = valueNear(series, *temp, nowTs - 24 * kHour, 45 * 60);
+    if (std::isnan(t3))
+        return failure(QStringLiteral("historique de température insuffisant sur 3 h"));
+
+    const double delta3h = t - t3;
+
+    QJsonObject o;
+    o["temperature"] = round1(t);
+    o["delta_3h"]    = round1(delta3h);
+    if (!std::isnan(t1))
+        o["delta_1h"] = round1(t - t1);
+    // L'ecart a la meme heure hier separe l'evolution du temps (masse d'air) du
+    // simple cycle jour/nuit, que delta_3h ne distingue pas.
+    if (!std::isnan(t24))
+        o["delta_24h"] = round1(t - t24);
+
+    QString label;
+    if (delta3h >= 2.0)       label = QStringLiteral("réchauffement rapide");
+    else if (delta3h >= 0.5)  label = QStringLiteral("réchauffement");
+    else if (delta3h <= -2.0) label = QStringLiteral("refroidissement rapide");
+    else if (delta3h <= -0.5) label = QStringLiteral("refroidissement");
+    else                      label = QStringLiteral("stable");
+    o["tendency"] = label;
+    o["note"] = QStringLiteral(
+        "Variation sur 3 h pour la tendance ; l'écart à la même heure la veille "
+        "distingue un changement de masse d'air du simple cycle jour/nuit.");
+    return o;
+}
+
 // Risque de brouillard : ecart au point de rosee faible et qui se resserre.
 QJsonObject analyzeFogRisk(const AnalysisContext& ctx, const QJsonObject&) {
     const Series series = ctx.store->range(ctx.now - 6 * kHour, ctx.now);
@@ -645,13 +692,15 @@ QJsonObject analyzeDailyCycle(const AnalysisContext& ctx, const QJsonObject& par
 
     double sums[24] = {0};
     int counts[24] = {0};
+    QSet<QDate> daysSeen;
     const QVector<qint64>& ts = series.timestamps();
     for (int i = 0; i < ts.size(); ++i) {
         if (!Series::isValid((*temp)[i]))
             continue;
-        const int hour = QDateTime::fromSecsSinceEpoch(ts[i]).time().hour();
-        sums[hour] += (*temp)[i];
-        counts[hour]++;
+        const QDateTime dt = QDateTime::fromSecsSinceEpoch(ts[i]);
+        sums[dt.time().hour()] += (*temp)[i];
+        counts[dt.time().hour()]++;
+        daysSeen.insert(dt.date());
     }
 
     QJsonArray hours;
@@ -678,7 +727,9 @@ QJsonObject analyzeDailyCycle(const AnalysisContext& ctx, const QJsonObject& par
     o["coldest_hour"]  = coldest;
     o["coldest_temp"]  = round1(coldestV);
     o["amplitude"]     = round1(hottestV - coldestV);
-    o["days_counted"]  = static_cast<int>(days_n);
+    // Jours reellement observes, pas la largeur de la fenetre demandee : sur un
+    // historique plus court que la fenetre, les deux divergent.
+    o["days_counted"]  = daysSeen.size();
     return o;
 }
 
@@ -746,6 +797,7 @@ void registerMeteoAnalyses(AnalysisRegistry& registry) {
     // --- Vague 1 : etat courant et prevision locale -------------------------
     add("current", "Conditions actuelles", "nowcast", 0, analyzeCurrent);
     add("pressure_trend", "Tendance barométrique", "nowcast", 3 * kHour, analyzePressureTrend);
+    add("temp_trend", "Tendance de température", "nowcast", 3 * kHour, analyzeTempTrend);
     add("zambretti", "Prévision locale (Zambretti)", "nowcast", 3 * kHour, analyzeZambretti);
     add("fog_risk", "Risque de brouillard", "nowcast", 2 * kHour, analyzeFogRisk);
     add("frost_risk", "Risque de gelée", "nowcast", 3 * kHour, analyzeFrostRisk);

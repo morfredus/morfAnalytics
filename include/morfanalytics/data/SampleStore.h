@@ -79,6 +79,34 @@ public:
     Cursor cursor(const QString& source) const;
     bool setCursor(const QString& source, const Cursor& c);
 
+    // --- Nettoyage (cache uniquement — jamais la source) ---------------------
+    // Ces operations n'agissent QUE sur la copie locale : la source de verite
+    // (l'appareil) n'est jamais touchee, le collecteur n'emettant que des GET.
+    //
+    // Le nettoyage partiel NEUTRALISE (valeurs mises a NULL) au lieu de
+    // supprimer les lignes : la reprise de collecte se deduit de MAX(idx) par
+    // jour, et des lignes supprimees seraient re-telechargees depuis l'appareil
+    // au cycle suivant. Une ligne neutralisee, elle, reste en place — l'import
+    // etant en OR IGNORE, la valeur d'origine ne revient pas tant que le cache
+    // n'est pas purge entierement.
+
+    // Neutralise les canaux donnes sur [fromTs, toTs]. Renvoie le nombre de
+    // lignes touchees (celles ou au moins un des canaux etait renseigne), ou -1
+    // en cas d'erreur. dryRun : compte sans rien modifier.
+    qint64 invalidateChannels(qint64 fromTs, qint64 toTs, const QStringList& channels,
+                              bool dryRun);
+
+    // Neutralise TOUTE la ligne (tous les canaux) quand `channel` porte une
+    // valeur hors de [lo, hi] : une grandeur physiquement impossible signe une
+    // panne du capteur, qui rend les autres valeurs du meme releve suspectes.
+    // Renvoie le nombre de lignes touchees, ou -1. dryRun : compte seulement.
+    qint64 invalidateOutliers(const QString& channel, double lo, double hi, bool dryRun);
+
+    // Vide integralement le cache (mesures + curseurs). Le prochain cycle de
+    // collecte reconstruit tout depuis la source, sans aucune perte : c'est la
+    // seule forme de suppression totale qui reste coherente avec la reprise.
+    bool purgeAll();
+
     // --- Lecture (analyses) --------------------------------------------------
     // Toutes les mesures de [fromTs, toTs] triees par horodatage croissant.
     Series range(qint64 fromTs, qint64 toTs) const;

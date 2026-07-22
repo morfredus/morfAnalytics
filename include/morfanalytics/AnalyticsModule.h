@@ -67,6 +67,15 @@ public:
     // sans les connaître à l'avance.
     QJsonArray analysisCatalog() const;
 
+    // Nettoyage du CACHE — et de lui seul : la source de vérité (l'appareil)
+    // n'est jamais touchée, le collecteur n'émettant que des GET.
+    // `request` : {"action": "scan_faults" | "invalidate_faults"
+    //              | "invalidate_range" (+ from_ts, to_ts, channels[])
+    //              | "purge_all"}.
+    // Les scans comptent sans modifier ; la purge totale se reconstruit depuis
+    // l'appareil au cycle de collecte suivant.
+    QJsonObject cleanupData(const QJsonObject& request);
+
 private:
     void maintainCache();
 

@@ -26,7 +26,8 @@ class ModuleRegistry;
 //   GET  /healthz       -> { "status": "ok" }
 //   GET  /modules       -> etat de tous les modules
 //   GET  /modules/{id}  -> etat d'un module
-//   POST /analyze      -> analyse a la demande (stub AnalyticsModule)
+//   POST /analyze       -> analyse a la demande (AnalyticsModule)
+//   POST /data/cleanup  -> nettoyage du cache local (jamais de la source)
 // -----------------------------------------------------------------------------
 class HttpServer : public QObject {
     Q_OBJECT
@@ -45,6 +46,7 @@ private:
     void handleRequest(QTcpSocket* sock, const QByteArray& method,
                        const QByteArray& path, const QByteArray& body);
     QByteArray handleAnalyzePost(const QByteArray& body, int& code, QByteArray& reason) const;
+    QByteArray handleCleanupPost(const QByteArray& body, int& code, QByteArray& reason) const;
     QByteArray buildStatusJson() const;
     void reply(QTcpSocket* sock, int code, const QByteArray& reason, const QByteArray& body,
                const QByteArray& contentType = "application/json; charset=utf-8");

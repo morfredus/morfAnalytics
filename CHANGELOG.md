@@ -3,6 +3,55 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.6.0] – 2026-07-23
+
+### Ajouté
+
+- **Nettoyage du cache (`POST /data/cleanup`) et section « Gestion du cache »
+  sur la page.** Trois opérations, qui n'agissent **que sur la copie locale** —
+  les mesures d'origine, sur l'appareil, ne sont jamais touchées, le collecteur
+  n'émettant que des GET :
+  - *Mesures aberrantes* : recherche puis neutralisation des relevés portant une
+    pression physiquement impossible (capteur en panne : `0 hPa`, `0 °C`). La
+    ligne entière est neutralisée, ces zéros n'étant pas des mesures.
+  - *Neutralisation d'une plage* : les valeurs d'une période (et éventuellement
+    d'un seul canal) sont marquées manquantes, avec comptage préalable
+    (`dry_run`).
+  - *Purge totale* : cache vidé (mesures + curseurs), reconstruit intégralement
+    depuis l'appareil au cycle de collecte suivant.
+
+  Le nettoyage partiel **neutralise** (valeurs mises à `NULL`) au lieu de
+  supprimer les lignes : la reprise de collecte se déduit de `MAX(idx)` par
+  jour, et des lignes supprimées seraient re-téléchargées depuis l'ESP32 au
+  cycle suivant. Une ligne neutralisée reste en place, et l'import en
+  `OR IGNORE` ne la réécrit jamais.
+
+- **Filtre de plausibilité à l'import.** Le collecteur marque manquante toute
+  valeur physiquement impossible (température hors ±60 °C, humidité hors
+  0–100 %, pression hors 300–1200 hPa) ; une pression hors bornes invalide le
+  relevé entier, signature d'un capteur hors service. Les pannes futures
+  n'entrent donc plus dans le cache — le nettoyage manuel rattrape l'historique
+  déjà importé.
+
+- **Analyse « Tendance de température » (`temp_trend`).** Variations sur 1 h et
+  3 h, écart avec la veille à la même heure (pour séparer un changement de
+  masse d'air du cycle jour/nuit), et libellé de tendance. Pendant côté
+  thermomètre de la tendance barométrique.
+
+### Modifié
+
+- **Page d'analyses.** Heure de la mesure affichée sous les conditions
+  actuelles ; heures restantes avant l'aube sur le risque de gelée ; période
+  couverte sous les records ; horodatage « Analyses actualisées » et bouton
+  *Actualiser* dans l'en-tête.
+
+### Corrigé
+
+- **`daily_cycle.days_counted` annonçait la largeur de la fenêtre demandée**,
+  pas le nombre de journées réellement observées : sur un historique plus court
+  que la fenêtre, les deux divergent. Le compte porte désormais sur les jours
+  effectivement vus.
+
 ## [0.5.1] – 2026-07-21
 
 ### Corrigé

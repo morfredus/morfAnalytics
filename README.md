@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.5.3-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -23,7 +23,7 @@ unavailable.
 
 See the ecosystem vision in `../MORFSYSTEM_ARCHITECTURE.md`.
 
-> **Status: operational.** Incremental collection, twelve weather analyses and a
+> **Status: operational.** Incremental collection, thirteen weather analyses, cache cleanup and a
 > web page are in place. Still to be written: publishing results to **morfSync**,
 > and the correlation and anomaly-detection analyses.
 
@@ -43,7 +43,12 @@ See the ecosystem vision in `../MORFSYSTEM_ARCHITECTURE.md`.
   (usable on a LAN with no Internet access).
 - **HTTP API** (GET + POST) — `GET /` (web page), `GET /analyses` (catalog),
   `GET /status` (morfBeacon-compatible), `GET /healthz`, `GET /modules`,
-  `GET /modules/{id}`, and `POST /analyze` (on-demand analysis).
+  `GET /modules/{id}`, `POST /analyze` (on-demand analysis) and
+  `POST /data/cleanup` (local-cache cleanup — never the source).
+- **Cache cleanup** — from the page or the API: neutralise failed-sensor
+  readings (`0 hPa`, `0 °C`), neutralise a time range, or purge everything.
+  Acts on the local copy only; the original measurements on the device are
+  never touched, and a purged cache rebuilds itself.
 - **Config** — JSON file with a `modules` list; a factory turns it into modules.
 - **LAN announce** — morfBeacon heartbeat (bundled, no external dependency).
 - **Service install** — `scripts/linux/` (systemd) and `scripts/windows/`
