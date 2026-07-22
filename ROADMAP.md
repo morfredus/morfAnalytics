@@ -18,7 +18,7 @@ Deux principes cadrent tout ce qui suit :
 
 - **Publication des résultats vers morfSync.** Les analyses restent aujourd'hui
   cantonnées à ce service. Les publier dans le journal `meteohub` les rendrait
-  consultables par le reste de l'écosystème (RaspberryDashboard, SiteWatch…).
+  consultables par le reste de l'écosystème (morfDashboard, SiteWatch…).
 - **Tests unitaires des formules météo.** `MeteoMath` est la seule partie où une
   erreur passe inaperçue : un point de rosée faux ressemble à un point de rosée
   juste. Des valeurs de référence issues de tables météorologiques seraient la
