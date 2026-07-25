@@ -3,6 +3,15 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.6.2] – 2026-07-25
+
+### Corrigé
+
+- **Valeurs longues dans les cartouches d'analyses.** Elles restent alignées à
+  droite sans couper les mots. Lorsqu'une valeur ne peut pas cohabiter avec son
+  libellé — par exemple une tendance descriptive — elle est placée sur la ligne
+  suivante, toujours alignée à droite, sans chevauchement.
+
 ## [0.6.1] – 2026-07-25
 
 ### Corrigé

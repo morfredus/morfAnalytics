@@ -268,7 +268,8 @@ QByteArray HttpServer::landingPage() {
   dl { display: grid; grid-template-columns: auto 1fr; gap: .35rem .9rem; margin: 0; }
   dt { color: var(--muted); white-space: nowrap; }
   dd { min-width: 0; margin: 0; text-align: right; font-variant-numeric: tabular-nums;
-       overflow-wrap: anywhere; }
+       white-space: nowrap; }
+  dd.wide-value { grid-column: 1 / -1; white-space: normal; }
 
   .hero { font-size: 2.6rem; font-weight: 600; letter-spacing: -.03em; line-height: 1.1; }
   .hero .unit { font-size: 1.2rem; color: var(--muted); font-weight: 400; }
@@ -470,6 +471,17 @@ function dl(rows) {
   const body = rows.filter((r) => r[1] !== undefined && r[1] !== null)
     .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
   return `<dl>${body}</dl>`;
+}
+
+// Une valeur reste a droite de son libelle tant que les deux tiennent sur la
+// meme ligne. Sinon, elle prend la ligne suivante et toute la largeur : aucun
+// mot n'est coupe, et le libelle ne peut jamais etre recouvert.
+function fitDefinitionLists() {
+  document.querySelectorAll('dl dd').forEach((value) => {
+    value.classList.remove('wide-value');
+    if (value.scrollWidth > value.clientWidth + 1)
+      value.classList.add('wide-value');
+  });
 }
 
 // Courbe simple, tracee a la main : evite d'embarquer une bibliotheque de
@@ -726,6 +738,7 @@ async function loadAnalyses() {
     `<h2 class="section">${esc(GROUP_LABELS[group] || group)}</h2>
      <div class="grid">${items.map(([m, r]) => renderCard(m, r)).join('')}</div>`
   ).join('');
+  requestAnimationFrame(fitDefinitionLists);
   document.getElementById('refreshed').textContent =
     new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
@@ -880,6 +893,12 @@ document.getElementById('purge-all').addEventListener('click', async () => {
 document.getElementById('refresh-btn').addEventListener('click', () => {
   loadStatus();
   loadAnalyses();
+});
+
+let fitTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(fitTimer);
+  fitTimer = setTimeout(fitDefinitionLists, 100);
 });
 
 loadStatus();
