@@ -185,6 +185,71 @@ QJsonObject analyzeCurrent(const AnalysisContext& ctx, const QJsonObject&) {
     return o;
 }
 
+// Chaleur ressentie : l'humidex combine temperature et humidite, ce qui rend
+// visible un risque que le thermometre seul sous-estime quand l'air est lourd.
+QJsonObject analyzeHeatRisk(const AnalysisContext& ctx, const QJsonObject&) {
+    const Series series = ctx.store->range(ctx.now - 6 * kHour, ctx.now);
+    const QVector<double>* temp = series.channel(kTemp);
+    const QVector<double>* hum  = series.channel(kHum);
+    if (!temp || !hum)
+        return failure(QStringLiteral("canaux manquants"));
+
+    const int i = lastValidIndex(*temp);
+    if (i < 0 || !Series::isValid((*hum)[i]))
+        return failure(QStringLiteral("aucune mesure récente"));
+
+    const double t = (*temp)[i];
+    const double h = (*hum)[i];
+    const double hx = meteo::humidex(t, h);
+    QString level = QStringLiteral("faible");
+    if (hx >= 45.0)      level = QStringLiteral("très élevé");
+    else if (hx >= 40.0) level = QStringLiteral("élevé");
+    else if (hx >= 35.0) level = QStringLiteral("modéré");
+
+    QJsonObject o;
+    o["temperature"] = round1(t);
+    o["humidity"]    = round1(h);
+    o["humidex"]     = round1(hx);
+    o["risk"]        = level;
+    o["note"] = QStringLiteral(
+        "Indicateur local temperature-humidite. Il ne remplace pas une "
+        "vigilance canicule officielle ni un avis medical.");
+    return o;
+}
+
+// Secheresse de l'air : le deficit de pression de vapeur quantifie le pouvoir
+// evaporant de l'air. C'est un precurseur utile pour la vegetation, mais pas
+// un indice de danger de feu : pluie, vent et etat des sols manquent ici.
+QJsonObject analyzeDryAirRisk(const AnalysisContext& ctx, const QJsonObject&) {
+    const Series series = ctx.store->range(ctx.now - 6 * kHour, ctx.now);
+    const QVector<double>* temp = series.channel(kTemp);
+    const QVector<double>* hum  = series.channel(kHum);
+    if (!temp || !hum)
+        return failure(QStringLiteral("canaux manquants"));
+
+    const int i = lastValidIndex(*temp);
+    if (i < 0 || !Series::isValid((*hum)[i]))
+        return failure(QStringLiteral("aucune mesure récente"));
+
+    const double t = (*temp)[i];
+    const double h = (*hum)[i];
+    const double vpd = meteo::vaporPressureDeficit(t, h);
+    QString level = QStringLiteral("faible");
+    if (vpd >= 2.0)      level = QStringLiteral("très sec");
+    else if (vpd >= 1.2) level = QStringLiteral("sec");
+    else if (vpd >= 0.7) level = QStringLiteral("modéré");
+
+    QJsonObject o;
+    o["temperature"] = round1(t);
+    o["humidity"]    = round1(h);
+    o["vpd_kpa"]     = round2(vpd);
+    o["risk"]        = level;
+    o["note"] = QStringLiteral(
+        "Secheresse atmospherique locale, pas un niveau officiel de danger de "
+        "feu. La pluie recente, le vent et l'etat de la vegetation ne sont pas mesures.");
+    return o;
+}
+
 // Tendance barometrique sur 3 h, code OMM, et alerte de chute rapide.
 QJsonObject analyzePressureTrend(const AnalysisContext& ctx, const QJsonObject&) {
     const Series series = ctx.store->range(ctx.now - 12 * kHour, ctx.now);
@@ -796,6 +861,8 @@ void registerMeteoAnalyses(AnalysisRegistry& registry) {
 
     // --- Vague 1 : etat courant et prevision locale -------------------------
     add("current", "Conditions actuelles", "nowcast", 0, analyzeCurrent);
+    add("heat_risk", "Chaleur et humidex", "nowcast", 0, analyzeHeatRisk);
+    add("dry_air", "Sécheresse atmosphérique", "nowcast", 0, analyzeDryAirRisk);
     add("pressure_trend", "Tendance barométrique", "nowcast", 3 * kHour, analyzePressureTrend);
     add("temp_trend", "Tendance de température", "nowcast", 3 * kHour, analyzeTempTrend);
     add("zambretti", "Prévision locale (Zambretti)", "nowcast", 3 * kHour, analyzeZambretti);

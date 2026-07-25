@@ -3,6 +3,17 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.6.3] – 2026-07-26
+
+### Ajouté
+
+- **Chaleur et humidex.** Niveau de chaleur locale déduit de la température et
+  de l'humidité, avec humidex lisible dans le cartouche.
+- **Sécheresse atmosphérique.** Déficit de pression de vapeur (VPD), qui mesure
+  le pouvoir asséchant de l'air. Il est explicitement présenté comme un
+  indicateur local et non comme un danger officiel de feu : pluie, vent et état
+  de la végétation ne sont pas mesurés par la station.
+
 ## [0.6.2] – 2026-07-25
 
 ### Corrigé

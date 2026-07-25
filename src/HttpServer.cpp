@@ -264,6 +264,10 @@ QByteArray HttpServer::landingPage() {
           padding: 1.1rem 1.25rem; }
   .card h3 { margin: 0 0 .8rem; font-size: .95rem; font-weight: 600; }
   .card.wide { grid-column: 1 / -1; }
+  .summary { margin: 0 0 2rem; }
+  .summary .summary-main { font-size: 1.2rem; font-weight: 600; margin: 0 0 .45rem; }
+  .summary .summary-lines { margin: 0; color: var(--muted); }
+  .summary .summary-lines span + span::before { content: " · "; }
 
   dl { display: grid; grid-template-columns: auto 1fr; gap: .35rem .9rem; margin: 0; }
   dt { color: var(--muted); white-space: nowrap; }
@@ -294,6 +298,15 @@ QByteArray HttpServer::landingPage() {
              background: color-mix(in srgb, var(--warn) 12%, transparent);
              border-left: 3px solid var(--warn); }
   .unavailable { color: var(--muted); font-size: .9rem; }
+  .learning { color: var(--muted); font-size: .9rem; }
+  .learning p { margin: .55rem 0 0; }
+  .progress { height: .45rem; margin-top: .5rem; border-radius: 999px;
+              overflow: hidden; background: color-mix(in srgb, var(--muted) 18%, transparent); }
+  .progress span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+  details.maintenance { margin-top: 2.5rem; }
+  details.maintenance > summary { cursor: pointer; color: var(--muted); font-size: .8rem;
+                                  text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+  details.maintenance[open] > summary { margin-bottom: .9rem; }
 
   table { width: 100%; border-collapse: collapse; font-size: .9rem; }
   th, td { text-align: right; padding: .3rem .4rem; border-bottom: 1px solid var(--line); }
@@ -352,6 +365,8 @@ QByteArray HttpServer::landingPage() {
     </div>
   </header>
 
+  <section id="summary" class="card summary" hidden aria-live="polite"></section>
+
   <h2 class="section">Service et collecte</h2>
   <div class="grid">
     <div class="card">
@@ -376,8 +391,9 @@ QByteArray HttpServer::landingPage() {
 
   <div id="groups"></div>
 
-  <h2 class="section">Gestion du cache</h2>
-  <div class="grid">
+  <details class="maintenance">
+    <summary>Maintenance avancée</summary>
+    <div class="grid">
     <div class="card">
       <h3>Mesures aberrantes</h3>
       <p class="note" style="margin-top:0">Relevés portant une pression physiquement
@@ -425,7 +441,8 @@ QByteArray HttpServer::landingPage() {
       </div>
       <div id="purge-result" class="cleanup-result"></div>
     </div>
-  </div>
+    </div>
+  </details>
 
   <footer>
     État détaillé au format JSON : <code>/status</code>, <code>/modules</code>,
@@ -528,6 +545,18 @@ const RENDERERS = {
       `<span class="chip">${esc(k)} <b>${v}</b></span>`).join('')}</div>`;
     return html + notes(r);
   },
+
+  heat_risk: (r) => `<div>${riskBadge(r.risk || '—')}</div>` + dl([
+    ['Température', num(r.temperature, '°C')],
+    ['Humidité', num(r.humidity, '%')],
+    ['Humidex', num(r.humidex, '°C')]
+  ]) + notes(r),
+
+  dry_air: (r) => `<div>${riskBadge(r.risk || '—')}</div>` + dl([
+    ['Température', num(r.temperature, '°C')],
+    ['Humidité', num(r.humidity, '%')],
+    ['Déficit de vapeur', num(r.vpd_kpa, 'kPa')]
+  ]) + notes(r),
 
   zambretti: (r) => `<div class="quote">${esc(r.forecast || '—')}</div>` +
     `<div class="chips">

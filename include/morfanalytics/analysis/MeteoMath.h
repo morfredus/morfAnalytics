@@ -37,6 +37,11 @@ double absoluteHumidity(double tempC, double humidityPct);
 // dessous, la fonction renvoie la temperature telle quelle.
 double humidex(double tempC, double humidityPct);
 
+// Deficit de pression de vapeur (kPa) : mesure de la capacite de l'air a
+// assecher la vegetation. Zero signifie air sature ; la valeur augmente avec
+// la chaleur et la secheresse de l'air.
+double vaporPressureDeficit(double tempC, double humidityPct);
+
 // Pression ramenee au niveau de la mer (formule barometrique). Sans cette
 // reduction, la pression mesuree n'est comparable ni aux bulletins meteo ni a
 // celle d'une autre station : 100 metres d'altitude valent deja environ 12 hPa.

@@ -49,6 +49,13 @@ double humidex(double tempC, double humidityPct) {
     return std::max(result, tempC);
 }
 
+double vaporPressureDeficit(double tempC, double humidityPct) {
+    const double rh = std::clamp(humidityPct, 0.0, 100.0);
+    // Formule de Tetens : pression de vapeur saturante en kPa.
+    const double saturation = 0.6108 * std::exp((17.27 * tempC) / (tempC + 237.3));
+    return saturation * (1.0 - rh / 100.0);
+}
+
 double seaLevelPressure(double pressureHpa, double tempC, double altitudeM) {
     if (std::abs(altitudeM) < 0.5)
         return pressureHpa; // station au niveau de la mer : rien a corriger

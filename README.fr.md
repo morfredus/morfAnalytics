@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.6.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.6.3-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -108,6 +108,8 @@ Le catalogue complet est exposé par `GET /analyses`.
 | Analyse | `type` | Ce qu'elle apporte |
 |---|---|---|
 | Conditions actuelles | `current` | Point de rosée, humidité absolue, humidex, pression ramenée au niveau de la mer |
+| Chaleur et humidex | `heat_risk` | Inconfort et risque local liés à la combinaison température-humidité |
+| Sécheresse atmosphérique | `dry_air` | Pouvoir asséchant de l'air ; indicateur local, distinct du danger officiel de feu |
 | Tendance barométrique | `pressure_trend` | Variation sur 1 h et 3 h, code OMM, alerte de chute rapide |
 | Prévision locale | `zambretti` | Prévision textuelle à 12–24 h déduite de la pression |
 | Risque de brouillard | `fog_risk` | Écart au point de rosée et son resserrement |
@@ -136,8 +138,9 @@ publier une moyenne calculée sur trois mesures.
 ### Limites assumées
 
 Ces analyses reposent sur trois grandeurs seulement — température, humidité,
-pression. Sans vent ni ensoleillement, Zambretti et les risques de brouillard et
-de gelée restent des **indications locales**, pas des prévisions. Chaque
+pression. Sans vent, pluie ni état de la végétation, Zambretti, les risques de
+brouillard et de gelée, et la sécheresse atmosphérique restent des
+**indications locales**, pas des prévisions ni un danger officiel de feu. Chaque
 résultat porte la note correspondante, affichée telle quelle dans la page.
 
 ## Compiler
