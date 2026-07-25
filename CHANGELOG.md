@@ -3,6 +3,14 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.6.1] – 2026-07-25
+
+### Corrigé
+
+- **Cartouches de résultats de la page d'analyses.** Les valeurs longues, dont
+  une tendance de température descriptive, reviennent désormais à la ligne dans
+  leur cartouche au lieu de déborder de celui-ci.
+
 ## [0.6.0] – 2026-07-23
 
 ### Ajouté

@@ -267,7 +267,8 @@ QByteArray HttpServer::landingPage() {
 
   dl { display: grid; grid-template-columns: auto 1fr; gap: .35rem .9rem; margin: 0; }
   dt { color: var(--muted); white-space: nowrap; }
-  dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  dd { min-width: 0; margin: 0; text-align: right; font-variant-numeric: tabular-nums;
+       overflow-wrap: anywhere; }
 
   .hero { font-size: 2.6rem; font-weight: 600; letter-spacing: -.03em; line-height: 1.1; }
   .hero .unit { font-size: 1.2rem; color: var(--muted); font-weight: 400; }
