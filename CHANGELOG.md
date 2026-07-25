@@ -3,6 +3,17 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.6.4] – 2026-07-26
+
+### Modifié
+
+- **Page d'analyses réorganisée autour de l'interprétation.** Une synthèse de
+  la situation locale ouvre désormais la page (température, tendances, alertes
+  locales et prévision). Les analyses qui construisent encore leur historique
+  affichent une progression « En apprentissage » avec les jours déjà collectés
+  et le seuil restant, au lieu de ressembler à une erreur. Les opérations sur le
+  cache sont regroupées sous « Maintenance avancée », repliée par défaut.
+
 ## [0.6.3] – 2026-07-26
 
 ### Ajouté

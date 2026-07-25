@@ -265,6 +265,8 @@ QByteArray HttpServer::landingPage() {
   .card h3 { margin: 0 0 .8rem; font-size: .95rem; font-weight: 600; }
   .card.wide { grid-column: 1 / -1; }
   .summary { margin: 0 0 2rem; }
+  .summary h2 { margin: 0 0 .65rem; font-size: .8rem; text-transform: uppercase;
+                letter-spacing: .08em; color: var(--muted); font-weight: 600; }
   .summary .summary-main { font-size: 1.2rem; font-weight: 600; margin: 0 0 .45rem; }
   .summary .summary-lines { margin: 0; color: var(--muted); }
   .summary .summary-lines span + span::before { content: " · "; }
@@ -472,7 +474,8 @@ const num = (v, unit) => (v === undefined || v === null)
   ? '—' : `${v}${unit ? ' ' + unit : ''}`;
 
 const riskBadge = (level) => {
-  const cls = level === 'élevé' ? 'bad' : (level === 'modéré' ? 'warn' : 'ok');
+  const cls = ['élevé', 'très élevé', 'sec', 'très sec'].includes(level)
+    ? 'bad' : (level === 'modéré' ? 'warn' : 'ok');
   return `<span class="badge ${cls}">${esc(level)}</span>`;
 };
 
@@ -499,6 +502,44 @@ function fitDefinitionLists() {
     if (value.scrollWidth > value.clientWidth + 1)
       value.classList.add('wide-value');
   });
+}
+
+function renderSummary(results) {
+  const summary = document.getElementById('summary');
+  const current = results.current;
+  if (!current || current.ok === false || current.temperature === undefined) {
+    summary.hidden = true;
+    return;
+  }
+
+  const temp = current.temperature;
+  let headline = temp >= 30 ? 'Conditions très chaudes.'
+    : temp >= 25 ? 'Conditions chaudes.'
+    : temp <= 0 ? 'Conditions hivernales.' : 'Conditions locales stables.';
+  const lines = [`Température mesurée : ${num(temp, '°C')}`];
+
+  const trend = results.temp_trend;
+  if (trend && trend.ok !== false && trend.tendency)
+    lines.push(`Température : ${esc(trend.tendency)}`);
+  const pressure = results.pressure_trend;
+  if (pressure && pressure.ok !== false && pressure.tendency)
+    lines.push(`Pression : ${esc(pressure.tendency)}`);
+
+  const alerts = [];
+  [results.heat_risk, results.dry_air, results.fog_risk, results.frost_risk]
+    .filter((r) => r && r.ok !== false && ['modéré', 'élevé', 'très élevé', 'sec', 'très sec'].includes(r.risk))
+    .forEach((r) => alerts.push(r.title || 'condition à surveiller'));
+  if (pressure && pressure.storm_warning) alerts.push('chute de pression rapide');
+  lines.push(alerts.length ? `À surveiller : ${esc(alerts.join(', '))}`
+                           : 'Aucune alerte locale détectée');
+
+  const forecast = results.zambretti;
+  if (forecast && forecast.ok !== false && forecast.forecast)
+    lines.push(esc(forecast.forecast));
+
+  summary.innerHTML = `<h2>Situation actuelle</h2><p class="summary-main">${headline}</p>` +
+    `<p class="summary-lines">${lines.map((line) => `<span>${line}</span>`).join('')}</p>`;
+  summary.hidden = false;
 }
 
 // Courbe simple, tracee a la main : evite d'embarquer une bibliotheque de
@@ -718,13 +759,18 @@ function renderCard(meta, result) {
   let body;
   if (!result || result.ok === false) {
     const reason = (result && result.reason) || 'indisponible';
-    let extra = '';
     if (result && result.required_span_s) {
-      const need = Math.round(result.required_span_s / 86400);
-      const have = Math.round((result.span_s || 0) / 86400);
-      extra = ` <span class="unavailable">(${have} j d'historique, ${need} j requis)</span>`;
+      const need = Math.max(1, Math.ceil(result.required_span_s / 86400));
+      const have = Math.min(need, Math.max(0, Math.floor((result.span_s || 0) / 86400)));
+      const remaining = Math.max(0, need - have);
+      const percent = Math.round((have / need) * 100);
+      body = `<div class="learning"><span class="badge warn">En apprentissage</span>` +
+        `<p>${have} / ${need} jours de mesures collectés</p>` +
+        `<div class="progress" aria-label="Progression : ${percent} %"><span style="width:${percent}%"></span></div>` +
+        `<p>Encore ${remaining} jour${remaining > 1 ? 's' : ''} avant les premières statistiques.</p></div>`;
+    } else {
+      body = `<p class="unavailable">${esc(reason)}</p>`;
     }
-    body = `<p class="unavailable">${esc(reason)}${extra}</p>`;
   } else {
     const renderer = RENDERERS[meta.id] || renderGeneric;
     try { body = renderer(result); }
@@ -759,14 +805,17 @@ async function loadAnalyses() {
     }).then((r) => r.json()).catch(() => null)));
 
   const byGroup = {};
+  const byId = {};
   catalog.forEach((meta, i) => {
     (byGroup[meta.group] = byGroup[meta.group] || []).push([meta, results[i]]);
+    byId[meta.id] = results[i];
   });
 
   container.innerHTML = Object.entries(byGroup).map(([group, items]) =>
     `<h2 class="section">${esc(GROUP_LABELS[group] || group)}</h2>
      <div class="grid">${items.map(([m, r]) => renderCard(m, r)).join('')}</div>`
   ).join('');
+  renderSummary(byId);
   requestAnimationFrame(fitDefinitionLists);
   document.getElementById('refreshed').textContent =
     new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });

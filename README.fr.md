@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.6.3-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.6.4-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -42,7 +42,9 @@ Voir la vision d'ensemble de l'écosystème dans `../MORFSYSTEM_ARCHITECTURE.md`
   temporelle générique à canaux nommés. Les analyses météo ne sont qu'un jeu
   parmi d'autres : un autre projet enregistre les siennes sans toucher au moteur.
 - **Page web d'analyses** — servie par le service lui-même, sans ressource
-  externe (consultable sur un réseau local sans accès Internet).
+  externe (consultable sur un réseau local sans accès Internet). Une synthèse
+  raconte d'abord la situation locale ; les cartes apportent ensuite les chiffres
+  et la progression d'apprentissage qui la justifient.
 - **API HTTP** (GET + POST) — `GET /` (page web), `GET /analyses` (catalogue),
   `GET /status` (compatible morfBeacon), `/healthz`, `/modules`, `/modules/{id}`,
   `POST /analyze` (analyse à la demande) et `POST /data/cleanup` (nettoyage du
