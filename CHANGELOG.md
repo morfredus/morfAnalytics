@@ -3,6 +3,31 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.6.5] – 2026-07-27
+
+### Ajouté
+
+- **`/status` déclare l'API métier** (`GET /analyses`, `POST /analyze`,
+  `POST /data/cleanup`), en plus de l'interface web déjà annoncée. Un observateur
+  découvre ainsi non seulement que morfAnalytics existe et où l'ouvrir, mais quoi
+  l'appeler — le dernier élément du principe « chaque service annonce ce qu'il
+  sait faire ET comment on l'appelle » (morfBeacon 0.5.0).
+
+### Modifié
+
+- **Le détail annoncé (interface web + API) est défini en un seul point**
+  (`SelfDescription.h`, `fillAnnouncedDetail`), appelé par le heartbeat
+  (`Service`) **et** par `/status` (`HttpServer`, via `describeService` de
+  morfBeacon). Le bloc `web_ui` était jusqu'ici écrit **à la main aux deux
+  endroits**, mêmes valeurs recopiées : la moindre modification pouvait diverger.
+  Un observateur voyait potentiellement une interface annoncée par le heartbeat
+  et décrite différemment par `/status`.
+
+### Vérifié
+
+`/status` d'un morfAnalytics réel émet `web_ui` et `api` identiques à ce que le
+heartbeat annonce, depuis la source unique.
+
 ## [0.6.4] – 2026-07-26
 
 ### Modifié
