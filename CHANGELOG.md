@@ -153,6 +153,18 @@ heartbeat annonce, depuis la source unique.
 
 ## [Non publié]
 
+## [0.6.6] - 2026-07-27
+### Ajouté
+
+- **La version s'affiche dans l'en-tete de la page** (pastille a cote du titre),
+  en plus de la carte Service, pour la lire d'un coup d'oeil comme dans les
+  autres services du parc.
+
+### Modifie
+
+- **Plus aucun tiret cadratin dans l'interface** : tous remplaces par le trait
+  d'union simple, conformement a la convention de redaction du parc.
+
 
 ## [0.5.3] – 2026-07-22
 

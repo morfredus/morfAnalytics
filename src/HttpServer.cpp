@@ -254,6 +254,11 @@ QByteArray HttpServer::landingPage() {
            text-decoration: none; font-size: .9rem; }
   a.back:hover { text-decoration: underline; }
   h1 { margin: 0 0 .2rem; font-size: 1.75rem; letter-spacing: -.02em; }
+  .version-badge { font-size: .8rem; font-weight: 600; vertical-align: middle;
+                   color: var(--accent);
+                   background: color-mix(in srgb, var(--accent) 12%, transparent);
+                   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+                   border-radius: 999px; padding: .1rem .5rem; margin-left: .4rem; }
   .sub { margin: 0; color: var(--muted); }
 
   h2.section { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em;
@@ -360,8 +365,8 @@ QByteArray HttpServer::landingPage() {
 <div class="wrap">
   <header class="top">
     <a id="backlink" class="back" href="#" hidden>&larr; Retour à MeteoHub</a>
-    <h1>morfAnalytics</h1>
-    <p class="sub">Analyses avancées &mdash; <span id="hostline">…</span></p>
+    <h1>morfAnalytics <span id="version-badge" class="version-badge"></span></h1>
+    <p class="sub">Analyses avancées - <span id="hostline">…</span></p>
     <div class="refresh-line">
       <span>Analyses actualisées : <span id="refreshed">…</span></span>
       <button id="refresh-btn" type="button">Actualiser</button>
@@ -435,7 +440,7 @@ QByteArray HttpServer::landingPage() {
     <div class="card">
       <h3>Purge totale</h3>
       <p class="note" style="margin-top:0">Vide entièrement le cache local. Il se
-        reconstruit depuis l'appareil au prochain cycle de collecte — les mesures
+        reconstruit depuis l'appareil au prochain cycle de collecte - les mesures
         d'origine, sur l'appareil, ne sont jamais touchées. Les neutralisations
         manuelles sont alors perdues (les pannes capteur, elles, restent filtrées
         à l'import).</p>
@@ -472,7 +477,7 @@ const fmtDay = (iso) => {
   return isNaN(d) ? iso : d.toLocaleDateString('fr-FR');
 };
 const num = (v, unit) => (v === undefined || v === null)
-  ? '—' : `${v}${unit ? ' ' + unit : ''}`;
+  ? '-' : `${v}${unit ? ' ' + unit : ''}`;
 
 const riskBadge = (level) => {
   const cls = ['élevé', 'très élevé', 'sec', 'très sec'].includes(level)
@@ -576,7 +581,7 @@ const RENDERERS = {
       heroSub.push(`ressenti ${num(r.humidex, '°C')}`);
     if (r.ts) heroSub.push(`mesuré à ${fmtTime(r.ts)}`);
     if (heroSub.length)
-      html += `<div class="hero-sub">${heroSub.join(' — ')}</div>`;
+      html += `<div class="hero-sub">${heroSub.join(' - ')}</div>`;
     const chips = [];
     if (r.humidity !== undefined) chips.push(['Humidité', num(r.humidity, '%')]);
     if (r.dew_point !== undefined) chips.push(['Point de rosée', num(r.dew_point, '°C')]);
@@ -588,19 +593,19 @@ const RENDERERS = {
     return html + notes(r);
   },
 
-  heat_risk: (r) => `<div>${riskBadge(r.risk || '—')}</div>` + dl([
+  heat_risk: (r) => `<div>${riskBadge(r.risk || '-')}</div>` + dl([
     ['Température', num(r.temperature, '°C')],
     ['Humidité', num(r.humidity, '%')],
     ['Humidex', num(r.humidex, '°C')]
   ]) + notes(r),
 
-  dry_air: (r) => `<div>${riskBadge(r.risk || '—')}</div>` + dl([
+  dry_air: (r) => `<div>${riskBadge(r.risk || '-')}</div>` + dl([
     ['Température', num(r.temperature, '°C')],
     ['Humidité', num(r.humidity, '%')],
     ['Déficit de vapeur', num(r.vpd_kpa, 'kPa')]
   ]) + notes(r),
 
-  zambretti: (r) => `<div class="quote">${esc(r.forecast || '—')}</div>` +
+  zambretti: (r) => `<div class="quote">${esc(r.forecast || '-')}</div>` +
     `<div class="chips">
        <span class="chip">Pression <b>${num(r.pressure_sea_level, 'hPa')}</b></span>
        <span class="chip">3 h <b>${r.delta_3h > 0 ? '+' : ''}${num(r.delta_3h, 'hPa')}</b></span>
@@ -624,13 +629,13 @@ const RENDERERS = {
     ['Tendance', esc(r.tendency || '')]
   ]) + notes(r),
 
-  fog_risk: (r) => `<div>${riskBadge(r.risk || '—')}</div>` + dl([
+  fog_risk: (r) => `<div>${riskBadge(r.risk || '-')}</div>` + dl([
     ['Écart au point de rosée', num(r.dew_point_spread, '°C')],
     ['Évolution sur 2 h', r.spread_trend_2h === undefined ? null :
       `${r.spread_trend_2h > 0 ? '+' : ''}${num(r.spread_trend_2h, '°C')}`]
   ]) + notes(r),
 
-  frost_risk: (r) => `<div>${riskBadge(r.risk || '—')}</div>` + dl([
+  frost_risk: (r) => `<div>${riskBadge(r.risk || '-')}</div>` + dl([
     ['Température actuelle', num(r.temperature, '°C')],
     ['Refroidissement', num(r.cooling_per_hour, '°C/h')],
     ['Minimum projeté', r.projected_min === undefined ? null : num(r.projected_min, '°C')],
@@ -649,7 +654,7 @@ const RENDERERS = {
     html += dl([
       ["Normale du jour", num(r.normal_temp, '°C')],
       ["Aujourd'hui", r.today_temp === undefined ? null : num(r.today_temp, '°C')],
-      ['Plage observée', `${num(r.normal_min)} – ${num(r.normal_max, '°C')}`],
+      ['Plage observée', `${num(r.normal_min)} - ${num(r.normal_max, '°C')}`],
       ['Journées prises en compte', r.sample_days],
       ['Années couvertes', r.years]
     ]);
@@ -721,8 +726,8 @@ const RENDERERS = {
   daily_cycle: (r) => {
     const h = (n) => `${String(n).padStart(2, '0')} h`;
     return sparkline(r.hourly_mean || []) + dl([
-      ['Heure la plus chaude', `${h(r.warmest_hour)} — ${num(r.warmest_temp, '°C')}`],
-      ['Heure la plus fraîche', `${h(r.coldest_hour)} — ${num(r.coldest_temp, '°C')}`],
+      ['Heure la plus chaude', `${h(r.warmest_hour)} - ${num(r.warmest_temp, '°C')}`],
+      ['Heure la plus fraîche', `${h(r.coldest_hour)} - ${num(r.coldest_temp, '°C')}`],
       ['Amplitude moyenne', num(r.amplitude, '°C')],
       ['Fenêtre', `${r.days_counted} jours`]
     ]) + notes(r);
@@ -830,6 +835,7 @@ async function loadStatus() {
     ]);
     document.getElementById('state').textContent = status.state || '?';
     document.getElementById('version').textContent = status.version || '?';
+    document.getElementById('version-badge').textContent = status.version ? 'v' + status.version : '';
     document.getElementById('host').textContent = status.host || '?';
     document.getElementById('hostline').textContent = status.host || '';
 
@@ -840,7 +846,7 @@ async function loadStatus() {
     // Lien de retour vers la station. MeteoHub ouvre ce service dans le MEME
     // onglet pour eviter d'en accumuler : sans ce lien, l'utilisateur n'aurait
     // que le bouton « precedent » du navigateur pour revenir. L'adresse est
-    // celle de la source collectee — la seule que ce service connaisse.
+    // celle de la source collectee - la seule que ce service connaisse.
     const back = document.getElementById('backlink');
     if (back && col && col.source) {
       back.href = col.source;
@@ -859,7 +865,7 @@ async function loadStatus() {
     } else {
       document.getElementById('source').textContent = 'aucun collecteur configuré';
       ['points', 'period', 'lastsync'].forEach((id) =>
-        document.getElementById(id).textContent = '—');
+        document.getElementById(id).textContent = '-');
       warn.innerHTML = `<p class="warning">Aucune source configurée : renseigner
         <code>source_url</code> dans le module <code>analytics</code> de la
         configuration, sans quoi aucune mesure n'est collectée et les analyses
