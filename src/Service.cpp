@@ -12,6 +12,7 @@
 #include "morfanalytics/Version.h"
 
 #include "morfbeacon/Heartbeat.h"
+#include "morfanalytics/SelfDescription.h"
 #include "morfbeacon/PresenceConfig.h"
 
 #include <utility>
@@ -55,15 +56,13 @@ bool Service::start() {
         // Renommer l'application n'interrompt donc pas l'integration.
         pc.capabilities        = {QStringLiteral("advanced_analysis")};
 
-        // morfAnalytics sert une page d'accueil : il la declare, et « web_ui »
-        // s'ajoute automatiquement aux capacites emises. Un observateur peut
-        // alors proposer un lien vers les analyses sans rien connaitre de
-        // morfAnalytics — c'est deja ainsi que MeteoHub le detecte, par capacite
-        // et jamais par nom.
-        pc.webUiPath        = QStringLiteral("/");
-        pc.webUiLabel       = QStringLiteral("Analyses");
-        pc.webUiDescription = QStringLiteral(
-            "Statistiques longue periode et correlations sur l'historique des equipements.");
+        // Detail annonce (interface web + API) : renseigne par le point unique
+        // fillAnnouncedDetail, le meme qu'utilise /status. Declarer web_ui ajoute
+        // automatiquement la capacite « web_ui » au heartbeat, de sorte qu'un
+        // observateur propose un lien vers les analyses sans rien connaitre de
+        // morfAnalytics — comme MeteoHub le detecte deja, par capacite, jamais
+        // par nom.
+        fillAnnouncedDetail(pc);
         pc.udpPort             = m_config.beaconUdpPort;
         pc.broadcastIntervalMs = m_config.beaconIntervalMs;
         pc.statusPort          = m_http ? m_http->port() : 0;

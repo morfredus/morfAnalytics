@@ -8,6 +8,7 @@
 #include "morfanalytics/ModuleRegistry.h"
 #include "morfanalytics/AnalyticsModule.h"
 #include "morfanalytics/Version.h"
+#include "morfanalytics/SelfDescription.h"
 
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -999,18 +1000,15 @@ QByteArray HttpServer::buildStatusJson() const {
     o["ts"]       = static_cast<double>(QDateTime::currentSecsSinceEpoch());
     o["metrics"]  = m_registry ? m_registry->metrics() : QJsonObject{};
 
-    // Detail de l'interface Web, attendu par tout consommateur ayant vu passer
-    // la capacite « web_ui » dans le heartbeat. morfAnalytics sert son PROPRE
-    // /status au lieu d'utiliser le StatusServer de morfBeacon : il doit donc
-    // publier ce bloc lui-meme, sans quoi il annoncerait une capacite dont le
-    // detail resterait introuvable.
-    QJsonObject ui;
-    ui["path"]        = QStringLiteral("/");
-    ui["label"]       = QStringLiteral("Analyses");
-    ui["port"]        = static_cast<int>(port());
-    ui["description"] = QStringLiteral(
-        "Statistiques longue periode et correlations sur l'historique des equipements.");
-    o["web_ui"] = ui;
+    // Detail annonce (interface web + API). morfAnalytics sert son PROPRE
+    // /status plutot que le StatusServer de morfBeacon ; il appelle donc le
+    // MEME point unique (fillAnnouncedDetail + describeService) pour que son
+    // /status et son heartbeat ne puissent pas diverger.
+    morfbeacon::PresenceConfig self;
+    fillAnnouncedDetail(self);
+    const QJsonObject detail = morfbeacon::describeService(self, port());
+    for (auto it = detail.constBegin(); it != detail.constEnd(); ++it)
+        o[it.key()] = it.value();
 
     return toJson(o);
 }
