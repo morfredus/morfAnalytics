@@ -1,16 +1,16 @@
-# Journal des versions — morfAnalytics
+# Journal des versions - morfAnalytics
 
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
-## [0.6.5] – 2026-07-27
+## [0.6.5] - 2026-07-27
 
 ### Ajouté
 
 - **`/status` déclare l'API métier** (`GET /analyses`, `POST /analyze`,
   `POST /data/cleanup`), en plus de l'interface web déjà annoncée. Un observateur
   découvre ainsi non seulement que morfAnalytics existe et où l'ouvrir, mais quoi
-  l'appeler — le dernier élément du principe « chaque service annonce ce qu'il
+  l'appeler - le dernier élément du principe « chaque service annonce ce qu'il
   sait faire ET comment on l'appelle » (morfBeacon 0.5.0).
 
 ### Modifié
@@ -28,7 +28,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 `/status` d'un morfAnalytics réel émet `web_ui` et `api` identiques à ce que le
 heartbeat annonce, depuis la source unique.
 
-## [0.6.4] – 2026-07-26
+## [0.6.4] - 2026-07-26
 
 ### Modifié
 
@@ -39,7 +39,7 @@ heartbeat annonce, depuis la source unique.
   et le seuil restant, au lieu de ressembler à une erreur. Les opérations sur le
   cache sont regroupées sous « Maintenance avancée », repliée par défaut.
 
-## [0.6.3] – 2026-07-26
+## [0.6.3] - 2026-07-26
 
 ### Ajouté
 
@@ -50,16 +50,16 @@ heartbeat annonce, depuis la source unique.
   indicateur local et non comme un danger officiel de feu : pluie, vent et état
   de la végétation ne sont pas mesurés par la station.
 
-## [0.6.2] – 2026-07-25
+## [0.6.2] - 2026-07-25
 
 ### Corrigé
 
 - **Valeurs longues dans les cartouches d'analyses.** Elles restent alignées à
   droite sans couper les mots. Lorsqu'une valeur ne peut pas cohabiter avec son
-  libellé — par exemple une tendance descriptive — elle est placée sur la ligne
+  libellé - par exemple une tendance descriptive - elle est placée sur la ligne
   suivante, toujours alignée à droite, sans chevauchement.
 
-## [0.6.1] – 2026-07-25
+## [0.6.1] - 2026-07-25
 
 ### Corrigé
 
@@ -67,12 +67,12 @@ heartbeat annonce, depuis la source unique.
   une tendance de température descriptive, reviennent désormais à la ligne dans
   leur cartouche au lieu de déborder de celui-ci.
 
-## [0.6.0] – 2026-07-23
+## [0.6.0] - 2026-07-23
 
 ### Ajouté
 
 - **Nettoyage du cache (`POST /data/cleanup`) et section « Gestion du cache »
-  sur la page.** Trois opérations, qui n'agissent **que sur la copie locale** —
+  sur la page.** Trois opérations, qui n'agissent **que sur la copie locale** -
   les mesures d'origine, sur l'appareil, ne sont jamais touchées, le collecteur
   n'émettant que des GET :
   - *Mesures aberrantes* : recherche puis neutralisation des relevés portant une
@@ -92,9 +92,9 @@ heartbeat annonce, depuis la source unique.
 
 - **Filtre de plausibilité à l'import.** Le collecteur marque manquante toute
   valeur physiquement impossible (température hors ±60 °C, humidité hors
-  0–100 %, pression hors 300–1200 hPa) ; une pression hors bornes invalide le
+  0-100 %, pression hors 300-1200 hPa) ; une pression hors bornes invalide le
   relevé entier, signature d'un capteur hors service. Les pannes futures
-  n'entrent donc plus dans le cache — le nettoyage manuel rattrape l'historique
+  n'entrent donc plus dans le cache - le nettoyage manuel rattrape l'historique
   déjà importé.
 
 - **Analyse « Tendance de température » (`temp_trend`).** Variations sur 1 h et
@@ -116,14 +116,14 @@ heartbeat annonce, depuis la source unique.
   que la fenêtre, les deux divergent. Le compte porte désormais sur les jours
   effectivement vus.
 
-## [0.5.1] – 2026-07-21
+## [0.5.1] - 2026-07-21
 
 ### Corrigé
 
 - **Le cache de travail était versionné.** `cache/meteohub-cache.sqlite` et ses
   fichiers `-shm` / `-wal` étaient suivis par Git. SQLite réécrivant ces deux
   derniers à chaque ouverture, le dépôt affichait un fichier modifié **à chaque
-  exécution du service** — un bruit permanent sans aucune information.
+  exécution du service** - un bruit permanent sans aucune information.
 
   Plus gênant : un clone neuf héritait du cache d'une autre machine au lieu de
   partir vide. Cela contredit le principe du projet, qui pose que morfAnalytics
@@ -132,10 +132,10 @@ heartbeat annonce, depuis la source unique.
 
   Les fichiers restent sur disque, ne sont plus suivis, et `cache/` est ignoré.
   Le service crée le dossier au démarrage (`QDir::mkpath`) : vérifié en
-  démarrant depuis un emplacement sans cache — dossier et base créés seuls,
+  démarrant depuis un emplacement sans cache - dossier et base créés seuls,
   `/status` répond.
 
-## [0.5.0] – 2026-07-21
+## [0.5.0] - 2026-07-21
 
 ### Ajouté
 
@@ -156,31 +156,31 @@ heartbeat annonce, depuis la source unique.
 ## [0.6.6] - 2026-07-27
 ### Ajouté
 
-- **La version s'affiche dans l'en-tete de la page** (pastille a cote du titre),
-  en plus de la carte Service, pour la lire d'un coup d'oeil comme dans les
+- **La version s'affiche dans l'en-tête de la page** (pastille à côté du titre),
+  en plus de la carte Service, pour la lire d'un coup d'œil comme dans les
   autres services du parc.
 
-### Modifie
+### Modifié
 
-- **Plus aucun tiret cadratin dans l'interface** : tous remplaces par le trait
-  d'union simple, conformement a la convention de redaction du parc.
+- **Plus aucun tiret cadratin dans l'interface** : tous remplacés par le trait
+  d'union simple, conformément à la convention de rédaction du parc.
 
 
-## [0.5.3] – 2026-07-22
+## [0.5.3] - 2026-07-22
 
 ### Corrigé
 
 - **Un module qui ne démarre pas se voit dans le journal.** L'échec d'ouverture
   du cache SQLite restait muet : le service affichait « 1 module(s) », l'interface
-  renvoyait vers `source_url`, et la vraie cause — un dossier `/opt` possédé par
-  root où le cache était incréable — ne figurait nulle part. Le module logue
+  renvoyait vers `source_url`, et la vraie cause - un dossier `/opt` possédé par
+  root où le cache était incréable - ne figurait nulle part. Le module logue
   désormais le chemin et la raison (`qCritical`), et le registre signale tout
   `start()` en échec. L'enquête d'aujourd'hui aurait tenu en une ligne de
   `journalctl`.
-## [0.5.2] – 2026-07-22
+## [0.5.2] - 2026-07-22
 ### Modifié
 
-- **Installation, mise à jour et désinstallation par `./service.py`** — point
+- **Installation, mise à jour et désinstallation par `./service.py`** - point
   d'entrée unique multiplateforme (morfdeploy), en remplacement des scripts
   `install-service.sh`/`.ps1`. Le binaire de ce service est inchangé ; seul son
   mode de déploiement évolue.
@@ -190,7 +190,7 @@ heartbeat annonce, depuis la source unique.
 - **Enrichissement à la mise à jour** : une clé introduite par une nouvelle
   version est ajoutée avec sa valeur par défaut, sans jamais toucher vos réglages.
 
-## [0.4.1] – 2026-07-20
+## [0.4.1] - 2026-07-20
 
 ### Corrigé
 
@@ -199,7 +199,7 @@ heartbeat annonce, depuis la source unique.
   données « à titre d'exemple ». Le document décrit désormais `AnalyticsModule`
   (type `analytics`) et les routes réelles `GET /analyses` et `POST /analyze`.
 
-## [0.4.0] – 2026-07-19
+## [0.4.0] - 2026-07-19
 
 ### Ajouté
 
@@ -212,7 +212,7 @@ heartbeat annonce, depuis la source unique.
 - **Lien « ← Retour à MeteoHub »** en tête de la page web. MeteoHub ouvre ce
   service dans le **même onglet** pour ne pas accumuler d'onglets ; sans ce lien,
   seul le bouton « précédent » du navigateur permettait de revenir. L'adresse
-  utilisée est celle de la source collectée (`source_url`) — la seule que ce
+  utilisée est celle de la source collectée (`source_url`) - la seule que ce
   service connaisse.
 
 ### Compatibilité
@@ -222,15 +222,15 @@ heartbeat annonce, depuis la source unique.
   0.4.0 ne sont plus découvertes automatiquement. Elles restent joignables en
   saisissant leur adresse dans la page Système de MeteoHub.
 
-## [0.3.3] – 2026-07-19
+## [0.3.3] - 2026-07-19
 
 ### Corrigé
 
 - **La mise à jour ne livrait jamais les nouveaux paramètres de configuration.**
   `update-service.sh` ne recopiait que le binaire et laissait
   `/opt/morfanalytics/morfanalytics.json` intact, par souci de préserver les
-  réglages locaux. Conséquence : les paramètres apparus depuis l'installation —
-  `source_url` et `altitude_m`, introduits en 0.2.0 et 0.3.x — restaient absents
+  réglages locaux. Conséquence : les paramètres apparus depuis l'installation -
+  `source_url` et `altitude_m`, introduits en 0.2.0 et 0.3.x - restaient absents
   indéfiniment, et la collecte ne démarrait jamais **sans que rien ne le
   signale**. La mise à jour **complète** désormais la configuration
   (`merge-config.py`) : les valeurs déjà en place ne sont jamais modifiées, les
@@ -264,7 +264,7 @@ heartbeat annonce, depuis la source unique.
   qu'est le projet, `CONTRIBUTING.md` expliquant notamment comment ajouter une
   analyse.
 
-## [0.3.2] – 2026-07-19
+## [0.3.2] - 2026-07-19
 
 ### Corrigé
 
@@ -287,14 +287,14 @@ locale produisent des résultats cohérents ; les six analyses climatologiques
 annoncent correctement « historique insuffisant » avec la profondeur requise,
 5 journées ne suffisant pas à leurs seuils de 7 à 30 jours.
 
-## [0.3.1] – 2026-07-19
+## [0.3.1] - 2026-07-19
 
 ### Corrigé
 
 - **Une altitude nulle n'est plus confondue avec une altitude non renseignée.**
   L'absence du paramètre était détectée en testant `altitude_m ≈ 0`, si bien
-  qu'une station réellement au niveau de la mer — une valeur parfaitement
-  légitime — était signalée à tort comme mal configurée dans les analyses de
+  qu'une station réellement au niveau de la mer - une valeur parfaitement
+  légitime - était signalée à tort comme mal configurée dans les analyses de
   pression. C'est désormais la *présence* de la clé dans la configuration qui
   fait foi (`AnalysisContext::altitudeKnown`).
 
@@ -308,7 +308,7 @@ annoncent correctement « historique insuffisant » avec la profondeur requise,
 - L'exemple de configuration et les README utilisent 8 m comme valeur
   d'illustration, à adapter à chaque installation.
 
-## [0.3.0] – 2026-07-19
+## [0.3.0] - 2026-07-19
 
 ### Ajouté
 
@@ -325,7 +325,7 @@ annoncent correctement « historique insuffisant » avec la profondeur requise,
   (`pressure_trend`), prévision locale Zambretti (`zambretti`), risque de
   brouillard (`fog_risk`), risque de gelée par extrapolation du refroidissement
   nocturne (`frost_risk`).
-- **Six analyses climatologiques** — celles que l'appareil ne peut pas calculer
+- **Six analyses climatologiques** - celles que l'appareil ne peut pas calculer
   lui-même, faute de profondeur d'historique : normale glissante du jour de
   l'année et écart du jour (`normals`), degrés-jours de chauffage et de
   climatisation par mois (`degree_days`), amplitude thermique diurne
@@ -361,7 +361,7 @@ annoncent correctement « historique insuffisant » avec la profondeur requise,
   de mer. Le cas est signalé dans le résultat et dans la page.
 - La publication des résultats vers morfSync reste à écrire.
 
-## [0.2.0] – 2026-07-19
+## [0.2.0] - 2026-07-19
 
 ### Ajouté
 
@@ -408,7 +408,7 @@ annoncent correctement « historique insuffisant » avec la profondeur requise,
   socle générique.
 - La publication des résultats vers morfSync reste à écrire.
 
-## [0.1.0] – Amorçage
+## [0.1.0] - Amorçage
 
 ### Ajouté
 
@@ -416,7 +416,7 @@ annoncent correctement « historique insuffisant » avec la profondeur requise,
   d'analyse de l'écosystème morfSystem. Service prêt à tourner (API HTTP, config
   JSON, annonce LAN via morfBeacon sous l'app `morfAnalytics` sur le port 45454).
 - **Module `analytics`** (`AnalyticsModule`, remplace le module d'exemple) :
-  squelette du moteur d'analyse — maintient un *cache de travail* (copie
+  squelette du moteur d'analyse - maintient un *cache de travail* (copie
   synchronisée en lecture seule, via morfSync) et exécute les analyses **à la
   demande** (`analyze()`). Les algorithmes réels (tendances, corrélations,
   anomalies…) et la synchro du cache sont des `TODO`.
@@ -429,7 +429,7 @@ annoncent correctement « historique insuffisant » avec la profondeur requise,
 - Présence optionnelle : aucune dépendance pour le fonctionnement nominal des
   équipements.
 
-## [0.1.0] — 2026-07-16
+## [0.1.0] - 2026-07-16
 
 ### Ajouté
 

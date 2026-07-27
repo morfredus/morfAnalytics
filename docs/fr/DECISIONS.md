@@ -72,7 +72,7 @@ ni dans le cache.
 **Pourquoi.** Un autre projet de l'écosystème (consommation électrique, qualité
 d'air, supervision) doit pouvoir réutiliser la chaîne complète en enregistrant
 son propre jeu d'analyses. C'est l'unique appel à `registerMeteoAnalyses()` qui
-spécialise ce service en moteur météo — et rien d'autre.
+spécialise ce service en moteur météo - et rien d'autre.
 
 ---
 
@@ -89,7 +89,7 @@ référence, seule garantie réelle. Partout ailleurs, une erreur se voit.
 
 ## 6. Une analyse rend un résultat, jamais un flot de mesures
 
-Tendance, score, classement, quelques valeurs — jamais des milliers de points.
+Tendance, score, classement, quelques valeurs - jamais des milliers de points.
 Rapatrier des mesures est le travail de l'API d'historique de l'appareil.
 
 **Corollaire assumé** : une analyse manquant d'historique répond `ok: false` avec

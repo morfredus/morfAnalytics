@@ -13,7 +13,7 @@ copie locale des mesures d'un équipement et en tire des résultats synthétique
   sur l'équipement.
 - **Le moteur ignore le métier.** `IAnalysis` et `Series` ne connaissent que des
   canaux nommés. Une notion météo (pression, rosée, saison) n'a rien à faire
-  dans le moteur ni dans le cache — elle vit dans les analyses.
+  dans le moteur ni dans le cache - elle vit dans les analyses.
 - **Une analyse rend un résultat, pas des données.** Tendance, score, classement,
   quelques valeurs. Jamais un flot de mesures.
 - **Présence optionnelle.** Les équipements fonctionnent sans ce service ; seules
@@ -48,7 +48,7 @@ Deux exigences pour toute nouvelle analyse :
 
 `src/analysis/MeteoMath.cpp` regroupe les formules météorologiques en fonctions
 **pures**, sans état ni accès au cache. C'est délibéré : ce sont les seules
-parties du code où une erreur reste plausible à l'œil — un point de rosée faux
+parties du code où une erreur reste plausible à l'œil - un point de rosée faux
 ressemble à un point de rosée juste. Toute modification doit être vérifiée contre
 des valeurs de référence, jamais contre l'intuition.
 

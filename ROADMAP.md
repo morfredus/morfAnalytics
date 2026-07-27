@@ -1,4 +1,4 @@
-# Roadmap — morfAnalytics
+# Roadmap - morfAnalytics
 
 morfAnalytics est le **moteur d'analyse** de l'écosystème morfSystem. Il déporte
 sur un serveur (typiquement un Raspberry Pi) les traitements que les équipements
@@ -23,7 +23,7 @@ Deux principes cadrent tout ce qui suit :
   erreur passe inaperçue : un point de rosée faux ressemble à un point de rosée
   juste. Des valeurs de référence issues de tables météorologiques seraient la
   seule vraie garantie.
-- **Vague 3 d'analyses** — corrélations avec décalage temporel entre grandeurs,
+- **Vague 3 d'analyses** - corrélations avec décalage temporel entre grandeurs,
   décomposition tendance/saisonnalité, détection d'anomalies par z-score robuste
   (MAD), segmentation automatique d'épisodes (canicule, coup de froid).
 

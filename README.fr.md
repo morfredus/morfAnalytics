@@ -2,13 +2,13 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.6.5-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.6.6-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
 
-**morfAnalytics — le moteur d'analyse de l'écosystème morfSystem.** Il décharge les
+**morfAnalytics - le moteur d'analyse de l'écosystème morfSystem.** Il décharge les
 équipements embarqués des traitements lourds (statistiques longues périodes,
 corrélations entre capteurs, détection d'anomalies, tendances saisonnières,
 comparaisons entre équipements, rapports…).
@@ -16,7 +16,7 @@ comparaisons entre équipements, rapports…).
 **morfAnalytics ne possède jamais la vérité des données.** Il travaille uniquement sur
 une **copie locale en lecture seule** (cache de travail), recopiée depuis les
 équipements. La source de vérité reste sur ceux-ci (ex. **MeteoHub**) :
-l'équipement écrit, morfAnalytics lit — jamais l'inverse, ce que garantit le
+l'équipement écrit, morfAnalytics lit - jamais l'inverse, ce que garantit le
 collecteur, qui n'émet que des requêtes `GET`. Le cache est supprimable et
 reconstructible intégralement depuis l'équipement, sans aucune perte. Sa présence
 est toujours **optionnelle** : sans serveur, les équipements continuent de mesurer,
@@ -36,26 +36,26 @@ Voir la vision d'ensemble de l'écosystème dans `../MORFSYSTEM_ARCHITECTURE.md`
 
 ## Ce que fait le service
 
-- **Collecte incrémentale** — recopie de l'historique de l'appareil, sans jamais
+- **Collecte incrémentale** - recopie de l'historique de l'appareil, sans jamais
   redemander ce qui est déjà en cache.
-- **Moteur d'analyse enfichable** — les analyses ne manipulent qu'une série
+- **Moteur d'analyse enfichable** - les analyses ne manipulent qu'une série
   temporelle générique à canaux nommés. Les analyses météo ne sont qu'un jeu
   parmi d'autres : un autre projet enregistre les siennes sans toucher au moteur.
-- **Page web d'analyses** — servie par le service lui-même, sans ressource
+- **Page web d'analyses** - servie par le service lui-même, sans ressource
   externe (consultable sur un réseau local sans accès Internet). Une synthèse
   raconte d'abord la situation locale ; les cartes apportent ensuite les chiffres
   et la progression d'apprentissage qui la justifient.
-- **API HTTP** (GET + POST) — `GET /` (page web), `GET /analyses` (catalogue),
+- **API HTTP** (GET + POST) - `GET /` (page web), `GET /analyses` (catalogue),
   `GET /status` (compatible morfBeacon), `/healthz`, `/modules`, `/modules/{id}`,
   `POST /analyze` (analyse à la demande) et `POST /data/cleanup` (nettoyage du
-  cache local — jamais de la source).
-- **Nettoyage du cache** — depuis la page ou l'API : neutralisation des relevés
+  cache local - jamais de la source).
+- **Nettoyage du cache** - depuis la page ou l'API : neutralisation des relevés
   de capteur en panne (`0 hPa`, `0 °C`), neutralisation d'une plage, purge
   totale. N'agit que sur la copie locale ; les mesures d'origine, sur
   l'appareil, ne sont jamais touchées et le cache purgé se reconstruit seul.
-- **Config** — fichier JSON avec une liste `modules` ; une fabrique les instancie.
-- **Annonce LAN** — heartbeat morfBeacon (embarqué, aucune dépendance externe).
-- **Installation service** — `scripts/linux/` (systemd) et `scripts/windows/`
+- **Config** - fichier JSON avec une liste `modules` ; une fabrique les instancie.
+- **Annonce LAN** - heartbeat morfBeacon (embarqué, aucune dépendance externe).
+- **Installation service** - `scripts/linux/` (systemd) et `scripts/windows/`
   (Planificateur de tâches), copie binaire + config dans un dossier fixe.
 
 ## Configurer la collecte depuis MeteoHub
@@ -74,10 +74,10 @@ Renseigner l'adresse de l'appareil et l'altitude de la station dans le module
 }
 ```
 
-- **`source_url`** — sans ce paramètre, aucune collecte n'est lancée : le service
+- **`source_url`** - sans ce paramètre, aucune collecte n'est lancée : le service
   se contente d'exposer le cache déjà constitué. C'est le mode à utiliser pour
   analyser un historique déjà recopié alors que l'appareil est hors service.
-- **`altitude_m`** — sert à ramener la pression au niveau de la mer, seule forme
+- **`altitude_m`** - sert à ramener la pression au niveau de la mer, seule forme
   comparable aux bulletins météo. Compter environ **0,12 hPa par mètre** : à
   quelques mètres l'écart est négligeable, à quelques centaines il change la
   prévision. Renseigner l'altitude réelle du capteur, pas celle de la commune.
@@ -113,7 +113,7 @@ Le catalogue complet est exposé par `GET /analyses`.
 | Chaleur et humidex | `heat_risk` | Inconfort et risque local liés à la combinaison température-humidité |
 | Sécheresse atmosphérique | `dry_air` | Pouvoir asséchant de l'air ; indicateur local, distinct du danger officiel de feu |
 | Tendance barométrique | `pressure_trend` | Variation sur 1 h et 3 h, code OMM, alerte de chute rapide |
-| Prévision locale | `zambretti` | Prévision textuelle à 12–24 h déduite de la pression |
+| Prévision locale | `zambretti` | Prévision textuelle à 12-24 h déduite de la pression |
 | Risque de brouillard | `fog_risk` | Écart au point de rosée et son resserrement |
 | Risque de gelée | `frost_risk` | Minimum projeté au petit matin |
 
@@ -123,7 +123,7 @@ Le catalogue complet est exposé par `GET /analyses`.
 |---|---|---|
 | Normale du jour | `normals` | Écart du jour à la normale glissante du jour de l'année |
 | Degrés-jours | `degree_days` | Chauffage (base 18) et climatisation (base 26), par mois |
-| Amplitude diurne | `diurnal_amplitude` | Écart maximum–minimum, moyenne et extrêmes |
+| Amplitude diurne | `diurnal_amplitude` | Écart maximum-minimum, moyenne et extrêmes |
 | Records | `records` | Minima et maxima absolus datés |
 | Jours remarquables | `streaks` | Gel, fortes chaleurs, nuits tropicales, séries consécutives |
 | Cycle journalier | `daily_cycle` | Température moyenne par heure, heures extrêmes |
@@ -139,7 +139,7 @@ publier une moyenne calculée sur trois mesures.
 
 ### Limites assumées
 
-Ces analyses reposent sur trois grandeurs seulement — température, humidité,
+Ces analyses reposent sur trois grandeurs seulement - température, humidité,
 pression. Sans vent, pluie ni état de la végétation, Zambretti, les risques de
 brouillard et de gelée, et la sécheresse atmosphérique restent des
 **indications locales**, pas des prévisions ni un danger officiel de feu. Chaque
@@ -176,8 +176,8 @@ sudo ./service.py uninstall    # desinscrit, en conservant votre configuration
 ./service.py status            # ce que le systeme en dit
 ```
 
-Un seul point d'entree partout. Ce qu'est ce service — son nom, son dossier,
-ses configurations — est declare dans `service.json` a cote. Les quatre etapes
+Un seul point d'entree partout. Ce qu'est ce service - son nom, son dossier,
+ses configurations - est declare dans `service.json` a cote. Les quatre etapes
 d'installation vivent une seule fois pour tout le parc ; seul le gestionnaire
 de services change selon la plateforme.
 
@@ -194,10 +194,10 @@ n'est jamais touché.
 
 ## Documentation
 
-- [Architecture](docs/fr/ARCHITECTURE.md) — les classes et le fil d'exécution.
-- [Choix de conception](docs/fr/DECISIONS.md) — les décisions structurantes et leurs raisons.
+- [Architecture](docs/fr/ARCHITECTURE.md) - les classes et le fil d'exécution.
+- [Choix de conception](docs/fr/DECISIONS.md) - les décisions structurantes et leurs raisons.
 - [Journal des versions](CHANGELOG.md) · [Roadmap](ROADMAP.md) · [Contribuer](CONTRIBUTING.md)
 
 ## Licence
 
-GPL-3.0-only — © 2026 morfredus (Frédéric Biron).
+GPL-3.0-only - © 2026 morfredus (Frédéric Biron).

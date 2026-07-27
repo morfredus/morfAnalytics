@@ -2,19 +2,19 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.6.5-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.6.6-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
 
-**morfAnalytics — the analysis engine of the morfSystem ecosystem.** It offloads
+**morfAnalytics - the analysis engine of the morfSystem ecosystem.** It offloads
 heavy analytics (long-period statistics, sensor correlations, anomaly detection,
 seasonal trends, cross-device comparisons, reports…) from the embedded devices.
 
 **morfAnalytics never owns the truth of the data.** It works only on a local,
 read-only *working cache* copied from the devices. The source of truth stays on the
-devices (e.g. **MeteoHub**): the device writes, morfAnalytics reads — never the
+devices (e.g. **MeteoHub**): the device writes, morfAnalytics reads - never the
 opposite, which the collector guarantees by issuing `GET` requests only. The cache
 can be deleted and rebuilt in full from the device without any loss. Its presence is
 always **optional**: if no server is available, the devices keep measuring, storing,
@@ -34,24 +34,24 @@ See the ecosystem vision in `../MORFSYSTEM_ARCHITECTURE.md`.
 
 ## What the service does
 
-- **Incremental collection** — copies the device history, never re-requesting
+- **Incremental collection** - copies the device history, never re-requesting
   what the cache already holds.
-- **Pluggable analysis engine** — analyses only ever handle a generic time series
+- **Pluggable analysis engine** - analyses only ever handle a generic time series
   with named channels. The weather analyses are just one set: another project
   registers its own without touching the engine.
-- **Analysis web page** — served by the service itself, with no external asset
+- **Analysis web page** - served by the service itself, with no external asset
   (usable on a LAN with no Internet access).
-- **HTTP API** (GET + POST) — `GET /` (web page), `GET /analyses` (catalog),
+- **HTTP API** (GET + POST) - `GET /` (web page), `GET /analyses` (catalog),
   `GET /status` (morfBeacon-compatible), `GET /healthz`, `GET /modules`,
   `GET /modules/{id}`, `POST /analyze` (on-demand analysis) and
-  `POST /data/cleanup` (local-cache cleanup — never the source).
-- **Cache cleanup** — from the page or the API: neutralise failed-sensor
+  `POST /data/cleanup` (local-cache cleanup - never the source).
+- **Cache cleanup** - from the page or the API: neutralise failed-sensor
   readings (`0 hPa`, `0 °C`), neutralise a time range, or purge everything.
   Acts on the local copy only; the original measurements on the device are
   never touched, and a purged cache rebuilds itself.
-- **Config** — JSON file with a `modules` list; a factory turns it into modules.
-- **LAN announce** — morfBeacon heartbeat (bundled, no external dependency).
-- **Service install** — `scripts/linux/` (systemd) and `scripts/windows/`
+- **Config** - JSON file with a `modules` list; a factory turns it into modules.
+- **LAN announce** - morfBeacon heartbeat (bundled, no external dependency).
+- **Service install** - `scripts/linux/` (systemd) and `scripts/windows/`
   (Task Scheduler), copying binary + config to a fixed location.
 
 ## Configure collection from MeteoHub
@@ -70,10 +70,10 @@ Set the device address and the station altitude in the `analytics` module (see
 }
 ```
 
-- **`source_url`** — without it, no collection runs: the service only exposes the
+- **`source_url`** - without it, no collection runs: the service only exposes the
   cache it already holds. Use that mode to analyse an already-copied history while
   the device is offline.
-- **`altitude_m`** — used to reduce pressure to sea level, the only form
+- **`altitude_m`** - used to reduce pressure to sea level, the only form
   comparable to weather bulletins. Reckon about **0.12 hPa per metre**: at a few
   metres the difference is negligible, at a few hundred it changes the forecast.
   Enter the actual altitude of the sensor, not the one of the town. A **zero
@@ -104,7 +104,7 @@ curl -X POST -H 'Content-Type: application/json'      -d '{"type":"zambretti"}' 
 |---|---|---|
 | Current conditions | `current` | Dew point, absolute humidity, humidex, sea-level pressure |
 | Pressure tendency | `pressure_trend` | 1 h and 3 h change, WMO code, rapid-fall warning |
-| Local forecast | `zambretti` | 12–24 h text forecast derived from pressure |
+| Local forecast | `zambretti` | 12-24 h text forecast derived from pressure |
 | Fog risk | `fog_risk` | Dew-point spread and how fast it narrows |
 | Frost risk | `frost_risk` | Projected minimum at dawn |
 
@@ -114,7 +114,7 @@ curl -X POST -H 'Content-Type: application/json'      -d '{"type":"zambretti"}' 
 |---|---|---|
 | Daily normal | `normals` | Departure from the rolling normal for the day of year |
 | Degree days | `degree_days` | Heating (base 18) and cooling (base 26), per month |
-| Diurnal range | `diurnal_amplitude` | Max–min spread, mean and extremes |
+| Diurnal range | `diurnal_amplitude` | Max-min spread, mean and extremes |
 | Records | `records` | Dated absolute minima and maxima |
 | Notable days | `streaks` | Frost, heat, tropical nights, consecutive runs |
 | Daily cycle | `daily_cycle` | Mean temperature per hour, extreme hours |
@@ -125,12 +125,12 @@ Optional parameters: `days` (window depth), `window_days` (normals half-window),
 
 An analysis short of history does not return an HTTP error: it answers
 `ok: false` with the reason and the required depth. The service did answer; it is
-the result that cannot be computed — better said plainly than published as an
+the result that cannot be computed - better said plainly than published as an
 average over three measurements.
 
 ### Acknowledged limits
 
-These analyses rest on three quantities only — temperature, humidity, pressure.
+These analyses rest on three quantities only - temperature, humidity, pressure.
 With no wind or sunshine data, Zambretti and the fog and frost risks remain
 **local indications**, not forecasts. Each result carries the matching note,
 displayed as-is on the page.
@@ -166,8 +166,8 @@ sudo ./service.py uninstall    # deregister, keeping your configuration
 ./service.py status            # what the system says about it
 ```
 
-One entry point everywhere. What this service is — its name, its directory,
-its configurations — is declared in `service.json` beside it. The four install
+One entry point everywhere. What this service is - its name, its directory,
+its configurations - is declared in `service.json` beside it. The four install
 steps live once for the whole parc; only the service manager differs by
 platform.
 
@@ -190,4 +190,4 @@ rationale. See also [CHANGELOG](CHANGELOG.md) · [ROADMAP](ROADMAP.md) ·
 
 ## License
 
-GPL-3.0-only — © 2026 morfredus (Frédéric Biron).
+GPL-3.0-only - © 2026 morfredus (Frédéric Biron).
