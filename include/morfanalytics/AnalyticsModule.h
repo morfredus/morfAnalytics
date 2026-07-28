@@ -37,7 +37,9 @@ class MeteoHubCollector;
 //
 // Paramètres (ModuleDef::params) :
 //   "maintenance_ms" : période de rafraîchissement du cache (défaut 60000).
-//   "cache_dir"      : dossier du cache de travail (défaut : dossier courant).
+//   "cache_dir"      : dossier du cache de travail (défaut : état persistant,
+//                      $STATE_DIRECTORY sinon /var/lib/morfsystem/morfanalytics ;
+//                      voir docs/FILESYSTEM.md).
 //   "source_url"     : URL de base de MeteoHub, p. ex. "http://192.168.1.42".
 //                      Si absent, aucune collecte n'est lancée.
 //   "altitude_m"     : altitude de la station, en mètres. Sert à ramener la

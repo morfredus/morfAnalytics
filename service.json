@@ -25,5 +25,10 @@
   "config_dir": {
     "linux": "/etc/morfsystem/morfanalytics",
     "windows": "%ProgramData%/morfsystem/morfanalytics"
+  },
+  "_comment_state_dir": "ETAT PERSISTANT (docs/FILESYSTEM.md) : cache SQLite des echantillons sous /var/lib/morfsystem/morfanalytics, distinct de la config (/etc, admin) et du programme (/opt). L'unite declare StateDirectory=morfsystem/morfanalytics : systemd cree ce dossier possede par le user du service, expose via $STATE_DIRECTORY (dossier de cache par defaut). La cle 'cache_dir' d'un module permet de surcharger cet emplacement.",
+  "state_dir": {
+    "linux": "/var/lib/morfsystem/morfanalytics",
+    "windows": "%ProgramData%/morfsystem/morfanalytics/state"
   }
 }

@@ -3,6 +3,22 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.8.0] - 2026-07-28
+
+### Modifié
+
+- **Cache déplacé sous `/var/lib/morfsystem/morfanalytics`** (doctrine du parc,
+  voir `docs/fr/FILESYSTEM.md`). Le cache SQLite des échantillons est de l'**état
+  persistant** généré par le service : quand `cache_dir` n'est pas fixé, il ne
+  retombe plus sur le dossier courant (`/opt/morfanalytics`) mais sur l'état,
+  distinct du programme (`/opt`) et de la config admin (`/etc`). L'unité systemd
+  déclare `StateDirectory=morfsystem/morfanalytics`, que systemd crée possédé par
+  l'utilisateur du service et expose via `$STATE_DIRECTORY`. Le paramètre
+  `cache_dir` d'un module reste prioritaire.
+  - **Migration** : déplacer un cache existant (`meteohub-cache.sqlite`) depuis
+    `/opt/morfanalytics` vers `/var/lib/morfsystem/morfanalytics` avant de
+    démarrer, ou fixer `cache_dir` sur l'ancien emplacement.
+
 ## [0.7.0] - 2026-07-28
 
 ### Modifié

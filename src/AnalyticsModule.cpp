@@ -20,6 +20,30 @@ namespace {
 // changer cette liste suffit à suivre un appareil exposant d'autres grandeurs.
 const QStringList kChannels{QStringLiteral("temp"), QStringLiteral("hum"),
                             QStringLiteral("pres")};
+
+// Dossier d'ETAT PERSISTANT par defaut (cache SQLite des echantillons), quand la
+// config ne fixe pas 'cache_dir'. Le cache est de l'etat genere par le service,
+// pas de la config ni du programme : il vit sous /var/lib (doctrine morfSystem,
+// docs/FILESYSTEM.md), jamais dans le dossier courant (/opt).
+//
+// Sous systemd, l'unite declare StateDirectory=morfsystem/morfanalytics : la
+// racine arrive via $STATE_DIRECTORY (generique, sans nom en dur). Repli conforme
+// a l'OS hors systemd. Le dossier est cree et doit etre accessible en ecriture.
+QString defaultStateDir() {
+    const QByteArray env = qgetenv("STATE_DIRECTORY");
+    if (!env.isEmpty()) {
+        const QString first = QString::fromLocal8Bit(env).split(QLatin1Char(':')).first();
+        if (!first.isEmpty()) { QDir().mkpath(first); return first; }
+    }
+#if defined(Q_OS_WIN)
+    const QString base = qEnvironmentVariable("ProgramData", QStringLiteral("C:/ProgramData"));
+    const QString dir  = QDir(base).filePath(QStringLiteral("morfsystem/morfanalytics/state"));
+#else
+    const QString dir  = QStringLiteral("/var/lib/morfsystem/morfanalytics");
+#endif
+    QDir().mkpath(dir);
+    return dir;
+}
 } // namespace
 
 AnalyticsModule::AnalyticsModule(const QString& id, int maintenanceMs,
@@ -43,7 +67,7 @@ AnalyticsModule::AnalyticsModule(const QString& id, int maintenanceMs,
 AnalyticsModule::~AnalyticsModule() = default;
 
 bool AnalyticsModule::start() {
-    const QString dir = m_cacheDir.isEmpty() ? QDir::currentPath() : m_cacheDir;
+    const QString dir = m_cacheDir.isEmpty() ? defaultStateDir() : m_cacheDir;
     const QString dbPath = QDir(dir).filePath(QStringLiteral("meteohub-cache.sqlite"));
 
     m_store = std::make_unique<SampleStore>(dbPath, kChannels);
