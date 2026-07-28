@@ -35,7 +35,8 @@ QString findDefaultConfig() {
         QDir(exeDir).filePath("morfanalytics.json"),
         QDir(exeDir).filePath("config/morfanalytics.json"),
 #ifdef Q_OS_UNIX
-        QStringLiteral("/etc/morfanalytics/morfanalytics.json"),
+        QStringLiteral("/etc/morfsystem/morfanalytics/morfanalytics.json"),
+        QStringLiteral("/etc/morfanalytics/morfanalytics.json"),   // ancien emplacement (avant le regroupement sous /etc/morfsystem)
 #endif
     };
     for (const QString& c : candidates)

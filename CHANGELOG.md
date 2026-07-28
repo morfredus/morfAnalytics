@@ -3,6 +3,18 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.7.0] - 2026-07-28
+
+### Modifié
+
+- **Configuration regroupée sous `/etc/morfsystem/<service>`.** Tout le parc
+  partage désormais un point d'entrée UNIQUE dans `/etc` (`/etc/morfsystem/`),
+  qui contient le fichier partagé `morfsystem.json` et un sous-dossier par
+  service, au lieu d'un `/etc/<service>` par service à la racine de `/etc`. Sous
+  Windows : `%ProgramData%\morfsystem\<service>`. Les données restent sous
+  `/opt/<service>`. L'ancien `/etc/<service>` est adopté à l'installation
+  (`migrate_from`).
+
 ## [0.6.5] - 2026-07-27
 
 ### Ajouté
@@ -150,8 +162,6 @@ heartbeat annonce, depuis la source unique.
   `/status` plutôt que le `StatusServer` de morfBeacon : il doit donc fournir ce
   détail lui-même, sans quoi il annoncerait une capacité dont le moyen
   d'ouverture resterait introuvable.
-
-## [Non publié]
 
 ## [0.6.6] - 2026-07-27
 ### Ajouté

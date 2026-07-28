@@ -1,5 +1,5 @@
 {
-  "_comment": "Configuration morfAnalytics. Copier en 'morfanalytics.json' et adapter. Le service la lit via --config, ou la cherche dans le dossier courant, a cote du binaire, ou dans /etc/morfanalytics/.",
+  "_comment": "Configuration morfAnalytics. Copier en 'morfanalytics.json' et adapter. Le service la lit via --config, ou la cherche dans le dossier courant, a cote du binaire, ou dans /etc/morfsystem/morfanalytics/.",
 
   "app_name": "morfAnalytics",
   "http_port": 8799,

@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.6.6-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.7.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -163,7 +163,7 @@ curl http://127.0.0.1:8799/analyses
 ```
 
 Sans `--config`, le service cherche une configuration dans le dossier courant, à
-côté du binaire, puis dans `/etc/morfanalytics/` ; à défaut il démarre avec un
+côté du binaire, puis dans `/etc/morfsystem/morfanalytics/` ; à défaut il démarre avec un
 module `analytics` par défaut, sans source, donc sans collecte.
 
 ## Installer en service
