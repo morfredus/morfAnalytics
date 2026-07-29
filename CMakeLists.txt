@@ -106,3 +106,14 @@ option(MORFANALYTICS_BUILD_EXAMPLES "Compiler l'exemple de demonstration" ${_mor
 if(MORFANALYTICS_BUILD_EXAMPLES)
     add_subdirectory(examples/minimal)
 endif()
+
+# --- Tests unitaires (formules meteo) -------------------------------------
+# Desactives par defaut : un build ordinaire ne les compile pas. Activer avec
+#   cmake --preset <p> -DMA_BUILD_TESTS=ON && ctest --preset <p>
+option(MA_BUILD_TESTS "Construire les tests unitaires (formules MeteoMath)" OFF)
+if(MA_BUILD_TESTS)
+    enable_testing()
+    add_executable(meteomath_test test/meteomath_test.cpp)
+    target_link_libraries(meteomath_test PRIVATE morfAnalytics)
+    add_test(NAME meteomath COMMAND meteomath_test)
+endif()

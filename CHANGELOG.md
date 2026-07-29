@@ -3,6 +3,20 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.9.1] - 2026-07-29
+
+### Ajouté
+
+- **Tests unitaires des formules météo (`MeteoMath`).** `MeteoMath` est la seule
+  partie du moteur où une erreur est silencieuse (un résultat faux reste
+  plausible) : `test/meteomath_test.cpp` vérifie point de rosée, humidité absolue,
+  humidex, déficit de pression de vapeur et pression réduite au niveau de la mer
+  contre des **valeurs de référence** issues de tables météorologiques, plus des
+  **invariants** robustes (saturation, monotonie, altitude nulle, seuil humidex).
+  Désactivés par défaut ; activer avec `-DMA_BUILD_TESTS=ON` puis `ctest`. Les 16
+  vérifications passent (l'implémentation colle aux références à moins de 0,1
+  d'écart typique).
+
 ## [0.9.0] - 2026-07-29
 
 ### Ajouté
