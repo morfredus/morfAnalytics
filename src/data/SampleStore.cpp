@@ -340,6 +340,33 @@ Series SampleStore::range(qint64 fromTs, qint64 toTs) const {
     return series;
 }
 
+Series SampleStore::rangeForDay(quint32 dayKey) const {
+    Series series(m_channels);
+    QStringList cols;
+    for (const QString& ch : m_channels)
+        cols << column(ch);
+
+    QSqlQuery q(m_db);
+    // Tri par ts (comme range) : l'ordre d'ecriture (idx) peut differer de l'ordre
+    // chronologique apres un recalage d'horloge, et une synthese raisonne en temps.
+    q.prepare(QStringLiteral("SELECT ts, %1 FROM sample "
+                             "WHERE day_key = ? ORDER BY ts ASC")
+                  .arg(cols.join(QStringLiteral(","))));
+    q.addBindValue(dayKey);
+    if (!q.exec())
+        return series;
+
+    while (q.next()) {
+        QHash<QString, double> values;
+        for (int i = 0; i < m_channels.size(); ++i) {
+            const QVariant v = q.value(i + 1);
+            values.insert(m_channels[i], v.isNull() ? Series::missing() : v.toDouble());
+        }
+        series.append(q.value(0).toLongLong(), values);
+    }
+    return series;
+}
+
 qint64 SampleStore::count() const {
     QSqlQuery q(m_db);
     if (q.exec(QStringLiteral("SELECT COUNT(*) FROM sample")) && q.next())

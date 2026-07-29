@@ -30,8 +30,12 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
         // distingue "station au bord de mer" de "parametre oublie".
         const bool altitudeKnown = def.params.contains("altitude_m");
         const double altitudeM   = def.params.value("altitude_m").toDouble(0.0);
+        // Publication (facultative) des synthèses journalières vers morfSync.
+        const QString morfsyncUrl   = def.params.value("morfsync_url").toString();
+        const QString morfsyncToken = def.params.value("morfsync_token").toString();
         return new AnalyticsModule(def.id, maintenanceMs, cacheDir, sourceUrl,
-                                   altitudeM, altitudeKnown, parent);
+                                   altitudeM, altitudeKnown,
+                                   morfsyncUrl, morfsyncToken, parent);
     }
 
     // >>> AJOUTER D'AUTRES TYPES ICI (au fur et à mesure des analyses) <<<

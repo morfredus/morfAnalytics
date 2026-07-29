@@ -17,6 +17,7 @@ namespace morfanalytics {
 
 class SampleStore;
 class MeteoHubCollector;
+class MeteoSyncPublisher;
 
 // -----------------------------------------------------------------------------
 // AnalyticsModule : moteur d'analyse.
@@ -46,6 +47,10 @@ class MeteoHubCollector;
 //                      pression au niveau de la mer. Une altitude nulle est une
 //                      valeur valide ; c'est l'ABSENCE du paramètre qui est
 //                      signalée dans les analyses de pression.
+//   "morfsync_url"   : URL de base du hub morfSync, p. ex. "http://127.0.0.1:8080".
+//                      Si absent, aucune publication n'est faite (le service reste
+//                      un moteur d'analyse local). Écriture SEULE vers morfSync.
+//   "morfsync_token" : Bearer optionnel du hub (LAN de confiance : souvent vide).
 // -----------------------------------------------------------------------------
 class AnalyticsModule : public IModule {
     Q_OBJECT
@@ -53,6 +58,7 @@ public:
     AnalyticsModule(const QString& id, int maintenanceMs = 60000,
                     QString cacheDir = QString(), QString sourceUrl = QString(),
                     double altitudeM = 0.0, bool altitudeKnown = false,
+                    QString morfsyncUrl = QString(), QString morfsyncToken = QString(),
                     QObject* parent = nullptr);
     ~AnalyticsModule() override;
 
@@ -86,11 +92,14 @@ private:
     QString m_sourceUrl;
     double  m_altitudeM;
     bool    m_altitudeKnown;
+    QString m_morfsyncUrl;
+    QString m_morfsyncToken;
     QTimer* m_timer;
     bool    m_running = false;
 
     std::unique_ptr<SampleStore> m_store;
     MeteoHubCollector*           m_collector = nullptr; // possédé via l'arbre QObject
+    MeteoSyncPublisher*          m_publisher = nullptr; // possédé via l'arbre QObject
     AnalysisRegistry             m_analyses;
 };
 

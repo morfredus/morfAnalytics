@@ -24,7 +24,11 @@
       "source_url": "",
 
       "_comment_altitude": "Altitude de la station, en metres (environ 0,12 hPa par metre). A adapter. Une altitude nulle est une valeur valide : c'est l'absence de ce parametre qui est signalee dans les analyses de pression.",
-      "altitude_m": 8
+      "altitude_m": 8,
+
+      "_comment_morfsync": "Publication (facultative) d'une synthese par jour vers le hub morfSync, pour rendre les resultats consultables par le reste du parc (morfDashboard, SiteWatch...). Ecriture SEULE, a sens unique : jamais vers l'appareil. Laisse VIDE, aucune publication n'est faite. Sur le Pi ou tourne aussi morfSync : http://127.0.0.1:8080. Le jeton reste vide sur un LAN de confiance.",
+      "morfsync_url": "",
+      "morfsync_token": ""
     }
   ]
 }

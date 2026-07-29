@@ -7,11 +7,13 @@
 #include "morfanalytics/AnalyticsModule.h"
 #include "morfanalytics/data/SampleStore.h"
 #include "morfanalytics/collect/MeteoHubCollector.h"
+#include "morfanalytics/publish/MeteoSyncPublisher.h"
 
 #include <QTimer>
 #include <QDateTime>
 #include <QDir>
 #include <QDebug>
+#include <QHostInfo>
 
 namespace morfanalytics {
 
@@ -49,6 +51,7 @@ QString defaultStateDir() {
 AnalyticsModule::AnalyticsModule(const QString& id, int maintenanceMs,
                                  QString cacheDir, QString sourceUrl,
                                  double altitudeM, bool altitudeKnown,
+                                 QString morfsyncUrl, QString morfsyncToken,
                                  QObject* parent)
     : IModule(id, QStringLiteral("analytics"), parent),
       m_maintenanceMs(maintenanceMs > 0 ? maintenanceMs : 60000),
@@ -56,6 +59,8 @@ AnalyticsModule::AnalyticsModule(const QString& id, int maintenanceMs,
       m_sourceUrl(std::move(sourceUrl)),
       m_altitudeM(altitudeM),
       m_altitudeKnown(altitudeKnown),
+      m_morfsyncUrl(std::move(morfsyncUrl)),
+      m_morfsyncToken(std::move(morfsyncToken)),
       m_timer(new QTimer(this)) {
     m_timer->setInterval(m_maintenanceMs);
     connect(m_timer, &QTimer::timeout, this, &AnalyticsModule::maintainCache);
@@ -98,6 +103,19 @@ bool AnalyticsModule::start() {
         QTimer::singleShot(0, this, &AnalyticsModule::maintainCache);
     }
 
+    // Publication (facultative) des synthèses journalières vers morfSync. Écriture
+    // seule, à sens unique : elle rend les résultats consultables par le reste du
+    // parc sans jamais toucher à la source. Absente si aucun hub n'est configuré.
+    if (!m_morfsyncUrl.isEmpty()) {
+        MeteoSyncPublisher::Config cfg;
+        cfg.baseUrl  = m_morfsyncUrl;
+        cfg.token    = m_morfsyncToken;
+        cfg.channels = kChannels;
+        // Origine stable de cet émetteur dans le journal morfSync (deviceId).
+        cfg.deviceId = QStringLiteral("morfanalytics@") + QHostInfo::localHostName();
+        m_publisher  = new MeteoSyncPublisher(m_store.get(), cfg, this);
+    }
+
     m_running = true;
     m_timer->start();
     return true;
@@ -118,6 +136,8 @@ QJsonObject AnalyticsModule::statusJson() const {
     o["ts"]         = static_cast<double>(QDateTime::currentSecsSinceEpoch());
     if (m_collector)
         o["collector"] = m_collector->statusJson();
+    if (m_publisher)
+        o["publisher"] = m_publisher->statusJson();
     return o;
 }
 
@@ -209,6 +229,13 @@ void AnalyticsModule::maintainCache() {
     // maintenance plus courte qu'un rattrapage complet n'empile donc rien.
     if (m_collector)
         m_collector->sync();
+    // Publication des synthèses journalières. La collecte ci-dessus est ASYNCHRONE
+    // (les mesures arrivent après cet appel) : on publie donc l'état STABILISÉ,
+    // celui de la collecte du cycle précédent. Un jour qui vient de gagner des
+    // mesures sera publié au cycle suivant — les synthèses journalières ne sont pas
+    // à la seconde près, et la publication reste idempotente.
+    if (m_publisher)
+        m_publisher->publish();
     emit updated(id());
 }
 

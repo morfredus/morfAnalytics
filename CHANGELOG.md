@@ -3,6 +3,28 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.9.0] - 2026-07-29
+
+### Ajouté
+
+- **Publication des synthèses journalières vers morfSync.** Les résultats
+  d'analyse n'étaient jusqu'ici consultables que sur ce service. morfAnalytics
+  publie désormais **une synthèse par jour** (min/max/moyenne + première/dernière
+  valeur par canal) dans le journal morfSync `meteohub`, ce qui les rend lisibles
+  par le reste du parc (morfDashboard, SiteWatch...). Écriture SEULE, à sens
+  unique : jamais vers l'appareil (la source reste souveraine), morfSync n'est
+  qu'un aval. Un jour = un enregistrement d'identité stable (`meteohub-<AAAAMMJJ>`)
+  dont la révision est le nombre d'échantillons du jour : elle croît quand la
+  journée se remplit, ce qui rend la publication naturellement **idempotente** (un
+  jour inchangé n'est pas republié, et le hub reconnaît un `(id, rev)` déjà vu).
+  La série temporelle brute reste dans le cache SQLite ; le journal JSON ne porte
+  que le résultat (~365 enregistrements/an), il ne devient jamais un entrepôt de
+  mesures.
+  - Nouveau paramètre de module `morfsync_url` (+ `morfsync_token` facultatif) :
+    vide, aucune publication n'est faite. Voir `config/morfanalytics.example.json`.
+  - Nouvelle classe `MeteoSyncPublisher` (`src/publish/`), lecture par jour
+    `SampleStore::rangeForDay()`, statut exposé sous `publisher` dans `/status`.
+
 ## [0.8.0] - 2026-07-28
 
 ### Modifié

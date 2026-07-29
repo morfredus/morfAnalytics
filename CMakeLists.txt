@@ -52,6 +52,10 @@ add_library(morfAnalytics STATIC
     src/AnalyticsModule.cpp               # logique metier : moteur d'analyse
     src/data/SampleStore.cpp              # cache de travail local (SQLite)
     src/collect/MeteoHubCollector.cpp     # collecte incrementale depuis MeteoHub
+    src/publish/MeteoSyncPublisher.cpp    # publication des syntheses journalieres vers morfSync
+    # Header liste explicitement pour qu'AUTOMOC traite son Q_OBJECT de facon
+    # fiable (il vit sous include/, hors du dossier de son .cpp).
+    include/morfanalytics/publish/MeteoSyncPublisher.h
     src/analysis/AnalysisRegistry.cpp     # moteur d'analyse (generique)
     src/analysis/MeteoMath.cpp            # formules meteorologiques (pures)
     src/analysis/MeteoAnalyses.cpp        # jeu d'analyses meteo

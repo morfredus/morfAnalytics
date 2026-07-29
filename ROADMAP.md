@@ -16,9 +16,11 @@ Deux principes cadrent tout ce qui suit :
 
 ## Prochaines étapes
 
-- **Publication des résultats vers morfSync.** Les analyses restent aujourd'hui
-  cantonnées à ce service. Les publier dans le journal `meteohub` les rendrait
-  consultables par le reste de l'écosystème (morfDashboard, SiteWatch…).
+- ~~**Publication des résultats vers morfSync.**~~ FAIT (v0.9.0) : une synthèse
+  par jour est publiée dans le journal `meteohub` (id stable `meteohub-<AAAAMMJJ>`,
+  révision = nombre d'échantillons du jour, idempotent). Écriture seule, à sens
+  unique. Reste envisageable plus loin : publier aussi des résultats d'analyse de
+  plus haut niveau (tendances, épisodes) une fois les vagues suivantes écrites.
 - **Tests unitaires des formules météo.** `MeteoMath` est la seule partie où une
   erreur passe inaperçue : un point de rosée faux ressemble à un point de rosée
   juste. Des valeurs de référence issues de tables météorologiques seraient la

@@ -111,6 +111,12 @@ public:
     // Toutes les mesures de [fromTs, toTs] triees par horodatage croissant.
     Series range(qint64 fromTs, qint64 toTs) const;
 
+    // Toutes les mesures d'UN jour (day_key = AAAAMMJJ), triees par ts croissant.
+    // Selection par day_key (et non par bornes temporelles) : c'est la source qui
+    // decoupe les journees, donc on s'aligne sur SON decoupage sans reconstruire
+    // des bornes a partir d'un fuseau, ce qui serait fragile au changement d'heure.
+    Series rangeForDay(quint32 dayKey) const;
+
     // Nombre total de mesures en cache, et bornes temporelles couvertes.
     qint64 count() const;
     bool bounds(qint64& firstTs, qint64& lastTs) const;
