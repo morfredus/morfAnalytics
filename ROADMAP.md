@@ -24,11 +24,11 @@ Deux principes cadrent tout ce qui suit :
 - ~~**Tests unitaires des formules météo.**~~ FAIT (v0.9.1) : `test/meteomath_test.cpp`
   vérifie `MeteoMath` contre des valeurs de référence issues de tables
   météorologiques + des invariants (saturation, monotonie, altitude nulle).
-- **Vague 3 d'analyses** - en grande partie FAITE (v0.10.0) : corrélations à
-  décalage temporel entre grandeurs (`correlations`), détection d'anomalies par
-  z-score robuste MAD (`anomalies`), segmentation d'épisodes canicule/coup de
-  froid (`episodes`), toutes couvertes par `test/analyses_test.cpp`. **Reste** la
-  décomposition tendance/saisonnalité, plus lourde et à cadrer.
+- ~~**Vague 3 d'analyses**~~ FAITE (v0.10.0 puis v0.11.0) : corrélations à décalage
+  temporel (`correlations`), anomalies par z-score robuste MAD (`anomalies`),
+  segmentation d'épisodes canicule/coup de froid (`episodes`) et décomposition
+  tendance/saison avec forces à la STL (`decomposition`). Toutes couvertes par
+  `test/analyses_test.cpp`.
 
 ## Envisagé
 

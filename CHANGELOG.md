@@ -3,6 +3,19 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.11.0] - 2026-07-29
+
+### Ajouté
+
+- **Décomposition tendance / saison (`decomposition`)**, qui achève la vague 3.
+  Décompose un canal en **tendance** (moyenne mobile centrée sur 24 h),
+  **composante saisonnière** journalière (profil horaire moyen, centré) et
+  **résidu**. Sortie synthétique : pente de tendance par jour, amplitude
+  saisonnière et profil 24 h, écart-type du résidu, et **force** de la tendance et
+  de la saison (diagnostics à la STL, `1 - Var(résidu)/Var(composante+résidu)`).
+  Distincte de `daily_cycle` : elle isole la tendance de fond du cycle journalier.
+  Couverte par `test/analyses_test.cpp`.
+
 ## [0.10.0] - 2026-07-29
 
 ### Ajouté

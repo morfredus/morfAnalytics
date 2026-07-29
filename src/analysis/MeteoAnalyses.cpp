@@ -965,6 +965,7 @@ QJsonObject analyzeAnomalies(const AnalysisContext& ctx, const QJsonObject& para
 // heures" n'aurait pas de sens sur des mesures espacees irregulierement.
 struct HourlyGrid {
     QVector<double> temp, hum, pres;   // meme longueur, NaN pour une heure vide
+    qint64 firstHour = 0;              // numero d'heure Unix de la case 0 (ts/3600)
     int size() const { return temp.size(); }
 };
 HourlyGrid hourlyGrid(const Series& series) {
@@ -973,6 +974,7 @@ HourlyGrid hourlyGrid(const Series& series) {
     if (ts.isEmpty()) return g;
     const qint64 firstHour = ts.first() / kHour;
     const qint64 lastHour  = ts.last()  / kHour;
+    g.firstHour = firstHour;
     const int n = static_cast<int>(lastHour - firstHour) + 1;
     if (n <= 0 || n > 24 * 3660) return g;   // garde-fou memoire
 
@@ -1135,6 +1137,111 @@ QJsonObject analyzeEpisodes(const AnalysisContext& ctx, const QJsonObject& param
     return out;
 }
 
+// Decomposition additive tendance / saison / residu d'un canal, sur grille
+// horaire, saison journaliere (24 h). Distincte de `daily_cycle` (forme moyenne
+// du jour) : ici on SEPARE la tendance multi-jours (rechauffement/refroidissement
+// de fond, une fois le cycle journalier retire) du residu (ce qui n'est explique
+// ni par la tendance ni par la saison), et on chiffre la FORCE de chaque
+// composante (diagnostics a la STL, Hyndman). Params : `days` (defaut 14),
+// `channel` (temp/hum/pres, defaut temp).
+QJsonObject analyzeDecomposition(const AnalysisContext& ctx, const QJsonObject& params) {
+    const qint64 days = windowDays(params, 14);
+    const QString channel = params.value(QStringLiteral("channel")).toString(kTemp);
+    const Series series = ctx.store->range(ctx.now - days * kDay, ctx.now);
+    const HourlyGrid g = hourlyGrid(series);
+
+    const QVector<double>* pv = channel == kHum ? &g.hum
+                              : channel == kPres ? &g.pres : &g.temp;
+    const QVector<double>& v = *pv;
+    const int n = v.size();
+    constexpr int P = 24;   // periode saisonniere : le cycle journalier
+    if (n < 2 * P) return failure(QStringLiteral("historique insuffisant (moins de deux jours)"));
+
+    // Tendance : moyenne mobile centree sur 24 h, trous ignores ; NaN si trop peu
+    // de points valides dans la fenetre.
+    QVector<double> trend(n, std::nan(""));
+    for (int i = 0; i < n; ++i) {
+        double s = 0; int c = 0;
+        for (int j = i - P / 2; j <= i + P / 2; ++j)
+            if (j >= 0 && j < n && !std::isnan(v[j])) { s += v[j]; ++c; }
+        if (c >= P / 2) trend[i] = s / c;
+    }
+
+    // Profil saisonnier = moyenne de (v - tendance) par heure du jour (UTC), centre.
+    QVector<double> seasonProfile(P, 0.0);
+    QVector<int>    seasonCount(P, 0);
+    for (int i = 0; i < n; ++i) {
+        if (std::isnan(v[i]) || std::isnan(trend[i])) continue;
+        const int h = static_cast<int>((g.firstHour + i) % P);
+        seasonProfile[h] += v[i] - trend[i];
+        seasonCount[h]   += 1;
+    }
+    double profMean = 0; int profN = 0;
+    for (int h = 0; h < P; ++h)
+        if (seasonCount[h] > 0) { seasonProfile[h] /= seasonCount[h]; profMean += seasonProfile[h]; ++profN; }
+    if (profN > 0) profMean /= profN;
+    for (int h = 0; h < P; ++h)
+        seasonProfile[h] = seasonCount[h] > 0 ? seasonProfile[h] - profMean : 0.0;
+
+    // Residu, deseasonnalise (tendance+residu) et detrended (saison+residu).
+    QVector<double> resid(n, std::nan("")), deseason(n, std::nan("")), detrend(n, std::nan(""));
+    for (int i = 0; i < n; ++i) {
+        if (std::isnan(v[i])) continue;
+        const double s = seasonProfile[static_cast<int>((g.firstHour + i) % P)];
+        deseason[i] = v[i] - s;
+        if (!std::isnan(trend[i])) { detrend[i] = v[i] - trend[i]; resid[i] = v[i] - trend[i] - s; }
+    }
+    auto varOf = [](const QVector<double>& x) -> double {
+        double m = 0; int c = 0;
+        for (double e : x) if (!std::isnan(e)) { m += e; ++c; }
+        if (c < 2) return std::nan("");
+        m /= c; double s = 0;
+        for (double e : x) if (!std::isnan(e)) s += (e - m) * (e - m);
+        return s / c;
+    };
+    const double vr = varOf(resid), vTR = varOf(deseason), vSR = varOf(detrend);
+    auto strength = [](double vres, double vcomp) -> double {
+        if (std::isnan(vres) || std::isnan(vcomp) || vcomp <= 0) return 0.0;
+        return std::clamp(1.0 - vres / vcomp, 0.0, 1.0);
+    };
+
+    // Pente de tendance : regression lineaire de trend[i] sur i (heures), *24 -> /jour.
+    double sx=0, sy=0, sxx=0, sxy=0; int cnt=0;
+    for (int i = 0; i < n; ++i)
+        if (!std::isnan(trend[i])) { sx+=i; sy+=trend[i]; sxx+=double(i)*i; sxy+=double(i)*trend[i]; ++cnt; }
+    double slopePerDay = std::nan(""), trendStart = std::nan(""), trendEnd = std::nan("");
+    if (cnt >= 2) { const double d = cnt*sxx - sx*sx; if (d != 0) slopePerDay = (cnt*sxy - sx*sy) / d * 24.0; }
+    for (int i = 0; i < n; ++i)   if (!std::isnan(trend[i])) { trendStart = trend[i]; break; }
+    for (int i = n-1; i >= 0; --i) if (!std::isnan(trend[i])) { trendEnd = trend[i]; break; }
+
+    double smin = 1e18, smax = -1e18;
+    for (int h = 0; h < P; ++h)
+        if (seasonCount[h] > 0) { smin = std::min(smin, seasonProfile[h]); smax = std::max(smax, seasonProfile[h]); }
+
+    QJsonObject out;
+    out["channel"]     = channel;
+    out["window_days"] = static_cast<int>(days);
+    QJsonObject tr;
+    if (!std::isnan(slopePerDay)) tr["slope_per_day"] = round2(slopePerDay);
+    if (!std::isnan(trendStart))  tr["start"] = round2(trendStart);
+    if (!std::isnan(trendEnd))    tr["end"]   = round2(trendEnd);
+    if (!std::isnan(trendStart) && !std::isnan(trendEnd)) tr["change"] = round2(trendEnd - trendStart);
+    out["trend"] = tr;
+    QJsonObject se;
+    se["period_hours"] = P;
+    se["amplitude"]    = (smax >= smin) ? round2(smax - smin) : 0.0;
+    QJsonArray prof;
+    for (int h = 0; h < P; ++h) prof.append(round2(seasonProfile[h]));
+    se["profile_utc"] = prof;   // 24 decalages, indexes par heure UTC, somme ~ 0
+    out["seasonal"] = se;
+    out["residual_std"] = std::isnan(vr) ? QJsonValue() : QJsonValue(round2(std::sqrt(vr)));
+    QJsonObject st;
+    st["trend"]    = round2(strength(vr, vTR));
+    st["seasonal"] = round2(strength(vr, vSR));
+    out["strength"] = st;
+    return out;
+}
+
 void registerMeteoAnalyses(AnalysisRegistry& registry) {
     using A = FunctionAnalysis;
     auto add = [&](const char* id, const char* title, const char* group,
@@ -1165,6 +1272,7 @@ void registerMeteoAnalyses(AnalysisRegistry& registry) {
     add("anomalies", "Anomalies (z-score robuste)", "avancé", 3 * kDay, analyzeAnomalies);
     add("correlations", "Corrélations à décalage", "avancé", 2 * kDay, analyzeLaggedCorrelation);
     add("episodes", "Épisodes (canicule, coup de froid)", "avancé", 3 * kDay, analyzeEpisodes);
+    add("decomposition", "Décomposition tendance / saison", "avancé", 3 * kDay, analyzeDecomposition);
 
     // --- Qualite -------------------------------------------------------------
     add("data_quality", "Complétude des données", "qualite", 2 * kDay, analyzeDataQuality);

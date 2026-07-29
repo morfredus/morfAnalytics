@@ -110,6 +110,15 @@ int main(int argc, char** argv) {
         check(heatDays >= 3, "episodes : une canicule d'au moins 3 jours consecutifs");
     }
 
+    // --- Decomposition : le cycle journalier synthetique doit ressortir ------
+    {
+        const QJsonObject r = reg.run("decomposition", ctx, {});
+        const double amp = r.value("seasonal").toObject().value("amplitude").toDouble();
+        const double fs  = r.value("strength").toObject().value("seasonal").toDouble();
+        check(amp > 3.0, "decomposition : amplitude saisonniere marquee (cycle journalier)");
+        check(fs >= 0.0 && fs <= 1.0, "decomposition : force saisonniere dans [0,1]");
+    }
+
     store.close();
     QDir().remove(db);
 
