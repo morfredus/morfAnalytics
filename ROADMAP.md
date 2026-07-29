@@ -21,13 +21,14 @@ Deux principes cadrent tout ce qui suit :
   révision = nombre d'échantillons du jour, idempotent). Écriture seule, à sens
   unique. Reste envisageable plus loin : publier aussi des résultats d'analyse de
   plus haut niveau (tendances, épisodes) une fois les vagues suivantes écrites.
-- **Tests unitaires des formules météo.** `MeteoMath` est la seule partie où une
-  erreur passe inaperçue : un point de rosée faux ressemble à un point de rosée
-  juste. Des valeurs de référence issues de tables météorologiques seraient la
-  seule vraie garantie.
-- **Vague 3 d'analyses** - corrélations avec décalage temporel entre grandeurs,
-  décomposition tendance/saisonnalité, détection d'anomalies par z-score robuste
-  (MAD), segmentation automatique d'épisodes (canicule, coup de froid).
+- ~~**Tests unitaires des formules météo.**~~ FAIT (v0.9.1) : `test/meteomath_test.cpp`
+  vérifie `MeteoMath` contre des valeurs de référence issues de tables
+  météorologiques + des invariants (saturation, monotonie, altitude nulle).
+- **Vague 3 d'analyses** - en grande partie FAITE (v0.10.0) : corrélations à
+  décalage temporel entre grandeurs (`correlations`), détection d'anomalies par
+  z-score robuste MAD (`anomalies`), segmentation d'épisodes canicule/coup de
+  froid (`episodes`), toutes couvertes par `test/analyses_test.cpp`. **Reste** la
+  décomposition tendance/saisonnalité, plus lourde et à cadrer.
 
 ## Envisagé
 

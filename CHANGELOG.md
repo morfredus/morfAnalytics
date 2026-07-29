@@ -3,6 +3,24 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.10.0] - 2026-07-29
+
+### Ajouté
+
+- **Vague 3 d'analyses (avancées).** Trois nouvelles analyses enfichables, groupe
+  `avancé`, toutes à sortie synthétique :
+  - **`anomalies`** : détection par **z-score robuste (MAD)**, insensible aux
+    valeurs aberrantes qu'elle cherche justement (médiane + écart absolu médian,
+    score d'Iglewicz-Hoaglin). Ne signale que les points les plus extrêmes,
+    plafonnés, avec médiane/MAD/comptage.
+  - **`correlations`** : corrélations à **décalage temporel** entre grandeurs
+    (sur grille horaire), pour repérer qu'une grandeur en **précède** une autre ;
+    renvoie le décalage qui maximise la corrélation par paire.
+  - **`episodes`** : **segmentation d'épisodes** (canicule, coup de froid) -
+    suites de jours consécutifs au-delà d'un seuil, avec durée et valeur extrême.
+  - Couvertes par `test/analyses_test.cpp` (données synthétiques à propriétés
+    connues : pics injectés, temp/hum anticorrélées, canicule prolongée).
+
 ## [0.9.1] - 2026-07-29
 
 ### Ajouté

@@ -116,4 +116,8 @@ if(MA_BUILD_TESTS)
     add_executable(meteomath_test test/meteomath_test.cpp)
     target_link_libraries(meteomath_test PRIVATE morfAnalytics)
     add_test(NAME meteomath COMMAND meteomath_test)
+
+    add_executable(analyses_test test/analyses_test.cpp)
+    target_link_libraries(analyses_test PRIVATE morfAnalytics)
+    add_test(NAME analyses COMMAND analyses_test)
 endif()

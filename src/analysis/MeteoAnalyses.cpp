@@ -132,6 +132,19 @@ QJsonObject failure(const QString& reason) {
 double round1(double v) { return std::round(v * 10.0) / 10.0; }
 double round2(double v) { return std::round(v * 100.0) / 100.0; }
 
+// Mediane d'un ensemble de valeurs (la copie est triee en place). Robuste aux
+// valeurs aberrantes, contrairement a la moyenne : c'est le socle des
+// statistiques de la vague 3 (anomalies par MAD, notamment).
+double median(std::vector<double> v) {
+    if (v.empty()) return std::nan("");
+    const std::size_t n = v.size();
+    std::nth_element(v.begin(), v.begin() + n / 2, v.end());
+    const double hi = v[n / 2];
+    if (n % 2 == 1) return hi;
+    std::nth_element(v.begin(), v.begin() + n / 2 - 1, v.begin() + n / 2);
+    return (v[n / 2 - 1] + hi) / 2.0;
+}
+
 // ===========================================================================
 //  VAGUE 1 — derives instantanes et prevision locale
 // ===========================================================================
@@ -851,6 +864,277 @@ QJsonObject analyzeDataQuality(const AnalysisContext& ctx, const QJsonObject& pa
 
 } // namespace
 
+// ===========================================================================
+//  VAGUE 3 — analyses avancees (anomalies, correlations, episodes)
+// ===========================================================================
+
+// Detection d'anomalies par z-score ROBUSTE (MAD). La moyenne et l'ecart-type
+// classiques sont eux-memes fausses par les valeurs aberrantes qu'on cherche a
+// reperer ; la mediane et l'ecart absolu median (MAD) ne le sont pas. Le score
+// d'Iglewicz-Hoaglin, z = 0.6745*(x - mediane)/MAD, depasse ~3.5 pour un point
+// franchement atypique.
+//
+// Sortie SYNTHETIQUE : on ne renvoie PAS un flot de points, seulement les plus
+// extremes (plafonnes), accompagnes des statistiques (mediane, MAD, comptage)
+// qui permettent de juger. Params : `days` (fenetre, defaut 30), `threshold`
+// (seuil |z|, defaut 3.5).
+QJsonObject analyzeAnomalies(const AnalysisContext& ctx, const QJsonObject& params) {
+    const qint64 days      = windowDays(params, 30);
+    const double threshold = std::clamp(params.value(QStringLiteral("threshold")).toDouble(3.5),
+                                        1.0, 20.0);
+    const Series series = ctx.store->range(ctx.now - days * kDay, ctx.now);
+    const QVector<qint64>& ts = series.timestamps();
+    if (ts.size() < 20)
+        return failure(QStringLiteral("historique insuffisant pour des statistiques robustes"));
+
+    constexpr int kMaxReported = 10;
+    const std::vector<QString> channels = {kTemp, kHum, kPres};
+
+    QJsonObject out;
+    out["window_days"] = static_cast<int>(days);
+    out["threshold"]   = threshold;
+    QJsonObject chansJson;
+    int totalAnomalies = 0;
+
+    for (const QString& key : channels) {
+        const QVector<double>* col = series.channel(key);
+        if (!col) continue;
+
+        // Valeurs valides et l'index d'origine (pour retrouver l'horodatage).
+        std::vector<double> values;
+        std::vector<int> origin;
+        for (int i = 0; i < col->size(); ++i)
+            if (Series::isValid((*col)[i])) { values.push_back((*col)[i]); origin.push_back(i); }
+        if (values.size() < 20) continue;
+
+        const double med = median(values);
+        std::vector<double> absdev;
+        absdev.reserve(values.size());
+        for (double v : values) absdev.push_back(std::fabs(v - med));
+        const double mad = median(absdev);
+
+        QJsonObject cj;
+        cj["count"]  = static_cast<int>(values.size());
+        cj["median"] = round2(med);
+        cj["mad"]    = round2(mad);
+
+        QJsonArray anomalies;
+        int anomaliesCount = 0;
+        // MAD nul = serie (quasi) constante : aucun point n'est "atypique", et
+        // diviser par zero n'aurait aucun sens. On le signale honnetement.
+        if (mad > 1e-9) {
+            std::vector<std::pair<double, int>> flagged;  // (z, index dans values)
+            for (std::size_t k = 0; k < values.size(); ++k) {
+                const double z = 0.6745 * (values[k] - med) / mad;
+                if (std::fabs(z) > threshold) flagged.push_back({z, static_cast<int>(k)});
+            }
+            anomaliesCount = static_cast<int>(flagged.size());
+            std::sort(flagged.begin(), flagged.end(),
+                      [](const auto& a, const auto& b) { return std::fabs(a.first) > std::fabs(b.first); });
+            for (int n = 0; n < static_cast<int>(flagged.size()) && n < kMaxReported; ++n) {
+                const int k = flagged[n].second;
+                QJsonObject a;
+                a["ts"]        = static_cast<double>(ts[origin[k]]);
+                a["value"]     = round2(values[k]);
+                a["z"]         = round2(flagged[n].first);
+                a["direction"] = flagged[n].first > 0 ? QStringLiteral("haut")
+                                                      : QStringLiteral("bas");
+                anomalies.append(a);
+            }
+        } else {
+            cj["note"] = QStringLiteral("série constante (MAD nul) : aucune anomalie définissable");
+        }
+        cj["anomalies_count"]    = anomaliesCount;
+        cj["anomalies_reported"] = anomalies.size();
+        cj["anomalies"]          = anomalies;
+        totalAnomalies += anomaliesCount;
+        chansJson[key] = cj;
+    }
+
+    if (chansJson.isEmpty())
+        return failure(QStringLiteral("aucun canal exploitable"));
+    out["channels"]        = chansJson;
+    out["total_anomalies"] = totalAnomalies;
+    return out;
+}
+
+// Reechantillonne une serie sur une grille HORAIRE dense : une case par heure
+// entre la premiere et la derniere mesure, contenant la moyenne du canal sur
+// l'heure, ou NaN si l'heure n'a aucune mesure. Aligner sur une grille reguliere
+// est indispensable a une correlation a decalage : sans elle, un "decalage de N
+// heures" n'aurait pas de sens sur des mesures espacees irregulierement.
+struct HourlyGrid {
+    QVector<double> temp, hum, pres;   // meme longueur, NaN pour une heure vide
+    int size() const { return temp.size(); }
+};
+HourlyGrid hourlyGrid(const Series& series) {
+    HourlyGrid g;
+    const QVector<qint64>& ts = series.timestamps();
+    if (ts.isEmpty()) return g;
+    const qint64 firstHour = ts.first() / kHour;
+    const qint64 lastHour  = ts.last()  / kHour;
+    const int n = static_cast<int>(lastHour - firstHour) + 1;
+    if (n <= 0 || n > 24 * 3660) return g;   // garde-fou memoire
+
+    const QVector<double>* cols[3] = {series.channel(kTemp), series.channel(kHum),
+                                      series.channel(kPres)};
+    QVector<double>* dst[3] = {&g.temp, &g.hum, &g.pres};
+    for (int c = 0; c < 3; ++c) {
+        QVector<double> sum(n, 0.0);
+        QVector<int>    cnt(n, 0);
+        if (cols[c]) {
+            for (int i = 0; i < ts.size(); ++i) {
+                if (!Series::isValid((*cols[c])[i])) continue;
+                const int b = static_cast<int>(ts[i] / kHour - firstHour);
+                if (b >= 0 && b < n) { sum[b] += (*cols[c])[i]; cnt[b]++; }
+            }
+        }
+        dst[c]->resize(n);
+        for (int b = 0; b < n; ++b)
+            (*dst[c])[b] = cnt[b] ? sum[b] / cnt[b] : std::nan("");
+    }
+    return g;
+}
+
+// Correlation de Pearson entre a[i] et b[i+lag], sur les seules cases ou les deux
+// sont presentes. Renvoie NaN si trop peu de panneaux valides pour etre credible.
+double pearsonLag(const QVector<double>& a, const QVector<double>& b, int lag) {
+    double sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0;
+    int n = 0;
+    for (int i = 0; i < a.size(); ++i) {
+        const int j = i + lag;
+        if (j < 0 || j >= b.size()) continue;
+        if (std::isnan(a[i]) || std::isnan(b[j])) continue;
+        sa += a[i]; sb += b[j];
+        saa += a[i] * a[i]; sbb += b[j] * b[j]; sab += a[i] * b[j];
+        ++n;
+    }
+    if (n < 12) return std::nan("");
+    const double cov = sab - sa * sb / n;
+    const double va  = saa - sa * sa / n;
+    const double vb  = sbb - sb * sb / n;
+    if (va <= 0 || vb <= 0) return std::nan("");
+    return cov / std::sqrt(va * vb);
+}
+
+// Correlations a decalage temporel entre grandeurs : au-dela du lien instantane,
+// on cherche le decalage qui MAXIMISE la correlation (ex. une chute de pression
+// qui PRECEDE une hausse d'humidite). Params : `days` (fenetre, defaut 30),
+// `max_lag_hours` (defaut 12).
+QJsonObject analyzeLaggedCorrelation(const AnalysisContext& ctx, const QJsonObject& params) {
+    const qint64 days = windowDays(params, 30);
+    const int maxLag  = std::clamp(params.value(QStringLiteral("max_lag_hours")).toInt(12), 1, 72);
+    const Series series = ctx.store->range(ctx.now - days * kDay, ctx.now);
+    const HourlyGrid g = hourlyGrid(series);
+    if (g.size() < 24)
+        return failure(QStringLiteral("historique insuffisant (moins d'une journée exploitable)"));
+
+    struct Pair { const char* label; const QVector<double>* a; const QVector<double>* b; };
+    const std::vector<Pair> pairs = {
+        {"temp~hum",  &g.temp, &g.hum},
+        {"temp~pres", &g.temp, &g.pres},
+        {"hum~pres",  &g.hum,  &g.pres},
+    };
+
+    QJsonArray arr;
+    for (const Pair& p : pairs) {
+        const double r0 = pearsonLag(*p.a, *p.b, 0);
+        double bestR = 0; int bestLag = 0; bool found = false;
+        for (int lag = -maxLag; lag <= maxLag; ++lag) {
+            const double r = pearsonLag(*p.a, *p.b, lag);
+            if (std::isnan(r)) continue;
+            if (!found || std::fabs(r) > std::fabs(bestR)) { bestR = r; bestLag = lag; found = true; }
+        }
+        if (!found) continue;
+        QJsonObject o;
+        o["pair"]          = QString::fromUtf8(p.label);
+        o["r_at_zero"]     = std::isnan(r0) ? QJsonValue() : QJsonValue(round2(r0));
+        o["best_r"]        = round2(bestR);
+        o["best_lag_hours"] = bestLag;   // >0 : le 2e canal suit le 1er de N heures
+        arr.append(o);
+    }
+    if (arr.isEmpty())
+        return failure(QStringLiteral("aucune paire exploitable"));
+
+    QJsonObject out;
+    out["window_days"]   = static_cast<int>(days);
+    out["max_lag_hours"] = maxLag;
+    out["note"]          = QStringLiteral(
+        "best_lag_hours > 0 : le second canal suit le premier de N heures "
+        "(le premier « précède »). La corrélation n'est pas une causalité.");
+    out["pairs"] = arr;
+    return out;
+}
+
+// Segmentation d'episodes remarquables : suites de jours consecutifs ou une
+// grandeur reste au-dela d'un seuil. Canicule (Tmax >= seuil chaud) et coup de
+// froid (Tmin <= seuil froid). Params : `days` (fenetre, defaut 90),
+// `heat_threshold` (defaut 30), `cold_threshold` (defaut 0), `min_days` (defaut 3).
+QJsonObject analyzeEpisodes(const AnalysisContext& ctx, const QJsonObject& params) {
+    const qint64 days   = windowDays(params, 90);
+    const double heatT  = params.value(QStringLiteral("heat_threshold")).toDouble(30.0);
+    const double coldT  = params.value(QStringLiteral("cold_threshold")).toDouble(0.0);
+    const int    minDays = std::clamp(params.value(QStringLiteral("min_days")).toInt(3), 1, 60);
+    const Series series = ctx.store->range(ctx.now - days * kDay, ctx.now);
+    const QVector<DayAggregate> agg = aggregateByDay(series);
+    if (agg.size() < minDays)
+        return failure(QStringLiteral("historique insuffisant"));
+
+    QJsonArray episodes;
+    // Detecte les suites de jours CONSECUTIFS qui satisfont `qualifies`, et emet
+    // un episode quand la suite atteint `minDays`. `extreme` suit la valeur la
+    // plus marquante de l'episode (max en chaleur, min en froid).
+    const auto scan = [&](const char* type,
+                          const std::function<bool(const DayAggregate&)>& qualifies,
+                          const std::function<double(const DayAggregate&)>& value,
+                          bool wantMax) {
+        int runStart = -1;
+        double extreme = 0;
+        auto flush = [&](int endExclusive) {
+            if (runStart < 0) return;
+            const int len = endExclusive - runStart;
+            if (len >= minDays) {
+                QJsonObject e;
+                e["type"]    = QString::fromUtf8(type);
+                e["start"]   = agg[runStart].date.toString(Qt::ISODate);
+                e["end"]     = agg[endExclusive - 1].date.toString(Qt::ISODate);
+                e["days"]    = len;
+                e["extreme"] = round1(extreme);
+                episodes.append(e);
+            }
+            runStart = -1;
+        };
+        for (int i = 0; i < agg.size(); ++i) {
+            const bool ok = agg[i].tCount > 0 && qualifies(agg[i]);
+            // Rupture de continuite du calendrier : un trou de jours casse la suite.
+            const bool contiguous = runStart >= 0 &&
+                agg[i - 1].date.daysTo(agg[i].date) == 1;
+            if (ok && runStart >= 0 && !contiguous) flush(i);
+            if (ok) {
+                if (runStart < 0) { runStart = i; extreme = value(agg[i]); }
+                else extreme = wantMax ? std::max(extreme, value(agg[i]))
+                                       : std::min(extreme, value(agg[i]));
+            } else {
+                flush(i);
+            }
+        }
+        flush(agg.size());
+    };
+
+    scan("canicule", [&](const DayAggregate& d){ return d.tMax >= heatT; },
+         [](const DayAggregate& d){ return d.tMax; }, /*wantMax=*/true);
+    scan("froid",    [&](const DayAggregate& d){ return d.tMin <= coldT; },
+         [](const DayAggregate& d){ return d.tMin; }, /*wantMax=*/false);
+
+    QJsonObject out;
+    out["window_days"]    = static_cast<int>(days);
+    out["heat_threshold"] = heatT;
+    out["cold_threshold"] = coldT;
+    out["min_days"]       = minDays;
+    out["episodes"]       = episodes;   // vide = aucun episode sur la periode, ce n'est pas une erreur
+    return out;
+}
+
 void registerMeteoAnalyses(AnalysisRegistry& registry) {
     using A = FunctionAnalysis;
     auto add = [&](const char* id, const char* title, const char* group,
@@ -876,6 +1160,11 @@ void registerMeteoAnalyses(AnalysisRegistry& registry) {
     add("records", "Records", "climat", 7 * kDay, analyzeRecords);
     add("streaks", "Jours remarquables et séries", "climat", 30 * kDay, analyzeStreaks);
     add("daily_cycle", "Cycle journalier moyen", "climat", 7 * kDay, analyzeDailyCycle);
+
+    // Vague 3 : analyses avancees.
+    add("anomalies", "Anomalies (z-score robuste)", "avancé", 3 * kDay, analyzeAnomalies);
+    add("correlations", "Corrélations à décalage", "avancé", 2 * kDay, analyzeLaggedCorrelation);
+    add("episodes", "Épisodes (canicule, coup de froid)", "avancé", 3 * kDay, analyzeEpisodes);
 
     // --- Qualite -------------------------------------------------------------
     add("data_quality", "Complétude des données", "qualite", 2 * kDay, analyzeDataQuality);
