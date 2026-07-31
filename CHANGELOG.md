@@ -3,6 +3,19 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.14.2] - 2026-07-31
+
+### Fixed
+
+- La page `/sitewatch` actualise désormais automatiquement les synthèses reçues.
+  Elle ne reste plus bloquée sur « En attente de données » lorsque SiteWatch
+  publie son rapport juste après l'ouverture de la page.
+
+### Ajouté
+
+- Les synthèses SiteWatch mettent en évidence le taux d'erreurs HTTP, les pages
+  les plus consultées ou touchées, ainsi que les robots les plus actifs.
+
 ## [0.14.1] - 2026-07-31
 
 ### Fixed
