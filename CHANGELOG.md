@@ -3,6 +3,13 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.14.1] - 2026-07-31
+
+### Fixed
+
+- Réception SiteWatch compatible avec la publication JSON explicite de
+  SiteWatch 1.11.1.
+
 ## [0.14.0] - 2026-07-31
 
 ### Modifié
