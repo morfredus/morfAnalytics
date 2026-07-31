@@ -3,6 +3,30 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.14.0] - 2026-07-31
+
+### Modifié
+
+- **Intégration SiteWatch finalisée.** SiteWatch découvre morfAnalytics sur le
+  réseau, lui transmet automatiquement sa synthèse après chaque analyse et
+  ouvre sa page dédiée. Le portail liste les deux espaces disponibles et la
+  date de la dernière synthèse SiteWatch reçue.
+
+## [0.13.0] - 2026-07-31
+
+### Ajouté
+
+- **Espace SiteWatch.** La page `/sitewatch` reçoit les synthèses publiées par
+  SiteWatch et présente, par site, les requêtes analysées, erreurs HTTP, robots,
+  tentatives sensibles et une conclusion lisible. Les synthèses sont conservées
+  localement après le redémarrage du service.
+
+### Modifié
+
+- **Entrées Web séparées.** La météo est désormais accessible par `/meteohub` ;
+  la racine présente les analyses disponibles. L'annonce réseau dirige MeteoHub
+  directement vers son espace dédié.
+
 ## [0.12.0] - 2026-07-31
 
 ### Modifié

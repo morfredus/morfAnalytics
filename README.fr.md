@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.12.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.14.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -96,6 +96,14 @@ tout moment : il sera reconstruit depuis l'appareil, sans perte, puisque la
 source de vérité reste MeteoHub.
 
 ## Les analyses disponibles
+
+### Espaces Web
+
+- `/` présente les espaces d'analyse disponibles.
+- `/meteohub` conserve les analyses météorologiques de MeteoHub.
+- `/sitewatch` affiche les synthèses reçues automatiquement de SiteWatch.
+  SiteWatch publie à la fin de chaque analyse les compteurs de requêtes, erreurs,
+  robots et tentatives sensibles ; morfAnalytics les conserve localement.
 
 Consulter la page `http://<adresse-du-serveur>:8799/`, ou interroger une analyse
 directement :

@@ -20,6 +20,7 @@
 #include <QJsonParseError>
 #include <QDateTime>
 #include <QUrl>
+#include <QSettings>
 
 #include <utility>
 
@@ -47,6 +48,8 @@ HttpServer::HttpServer(ServiceConfig config, ModuleRegistry* registry, QObject* 
       m_config(std::move(config)),
       m_registry(registry),
       m_server(new QTcpServer(this)) {
+    const QJsonArray saved = QJsonDocument::fromJson(QSettings("morfSystem", "morfAnalytics").value("sitewatch/reports").toByteArray()).array();
+    for (const QJsonValue& v : saved) { const QJsonObject r = v.toObject(); const QString id = r.value("site_id").toString(); if (!id.isEmpty()) m_siteWatchReports.insert(id, r); }
     connect(m_server, &QTcpServer::newConnection, this, &HttpServer::onNewConnection);
 }
 
@@ -113,7 +116,10 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
     QByteArray out;
 
     // ---- Analyse a la demande (POST), servie par AnalyticsModule -------------
-    if (path == "/analyze") {
+    if (path == "/sitewatch/ingest") {
+        if (method != "POST") { code = 405; reason = "Method Not Allowed"; out = "{\"error\":\"use POST /sitewatch/ingest\"}"; }
+        else out = handleSiteWatchPost(body, code, reason);
+    } else if (path == "/analyze") {
         if (method != "POST") {
             code = 405; reason = "Method Not Allowed";
             out = "{\"error\":\"use POST /analyze\"}";
@@ -137,12 +143,22 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         code = 405; reason = "Method Not Allowed";
         out = "{\"error\":\"method not allowed\"}";
     } else if (path == "/" || path == "/index.html") {
+        reply(sock, 200, "OK", QByteArrayLiteral("<!doctype html><meta charset=utf-8><title>morfAnalytics</title><h1>morfAnalytics</h1><ul><li><a href='/meteohub'>Analyses MeteoHub</a> — données météo</li><li><a href='/sitewatch'>Analyses SiteWatch</a> — données de journaux Web <span id='sw'>— aucune donnée reçue</span></li></ul><script>fetch('/sitewatch/reports').then(r=>r.json()).then(x=>{if(x.reports.length){let d=Math.max(...x.reports.map(r=>r.received_at||0));sw.textContent='— dernière analyse : '+new Date(d*1000).toLocaleString('fr-FR')}})</script>"), "text/html; charset=utf-8");
+        return;
+    } else if (path == "/meteohub") {
         // Page d'accueil : c'est la cible du lien "Analyse avancee" affiche par
         // MeteoHub quand il detecte ce service sur le reseau. Elle doit donc
         // repondre quelque chose d'utile des la premiere version, avant meme
         // que les analyses existent.
         reply(sock, 200, "OK", landingPage(), "text/html; charset=utf-8");
         return;
+    } else if (path == "/sitewatch") {
+        reply(sock, 200, "OK", siteWatchPage(), "text/html; charset=utf-8");
+        return;
+    } else if (path == "/sitewatch/reports") {
+        QJsonArray reports;
+        for (const QJsonObject& report : m_siteWatchReports) reports.append(report);
+        out = toJson(QJsonObject{{"reports", reports}});
     } else if (path == "/analyses") {
         // Catalogue des analyses : l'interface se construit a partir de cette
         // liste, sans qu'aucune analyse ne soit codee en dur cote page.
@@ -215,6 +231,29 @@ QByteArray HttpServer::handleCleanupPost(const QByteArray& body, int& code, QByt
         return "{\"error\":\"aucun module d'analyse actif\"}";
     }
     return toJson(module->cleanupData(doc.object()));
+}
+
+QByteArray HttpServer::handleSiteWatchPost(const QByteArray& body, int& code, QByteArray& reason) {
+    QJsonParseError pe{};
+    const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+    if (pe.error != QJsonParseError::NoError || !doc.isObject()) {
+        code = 400; reason = "Bad Request"; return "{\"error\":\"corps JSON invalide\"}";
+    }
+    QJsonObject report = doc.object();
+    const QString siteId = report.value("site_id").toString();
+    if (siteId.isEmpty()) { code = 400; reason = "Bad Request"; return "{\"error\":\"site_id manquant\"}"; }
+    report["received_at"] = static_cast<double>(QDateTime::currentSecsSinceEpoch());
+    m_siteWatchReports.insert(siteId, report);
+    QJsonArray saved; for (const QJsonObject& item : m_siteWatchReports) saved.append(item);
+    QSettings("morfSystem", "morfAnalytics").setValue("sitewatch/reports", QJsonDocument(saved).toJson(QJsonDocument::Compact));
+    return toJson(QJsonObject{{"ok", true}, {"site_id", siteId}});
+}
+
+QByteArray HttpServer::siteWatchPage() {
+    return R"HTML(<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>morfAnalytics — SiteWatch</title><style>body{margin:0;background:#15171b;color:#e7e9ec;font:16px system-ui;padding:2rem}.wrap{max-width:70rem;margin:auto}.card{background:#1e2126;border:1px solid #2c3037;border-radius:12px;padding:1.25rem;margin:1rem 0}h1{margin:0}h2{font-size:1.05rem}.muted{color:#99a1ad}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1rem}.number{font-size:2rem;font-weight:700}table{width:100%;border-collapse:collapse}td,th{padding:.55rem;border-bottom:1px solid #2c3037;text-align:left}</style>
+<div class="wrap"><p><a href="/" style="color:#6f9bff">← morfAnalytics</a></p><h1>Analyse des sites</h1><p class="muted">Synthèses reçues de SiteWatch.</p><div id="content" class="card">En attente de données SiteWatch.</div></div>
+<script>const n=v=>Number(v||0).toLocaleString('fr-FR');function card(r){const s=r.stats||r;const err=n((s.errors_404||0)+(s.errors_403||0)+(s.errors_500||0));const verdict=(s.errors_500||0)?'À surveiller : erreurs serveur détectées.':(s.attacks||0)?'Activité à surveiller : requêtes sensibles détectées.':'Activité globalement normale.';return `<section class=card><h2>${r.site_label||r.site_id}</h2><p>${verdict}</p><div class=grid><div><span class=number>${n(s.requests)}</span><br><span class=muted>requêtes analysées</span></div><div><span class=number>${err}</span><br><span class=muted>erreurs HTTP</span></div><div><span class=number>${n(s.bots)}</span><br><span class=muted>requêtes de robots</span></div><div><span class=number>${n(s.attacks)}</span><br><span class=muted>tentatives sensibles</span></div></div><p class=muted>Période : ${r.from||'?'} → ${r.to||'?'} · reçu le ${new Date((r.received_at||0)*1000).toLocaleString('fr-FR')}</p></section>`}fetch('/sitewatch/reports').then(r=>r.json()).then(x=>content.innerHTML=x.reports.length?x.reports.map(card).join(''):'Aucune synthèse reçue.')</script>)HTML";
 }
 
 QByteArray HttpServer::landingPage() {

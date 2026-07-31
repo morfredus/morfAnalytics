@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QElapsedTimer>
 #include <QByteArray>
+#include <QHash>
 #include "morfanalytics/ServiceConfig.h"
 
 class QTcpServer;
@@ -47,15 +48,18 @@ private:
                        const QByteArray& path, const QByteArray& body);
     QByteArray handleAnalyzePost(const QByteArray& body, int& code, QByteArray& reason) const;
     QByteArray handleCleanupPost(const QByteArray& body, int& code, QByteArray& reason) const;
+    QByteArray handleSiteWatchPost(const QByteArray& body, int& code, QByteArray& reason);
     QByteArray buildStatusJson() const;
     void reply(QTcpSocket* sock, int code, const QByteArray& reason, const QByteArray& body,
                const QByteArray& contentType = "application/json; charset=utf-8");
     static QByteArray landingPage();
+    static QByteArray siteWatchPage();
 
     ServiceConfig   m_config;
     ModuleRegistry* m_registry;
     QTcpServer*     m_server;
     QElapsedTimer   m_uptime;
+    QHash<QString, QJsonObject> m_siteWatchReports;
 };
 
 } // namespace morfanalytics

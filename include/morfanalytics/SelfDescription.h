@@ -24,7 +24,7 @@ namespace morfanalytics {
 //
 // En-tete (inline) : aucun fichier source ni entree CMake supplementaires.
 inline void fillAnnouncedDetail(morfbeacon::PresenceConfig& pc) {
-    pc.webUiPath        = QStringLiteral("/");
+    pc.webUiPath        = QStringLiteral("/meteohub");
     pc.webUiLabel       = QStringLiteral("Analyses");
     pc.webUiDescription = QStringLiteral(
         "Statistiques longue periode et correlations sur l'historique des equipements.");
