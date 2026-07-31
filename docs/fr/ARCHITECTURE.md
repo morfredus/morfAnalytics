@@ -4,6 +4,13 @@ Retour à l'[index de la documentation](README.md).
 
 ---
 
+## Pages Web modulaires
+
+Le rendu Web est organisé sous `src/web/` : `PortalPage`, `MeteoHubPage` et
+`SiteWatchPage` correspondent respectivement aux routes `/`, `/meteohub` et
+`/sitewatch`. `HttpServer` ne choisit que la route et fournit les données ; une
+nouvelle source doit ajouter sa propre page, sans modifier les autres espaces.
+
 Service Qt (Core, Network, Sql), sans interface graphique. Le socle ne contient
 **aucun métier** : ce qui est propre à une activité donnée vit dans des `IModule`
 (ici `AnalyticsModule`) et, pour les calculs, dans des `IAnalysis`.

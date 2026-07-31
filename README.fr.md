@@ -119,6 +119,14 @@ source de vérité reste MeteoHub.
   répétitions de tentatives sensibles : ces analyses n'existent pas dans la
   vue de bureau de SiteWatch.
 
+## Architecture des pages Web
+
+Les espaces `/`, `/meteohub` et `/sitewatch` sont organisés comme des pages
+compilées distinctes dans `src/web/`. Le serveur HTTP assure les routes et les
+pages reçoivent uniquement les données nécessaires à leur rendu. Cette
+organisation permet d'ajouter de nouvelles sources d'analyse sans transformer
+`HttpServer` en fichier monolithique.
+
 Consulter la page `http://<adresse-du-serveur>:8799/`, ou interroger une analyse
 directement :
 

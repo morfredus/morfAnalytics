@@ -3,6 +3,16 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.18.0] - 2026-08-01
+
+### Changed
+
+- Fondation du rendu Web modulaire : le portail, MeteoHub et SiteWatch possèdent
+  désormais chacun leur unité de page compilée sous `src/web/`. `HttpServer` se
+  limite progressivement au routage et à la fourniture des données.
+- Cette structure est extensible : une future source, telle que GatewayLab,
+  pourra ajouter sa page sans modifier les espaces existants.
+
 ## [0.17.0] - 2026-08-01
 
 ### Ajouté

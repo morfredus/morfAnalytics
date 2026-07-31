@@ -9,6 +9,9 @@
 #include "morfanalytics/AnalyticsModule.h"
 #include "morfanalytics/Version.h"
 #include "morfanalytics/SelfDescription.h"
+#include "morfanalytics/web/PortalPage.h"
+#include "morfanalytics/web/MeteoHubPage.h"
+#include "morfanalytics/web/SiteWatchPage.h"
 
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -287,17 +290,18 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         code = 405; reason = "Method Not Allowed";
         out = "{\"error\":\"method not allowed\"}";
     } else if (path == "/" || path == "/index.html") {
-        reply(sock, 200, "OK", QByteArrayLiteral("<!doctype html><meta charset=utf-8><title>morfAnalytics</title><h1>morfAnalytics</h1><ul><li><a href='/meteohub'>Analyses MeteoHub</a> — données météo</li><li><a href='/sitewatch'>Analyses SiteWatch</a> — données de journaux Web <span id='sw'>— aucune donnée reçue</span></li></ul><script>fetch('/sitewatch/reports').then(r=>r.json()).then(x=>{if(x.reports.length){let d=Math.max(...x.reports.map(r=>r.received_at||0));sw.textContent='— dernière analyse : '+new Date(d*1000).toLocaleString('fr-FR')}})</script>"), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", web::PortalPage::render(siteWatchReports()), "text/html; charset=utf-8");
         return;
     } else if (path == "/meteohub") {
         // Page d'accueil : c'est la cible du lien "Analyse avancee" affiche par
         // MeteoHub quand il detecte ce service sur le reseau. Elle doit donc
         // repondre quelque chose d'utile des la premiere version, avant meme
         // que les analyses existent.
-        reply(sock, 200, "OK", landingPage(), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", web::MeteoHubPage::render(landingPage()), "text/html; charset=utf-8");
         return;
     } else if (path == "/sitewatch") {
-        reply(sock, 200, "OK", siteWatchPage(), "text/html; charset=utf-8");
+        const QJsonArray reports = siteWatchReports();
+        reply(sock, 200, "OK", web::SiteWatchPage::render(siteWatchPage(), reports), "text/html; charset=utf-8");
         return;
     } else if (path == "/sitewatch/reports") {
         out = toJson(QJsonObject{{"reports", siteWatchReports()}, {"storage", "sqlite"}});

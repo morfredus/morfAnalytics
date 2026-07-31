@@ -47,6 +47,9 @@ endif()
 add_library(morfAnalytics STATIC
     src/ModuleRegistry.cpp
     src/HttpServer.cpp
+    src/web/PortalPage.cpp
+    src/web/MeteoHubPage.cpp
+    src/web/SiteWatchPage.cpp
     src/Service.cpp
     src/ModuleFactory.cpp
     src/AnalyticsModule.cpp               # logique metier : moteur d'analyse
@@ -70,6 +73,9 @@ add_library(morfAnalytics STATIC
     include/morfanalytics/ServiceConfig.h
     include/morfanalytics/ModuleFactory.h
     include/morfanalytics/HttpServer.h
+    include/morfanalytics/web/PortalPage.h
+    include/morfanalytics/web/MeteoHubPage.h
+    include/morfanalytics/web/SiteWatchPage.h
     include/morfanalytics/Service.h
     include/morfanalytics/AnalyticsModule.h # logique metier : moteur d'analyse
     include/morfanalytics/Version.h
