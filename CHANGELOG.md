@@ -3,6 +3,21 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.16.0] - 2026-07-31
+
+### Changed
+
+- **Page SiteWatch rendue côté serveur.** `/sitewatch` lit maintenant les
+  synthèses dans SQLite et produit directement le HTML des cartes. Elle ne
+  dépend plus de JavaScript ni d'un appel asynchrone du navigateur.
+- La page se recharge automatiquement toutes les 30 secondes pour intégrer les
+  nouvelles synthèses sans intervention.
+
+### Verified
+
+- Test de bout en bout : publication SiteWatch, écriture SQLite puis rendu de
+  l'URL, des compteurs et des pages sensibles dans `/sitewatch`.
+
 ## [0.15.2] - 2026-07-31
 
 ### Fixed

@@ -26,7 +26,12 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QUuid>
+#include <QLocale>
+#include <QPair>
+#include <QVector>
+#include <QStringList>
 
+#include <algorithm>
 #include <utility>
 
 namespace morfanalytics {
@@ -371,11 +376,56 @@ QByteArray HttpServer::handleSiteWatchPost(const QByteArray& body, int& code, QB
     return toJson(QJsonObject{{"ok", true}, {"site_id", siteId}});
 }
 
-QByteArray HttpServer::siteWatchPage() {
-    return R"HTML(<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>morfAnalytics — SiteWatch</title><style>body{margin:0;background:#15171b;color:#e7e9ec;font:16px system-ui;padding:2rem}.wrap{max-width:70rem;margin:auto}.card{background:#1e2126;border:1px solid #2c3037;border-radius:12px;padding:1.25rem;margin:1rem 0}h1{margin:0}h2{font-size:1.05rem}.muted{color:#99a1ad}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1rem}.number{font-size:2rem;font-weight:700}table{width:100%;border-collapse:collapse}td,th{padding:.55rem;border-bottom:1px solid #2c3037;text-align:left}</style>
-<div class="wrap"><p><a href="/" style="color:#6f9bff">← morfAnalytics</a></p><h1>Analyse des sites</h1><p class="muted">Synthèses reçues de SiteWatch.</p><div id="content" class="card">En attente de données SiteWatch.</div></div>
-<script>const contentEl=document.getElementById('content'),n=v=>Number(v||0).toLocaleString('fr-FR'),top=o=>Object.entries(o||{}).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>`${x[0]} (${n(x[1])})`).join(' · ')||'aucune',peak=o=>{const x=Object.entries(o||{}).sort((a,b)=>b[1]-a[1])[0];return x?`${x[0]} (${n(x[1])})`:'aucune'};function card(r){const s=r.stats||r,e=(s.errors_404||0)+(s.errors_403||0)+(s.errors_500||0),rate=s.requests?((e/s.requests)*100).toFixed(2):0,v=s.errors_500?'À surveiller : erreurs serveur détectées.':s.attacks?'À surveiller : tentatives sensibles détectées.':'Activité globalement normale.';return `<section class=card><h2>${r.site_label||r.site_id}</h2><p>${v}</p><div class=grid><div><span class=number>${n(s.requests)}</span><br><span class=muted>requêtes analysées</span></div><div><span class=number>${n(e)}</span><br><span class=muted>erreurs HTTP (${rate} %)</span></div><div><span class=number>${n(s.bots)}</span><br><span class=muted>requêtes de robots</span></div><div><span class=number>${n(s.attacks)}</span><br><span class=muted>tentatives sensibles</span></div></div><h2>Points à examiner</h2><p>Pages les plus touchées : ${top(s.top_attacked)}</p><p>Robots les plus actifs : ${top(s.bot_counts)}</p><p>Pages les plus visitées : ${top(s.top_pages)}</p><h2>Périodes marquantes</h2><p>Pic d'erreurs 404 : ${peak(s.daily_404)} · Pic de robots : ${peak(s.daily_bots)} · Pic de tentatives sensibles : ${peak(s.daily_attacks)}</p><p class=muted>Période : ${r.from||'?'} → ${r.to||'?'}</p></section>`}function load(){fetch('/sitewatch/reports').then(r=>r.json()).then(x=>{contentEl.innerHTML=x.reports.length?x.reports.map(card).join(''):'Aucune synthèse reçue.'}).catch(()=>contentEl.textContent='Impossible de lire les données SiteWatch.')}load();setInterval(load,3000)</script>)HTML";
+QByteArray HttpServer::siteWatchPage() const {
+    const auto formatNumber = [](double value) {
+        return QLocale(QLocale::French, QLocale::France).toString(static_cast<qlonglong>(value));
+    };
+    const auto topEntries = [&formatNumber](const QJsonObject& values) {
+        QVector<QPair<QString, double>> ranked;
+        ranked.reserve(values.size());
+        for (auto it = values.begin(); it != values.end(); ++it)
+            ranked.append({it.key(), it.value().toDouble()});
+        std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) {
+            return a.second != b.second ? a.second > b.second : a.first < b.first;
+        });
+        QStringList result;
+        for (int i = 0; i < ranked.size() && i < 3; ++i)
+            result << QStringLiteral("%1 (%2)").arg(ranked[i].first.toHtmlEscaped(), formatNumber(ranked[i].second));
+        return result.isEmpty() ? QStringLiteral("aucune") : result.join(QStringLiteral(" · "));
+    };
+
+    const QJsonArray reports = siteWatchReports();
+    QString page = QStringLiteral(R"HTML(<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="30"><title>morfAnalytics — SiteWatch</title><style>body{margin:0;background:#15171b;color:#e7e9ec;font:16px system-ui;padding:2rem}.wrap{max-width:70rem;margin:auto}.card{background:#1e2126;border:1px solid #2c3037;border-radius:12px;padding:1.25rem;margin:1rem 0}h1{margin:0}h2{font-size:1.05rem}.muted{color:#99a1ad}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:1rem}.number{font-size:2rem;font-weight:700}</style><body><div class="wrap"><p><a href="/" style="color:#6f9bff">← morfAnalytics</a></p><h1>Analyse des sites</h1><p class="muted">Synthèses reçues de SiteWatch · actualisation automatique toutes les 30 secondes.</p>)HTML");
+    if (reports.isEmpty()) {
+        page += QStringLiteral("<section class=\"card\">Aucune synthèse SiteWatch n'est encore enregistrée.</section>");
+    }
+    for (const QJsonValue& value : reports) {
+        const QJsonObject report = value.toObject();
+        const QJsonObject stats = report.value(QStringLiteral("stats")).toObject();
+        const double errors = stats.value(QStringLiteral("errors_404")).toDouble()
+                            + stats.value(QStringLiteral("errors_403")).toDouble()
+                            + stats.value(QStringLiteral("errors_500")).toDouble();
+        const double requests = stats.value(QStringLiteral("requests")).toDouble();
+        const QString verdict = stats.value(QStringLiteral("errors_500")).toDouble() > 0
+            ? QStringLiteral("À surveiller : erreurs serveur détectées.")
+            : stats.value(QStringLiteral("attacks")).toDouble() > 0
+                ? QStringLiteral("À surveiller : tentatives sensibles détectées.")
+                : QStringLiteral("Activité globalement normale.");
+        const QString site = report.value(QStringLiteral("site_label")).toString(
+            report.value(QStringLiteral("site_id")).toString()).toHtmlEscaped();
+        const QString rate = requests > 0 ? QLocale(QLocale::French, QLocale::France).toString(errors * 100.0 / requests, 'f', 2) : QStringLiteral("0,00");
+        page += QStringLiteral("<section class=\"card\"><h2>%1</h2><p>%2</p><div class=\"grid\"><div><span class=\"number\">%3</span><br><span class=\"muted\">requêtes analysées</span></div><div><span class=\"number\">%4</span><br><span class=\"muted\">erreurs HTTP (%5 %)</span></div><div><span class=\"number\">%6</span><br><span class=\"muted\">requêtes de robots</span></div><div><span class=\"number\">%7</span><br><span class=\"muted\">tentatives sensibles</span></div></div><h2>Points à examiner</h2><p>Pages les plus touchées : %8</p><p>Robots les plus actifs : %9</p><p>Pages les plus visitées : %10</p><p class=\"muted\">Période : %11 → %12</p></section>")
+            .arg(site).arg(verdict).arg(formatNumber(requests)).arg(formatNumber(errors)).arg(rate)
+            .arg(formatNumber(stats.value(QStringLiteral("bots")).toDouble()))
+            .arg(formatNumber(stats.value(QStringLiteral("attacks")).toDouble()))
+            .arg(topEntries(stats.value(QStringLiteral("top_attacked")).toObject()))
+            .arg(topEntries(stats.value(QStringLiteral("bot_counts")).toObject()))
+            .arg(topEntries(stats.value(QStringLiteral("top_pages")).toObject()))
+            .arg(report.value(QStringLiteral("from")).toString().toHtmlEscaped())
+            .arg(report.value(QStringLiteral("to")).toString().toHtmlEscaped());
+    }
+    page += QStringLiteral("</div></body></html>");
+    return page.toUtf8();
 }
 
 QByteArray HttpServer::landingPage() {

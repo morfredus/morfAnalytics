@@ -59,7 +59,7 @@ private:
     void reply(QTcpSocket* sock, int code, const QByteArray& reason, const QByteArray& body,
                const QByteArray& contentType = "application/json; charset=utf-8");
     static QByteArray landingPage();
-    static QByteArray siteWatchPage();
+    QByteArray siteWatchPage() const;
 
     ServiceConfig   m_config;
     ModuleRegistry* m_registry;
