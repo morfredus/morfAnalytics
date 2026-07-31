@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.14.3-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.15.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -87,6 +87,11 @@ minutes; later cycles only transfer new measurements.
 The cache is a plain SQLite file in `cache_dir`. It can be deleted at any time: it
 gets rebuilt from the device without loss, since MeteoHub remains the source of
 truth.
+
+SiteWatch summaries are stored separately in
+`/opt/morfanalytics/cache/sitewatch-history.sqlite`. This historical database
+contains only calculated summaries: SiteWatch remains the sovereign owner of
+the source access logs.
 
 ## Available analyses
 

@@ -39,6 +39,11 @@ struct ServiceConfig {
     quint16 httpPort    = 8799;                      // 0 => pas de serveur HTTP
     QString bindAddress = QStringLiteral("0.0.0.0");
 
+    // Historique des synthèses envoyées par SiteWatch. Ce cache ne contient pas
+    // les journaux source, qui restent exclusivement sous la responsabilité de
+    // SiteWatch.
+    QString siteWatchCacheDir = QStringLiteral("/opt/morfanalytics/cache");
+
     // Annonce de presence sur le LAN via morfBeacon.
     bool    beaconEnabled    = true;
     quint16 beaconUdpPort    = 45454;                // port du parc morfSystem
@@ -53,6 +58,8 @@ struct ServiceConfig {
         if (root.contains("instance_id"))  c.instanceId  = root.value("instance_id").toString();
         if (root.contains("http_port"))    c.httpPort    = static_cast<quint16>(root.value("http_port").toInt(c.httpPort));
         if (root.contains("bind_address")) c.bindAddress = root.value("bind_address").toString(c.bindAddress);
+        if (root.contains("sitewatch_cache_dir"))
+            c.siteWatchCacheDir = root.value("sitewatch_cache_dir").toString(c.siteWatchCacheDir);
 
         const QJsonObject beacon = root.value("beacon").toObject();
         if (beacon.contains("enabled"))     c.beaconEnabled    = beacon.value("enabled").toBool(c.beaconEnabled);

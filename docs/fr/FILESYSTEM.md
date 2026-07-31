@@ -10,6 +10,7 @@ morfAnalytics suit la doctrine du parc morfSystem (référence complète :
 | Programme | binaire `morfanalytics` | `/opt/morfanalytics` | non |
 | Config admin | `morfanalytics.json` | `/etc/morfsystem/morfanalytics` | non |
 | État persistant | cache SQLite des échantillons | `/var/lib/morfsystem/morfanalytics` | oui |
+| Historique SiteWatch | synthèses d'analyse SQLite | `/opt/morfanalytics/cache/sitewatch-history.sqlite` | oui |
 
 Sous Windows, l'état se replie sous
 `%ProgramData%\morfsystem\morfanalytics\state`.
@@ -45,3 +46,21 @@ sudo systemctl start morfanalytics
 
 Autre option : fixer `"cache_dir": "/opt/morfanalytics"` dans le module pour
 conserver l'ancien emplacement.
+
+## Historique SiteWatch
+
+`/opt/morfanalytics/cache/sitewatch-history.sqlite` conserve une ligne par
+analyse reçue de SiteWatch. Il permet d'étendre les comparaisons dans le temps
+sans conserver les journaux d'accès eux-mêmes : **SiteWatch reste la source
+souveraine** de ces données.
+
+Le chemin est réglable avec `sitewatch_cache_dir` dans `morfanalytics.json`.
+La base utilise le mode WAL afin que les consultations ne bloquent pas la
+réception d'une nouvelle synthèse. Aucune purge automatique n'est appliquée.
+
+Le compte qui exécute le service doit pouvoir écrire dans ce dossier. Pour le
+chemin par défaut, le préparer lors de l'installation :
+
+```bash
+sudo install -d -o <utilisateur-du-service> -g <utilisateur-du-service> /opt/morfanalytics/cache
+```

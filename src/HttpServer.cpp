@@ -21,6 +21,11 @@
 #include <QDateTime>
 #include <QUrl>
 #include <QSettings>
+#include <QSqlQuery>
+#include <QSqlError>
+#include <QFileInfo>
+#include <QDir>
+#include <QUuid>
 
 #include <utility>
 
@@ -51,12 +56,101 @@ HttpServer::HttpServer(ServiceConfig config, ModuleRegistry* registry, QObject* 
       m_config(std::move(config)),
       m_registry(registry),
       m_server(new QTcpServer(this)) {
-    const QJsonArray saved = QJsonDocument::fromJson(QSettings("morfSystem", "morfAnalytics").value("sitewatch/reports").toByteArray()).array();
-    for (const QJsonValue& v : saved) { const QJsonObject r = v.toObject(); const QString id = r.value("site_id").toString(); if (!id.isEmpty()) m_siteWatchReports.insert(id, r); }
+    openSiteWatchStore();
+    loadSiteWatchReports();
     connect(m_server, &QTcpServer::newConnection, this, &HttpServer::onNewConnection);
 }
 
-HttpServer::~HttpServer() = default;
+HttpServer::~HttpServer() {
+    closeSiteWatchStore();
+}
+
+bool HttpServer::openSiteWatchStore() {
+    if (!QSqlDatabase::isDriverAvailable(QStringLiteral("QSQLITE"))) {
+        m_siteWatchStoreError = QStringLiteral("pilote QSQLITE indisponible");
+        return false;
+    }
+
+    const QString dbPath = QDir(m_config.siteWatchCacheDir).filePath(QStringLiteral("sitewatch-history.sqlite"));
+    if (!QDir().mkpath(QFileInfo(dbPath).absolutePath())) {
+        m_siteWatchStoreError = QStringLiteral("impossible de créer %1").arg(m_config.siteWatchCacheDir);
+        return false;
+    }
+
+    m_siteWatchConnectionName = QStringLiteral("morfanalytics-sitewatch-%1")
+        .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    m_siteWatchDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), m_siteWatchConnectionName);
+    m_siteWatchDb.setDatabaseName(dbPath);
+    if (!m_siteWatchDb.open()) {
+        m_siteWatchStoreError = m_siteWatchDb.lastError().text();
+        return false;
+    }
+
+    QSqlQuery q(m_siteWatchDb);
+    q.exec(QStringLiteral("PRAGMA journal_mode=WAL"));
+    q.exec(QStringLiteral("PRAGMA synchronous=NORMAL"));
+    if (!q.exec(QStringLiteral("CREATE TABLE IF NOT EXISTS sitewatch_report ("
+                               "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                               "site_id TEXT NOT NULL, site_label TEXT, received_at INTEGER NOT NULL,"
+                               "payload BLOB NOT NULL)")) ||
+        !q.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS idx_sitewatch_report_site_time "
+                               "ON sitewatch_report(site_id, received_at DESC)"))) {
+        m_siteWatchStoreError = q.lastError().text();
+        closeSiteWatchStore();
+        return false;
+    }
+    return true;
+}
+
+void HttpServer::closeSiteWatchStore() {
+    if (m_siteWatchDb.isOpen()) m_siteWatchDb.close();
+    m_siteWatchDb = QSqlDatabase();
+    if (!m_siteWatchConnectionName.isEmpty() && QSqlDatabase::contains(m_siteWatchConnectionName))
+        QSqlDatabase::removeDatabase(m_siteWatchConnectionName);
+    m_siteWatchConnectionName.clear();
+}
+
+bool HttpServer::saveSiteWatchReport(const QJsonObject& report) {
+    if (!m_siteWatchDb.isOpen()) return false;
+    QSqlQuery q(m_siteWatchDb);
+    q.prepare(QStringLiteral("INSERT INTO sitewatch_report(site_id, site_label, received_at, payload) "
+                             "VALUES(?, ?, ?, ?)"));
+    q.addBindValue(report.value("site_id").toString());
+    q.addBindValue(report.value("site_label").toString());
+    q.addBindValue(static_cast<qint64>(report.value("received_at").toDouble()));
+    q.addBindValue(QJsonDocument(report).toJson(QJsonDocument::Compact));
+    if (q.exec()) return true;
+    m_siteWatchStoreError = q.lastError().text();
+    return false;
+}
+
+void HttpServer::loadSiteWatchReports() {
+    if (m_siteWatchDb.isOpen()) {
+        QSqlQuery q(m_siteWatchDb);
+        if (q.exec(QStringLiteral("SELECT payload FROM sitewatch_report WHERE id IN "
+                                  "(SELECT MAX(id) FROM sitewatch_report GROUP BY site_id)"))) {
+            while (q.next()) {
+                const QJsonObject report = QJsonDocument::fromJson(q.value(0).toByteArray()).object();
+                const QString siteId = report.value("site_id").toString();
+                if (!siteId.isEmpty()) m_siteWatchReports.insert(siteId, report);
+            }
+        }
+    }
+
+    // Migration transparente de l'ancien état QSettings, puis abandon de ce
+    // stockage limité : SQLite garde chaque analyse et non seulement la dernière.
+    const QJsonArray legacy = QJsonDocument::fromJson(
+        QSettings("morfSystem", "morfAnalytics").value("sitewatch/reports").toByteArray()).array();
+    if (m_siteWatchReports.isEmpty() && !legacy.isEmpty()) {
+        for (const QJsonValue& value : legacy) {
+            const QJsonObject report = value.toObject();
+            const QString siteId = report.value("site_id").toString();
+            if (siteId.isEmpty()) continue;
+            m_siteWatchReports.insert(siteId, report);
+            saveSiteWatchReport(report);
+        }
+    }
+}
 
 bool HttpServer::start() {
     if (m_config.httpPort == 0)
@@ -247,9 +341,12 @@ QByteArray HttpServer::handleSiteWatchPost(const QByteArray& body, int& code, QB
     const QString siteId = report.value("site_id").toString();
     if (siteId.isEmpty()) { code = 400; reason = "Bad Request"; return "{\"error\":\"site_id manquant\"}"; }
     report["received_at"] = static_cast<double>(QDateTime::currentSecsSinceEpoch());
+    if (!saveSiteWatchReport(report)) {
+        code = 503; reason = "Service Unavailable";
+        return toJson(QJsonObject{{"error", "stockage SiteWatch indisponible"},
+                                  {"detail", m_siteWatchStoreError}});
+    }
     m_siteWatchReports.insert(siteId, report);
-    QJsonArray saved; for (const QJsonObject& item : m_siteWatchReports) saved.append(item);
-    QSettings("morfSystem", "morfAnalytics").setValue("sitewatch/reports", QJsonDocument(saved).toJson(QJsonDocument::Compact));
     return toJson(QJsonObject{{"ok", true}, {"site_id", siteId}});
 }
 

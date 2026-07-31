@@ -3,6 +3,17 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.15.0] - 2026-07-31
+
+### Ajouté
+
+- **Historique SiteWatch SQLite.** Chaque synthèse reçue est désormais ajoutée à
+  `/opt/morfanalytics/cache/sitewatch-history.sqlite`, ce qui permet de bâtir des
+  analyses sur une période étendue. Seules les synthèses calculées sont stockées :
+  les journaux d'accès demeurent souverains dans SiteWatch.
+- Migration automatique de la dernière synthèse autrefois conservée dans
+  QSettings, sans perdre l'état déjà reçu.
+
 ## [0.14.3] - 2026-07-31
 
 ### Fixed

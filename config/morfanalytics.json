@@ -4,6 +4,8 @@
   "app_name": "morfAnalytics",
   "http_port": 8799,
   "bind_address": "0.0.0.0",
+  "_comment_sitewatch_cache": "Historique des synthèses SiteWatch (SQLite). Il ne contient jamais les journaux source, qui restent souverains dans SiteWatch.",
+  "sitewatch_cache_dir": "/opt/morfanalytics/cache",
 
   "beacon": {
     "_comment": "Annonce de presence sur le LAN (protocole morfBeacon, port du parc).",
