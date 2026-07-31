@@ -9,9 +9,9 @@
 #include "morfanalytics/AnalyticsModule.h"
 #include "morfanalytics/Version.h"
 #include "morfanalytics/SelfDescription.h"
-#include "morfanalytics/web/PortalPage.h"
-#include "morfanalytics/web/MeteoHubPage.h"
-#include "morfanalytics/web/SiteWatchPage.h"
+#include "morfanalytics/pages/PortalPage.h"
+#include "morfanalytics/pages/MeteoHubPage.h"
+#include "morfanalytics/pages/SiteWatchPage.h"
 
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -290,18 +290,18 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         code = 405; reason = "Method Not Allowed";
         out = "{\"error\":\"method not allowed\"}";
     } else if (path == "/" || path == "/index.html") {
-        reply(sock, 200, "OK", web::PortalPage::render(siteWatchReports()), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", pages::PortalPage::render(siteWatchReports()), "text/html; charset=utf-8");
         return;
     } else if (path == "/meteohub") {
         // Page d'accueil : c'est la cible du lien "Analyse avancee" affiche par
         // MeteoHub quand il detecte ce service sur le reseau. Elle doit donc
         // repondre quelque chose d'utile des la premiere version, avant meme
         // que les analyses existent.
-        reply(sock, 200, "OK", web::MeteoHubPage::render(landingPage()), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", pages::MeteoHubPage::render(landingPage()), "text/html; charset=utf-8");
         return;
     } else if (path == "/sitewatch") {
         const QJsonArray reports = siteWatchReports();
-        reply(sock, 200, "OK", web::SiteWatchPage::render(siteWatchPage(), reports), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", pages::SiteWatchPage::render(siteWatchPage(), reports), "text/html; charset=utf-8");
         return;
     } else if (path == "/sitewatch/reports") {
         out = toJson(QJsonObject{{"reports", siteWatchReports()}, {"storage", "sqlite"}});

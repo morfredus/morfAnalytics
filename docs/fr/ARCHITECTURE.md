@@ -6,10 +6,17 @@ Retour à l'[index de la documentation](README.md).
 
 ## Pages Web modulaires
 
-Le rendu Web est organisé sous `src/web/` : `PortalPage`, `MeteoHubPage` et
+Le rendu Web est organisé sous `src/pages/` : `PortalPage`, `MeteoHubPage` et
 `SiteWatchPage` correspondent respectivement aux routes `/`, `/meteohub` et
 `/sitewatch`. `HttpServer` ne choisit que la route et fournit les données ; une
 nouvelle source doit ajouter sa propre page, sans modifier les autres espaces.
+
+> **Convention de nommage :** ne pas créer de dossier source nommé `web/`.
+> Dans le parc morfSystem, ce nom est historiquement réservé aux projets ESP32
+> dont les pages Web sont générées ou minifiées au moment de la compilation.
+> Cette règle d'exclusion peut donc empêcher leur déploiement et provoquer des
+> propositions de commit après chaque compilation. Les pages C++ de
+> morfAnalytics vivent sous `src/pages/` et `include/morfanalytics/pages/`.
 
 Service Qt (Core, Network, Sql), sans interface graphique. Le socle ne contient
 **aucun métier** : ce qui est propre à une activité donnée vit dans des `IModule`

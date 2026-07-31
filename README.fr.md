@@ -122,7 +122,7 @@ source de vérité reste MeteoHub.
 ## Architecture des pages Web
 
 Les espaces `/`, `/meteohub` et `/sitewatch` sont organisés comme des pages
-compilées distinctes dans `src/web/`. Le serveur HTTP assure les routes et les
+compilées distinctes dans `src/pages/`. Le serveur HTTP assure les routes et les
 pages reçoivent uniquement les données nécessaires à leur rendu. Cette
 organisation permet d'ajouter de nouvelles sources d'analyse sans transformer
 `HttpServer` en fichier monolithique.

@@ -3,6 +3,14 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.18.1] - 2026-08-01
+
+### Fixed
+
+- Les sources des pages compilées sont déplacées de `src/web/` vers `src/pages/`
+  afin de ne plus être concernées par la règle historique d'exclusion `web/`
+  lors des déploiements. La compilation distante retrouve ainsi tous les fichiers.
+
 ## [0.18.0] - 2026-08-01
 
 ### Changed
