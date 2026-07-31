@@ -3,6 +3,15 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.15.1] - 2026-07-31
+
+### Fixed
+
+- `/sitewatch/reports` relit désormais directement SQLite à chaque demande. Les
+  synthèses restent ainsi affichées après le redémarrage de morfAnalytics.
+- Le rendu Web utilise une référence DOM explicite, ce qui évite le conflit avec
+  la propriété navigateur `content` qui laissait la page sur son message d'attente.
+
 ## [0.15.0] - 2026-07-31
 
 ### Ajouté

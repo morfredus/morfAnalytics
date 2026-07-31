@@ -53,6 +53,7 @@ private:
     bool openSiteWatchStore();
     void loadSiteWatchReports();
     bool saveSiteWatchReport(const QJsonObject& report);
+    QJsonArray siteWatchReports() const;
     void closeSiteWatchStore();
     QByteArray buildStatusJson() const;
     void reply(QTcpSocket* sock, int code, const QByteArray& reason, const QByteArray& body,

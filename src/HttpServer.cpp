@@ -124,6 +124,29 @@ bool HttpServer::saveSiteWatchReport(const QJsonObject& report) {
     return false;
 }
 
+QJsonArray HttpServer::siteWatchReports() const {
+    QJsonArray reports;
+    if (m_siteWatchDb.isOpen()) {
+        // La page Web lit la base, pas un instantané mémoire : un redémarrage du
+        // service ou une longue période d'analyse ne peut donc pas masquer les
+        // synthèses déjà historisées.
+        QSqlQuery q(m_siteWatchDb);
+        if (q.exec(QStringLiteral("SELECT payload FROM sitewatch_report WHERE id IN "
+                                  "(SELECT MAX(id) FROM sitewatch_report GROUP BY site_id) "
+                                  "ORDER BY received_at DESC"))) {
+            while (q.next()) {
+                const QJsonObject report = QJsonDocument::fromJson(q.value(0).toByteArray()).object();
+                if (!report.isEmpty()) reports.append(report);
+            }
+            return reports;
+        }
+    }
+    // Compatibilité seulement si une ancienne synthèse QSettings est en cours
+    // de migration ou si SQLite n'est pas disponible au démarrage.
+    for (const QJsonObject& report : m_siteWatchReports) reports.append(report);
+    return reports;
+}
+
 void HttpServer::loadSiteWatchReports() {
     if (m_siteWatchDb.isOpen()) {
         QSqlQuery q(m_siteWatchDb);
@@ -254,9 +277,7 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         reply(sock, 200, "OK", siteWatchPage(), "text/html; charset=utf-8");
         return;
     } else if (path == "/sitewatch/reports") {
-        QJsonArray reports;
-        for (const QJsonObject& report : m_siteWatchReports) reports.append(report);
-        out = toJson(QJsonObject{{"reports", reports}});
+        out = toJson(QJsonObject{{"reports", siteWatchReports()}, {"storage", "sqlite"}});
     } else if (path == "/analyses") {
         // Catalogue des analyses : l'interface se construit a partir de cette
         // liste, sans qu'aucune analyse ne soit codee en dur cote page.
@@ -354,7 +375,7 @@ QByteArray HttpServer::siteWatchPage() {
     return R"HTML(<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>morfAnalytics — SiteWatch</title><style>body{margin:0;background:#15171b;color:#e7e9ec;font:16px system-ui;padding:2rem}.wrap{max-width:70rem;margin:auto}.card{background:#1e2126;border:1px solid #2c3037;border-radius:12px;padding:1.25rem;margin:1rem 0}h1{margin:0}h2{font-size:1.05rem}.muted{color:#99a1ad}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1rem}.number{font-size:2rem;font-weight:700}table{width:100%;border-collapse:collapse}td,th{padding:.55rem;border-bottom:1px solid #2c3037;text-align:left}</style>
 <div class="wrap"><p><a href="/" style="color:#6f9bff">← morfAnalytics</a></p><h1>Analyse des sites</h1><p class="muted">Synthèses reçues de SiteWatch.</p><div id="content" class="card">En attente de données SiteWatch.</div></div>
-<script>const n=v=>Number(v||0).toLocaleString('fr-FR'),top=o=>Object.entries(o||{}).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>`${x[0]} (${n(x[1])})`).join(' · ')||'aucune',peak=o=>{const x=Object.entries(o||{}).sort((a,b)=>b[1]-a[1])[0];return x?`${x[0]} (${n(x[1])})`:'aucune'};function card(r){const s=r.stats||r,e=(s.errors_404||0)+(s.errors_403||0)+(s.errors_500||0),rate=s.requests?((e/s.requests)*100).toFixed(2):0,v=s.errors_500?'À surveiller : erreurs serveur détectées.':s.attacks?'À surveiller : tentatives sensibles détectées.':'Activité globalement normale.';return `<section class=card><h2>${r.site_label||r.site_id}</h2><p>${v}</p><div class=grid><div><span class=number>${n(s.requests)}</span><br><span class=muted>requêtes analysées</span></div><div><span class=number>${n(e)}</span><br><span class=muted>erreurs HTTP (${rate} %)</span></div><div><span class=number>${n(s.bots)}</span><br><span class=muted>requêtes de robots</span></div><div><span class=number>${n(s.attacks)}</span><br><span class=muted>tentatives sensibles</span></div></div><h2>Points à examiner</h2><p>Pages les plus touchées : ${top(s.top_attacked)}</p><p>Robots les plus actifs : ${top(s.bot_counts)}</p><p>Pages les plus visitées : ${top(s.top_pages)}</p><h2>Périodes marquantes</h2><p>Pic d'erreurs 404 : ${peak(s.daily_404)} · Pic de robots : ${peak(s.daily_bots)} · Pic de tentatives sensibles : ${peak(s.daily_attacks)}</p><p class=muted>Période : ${r.from||'?'} → ${r.to||'?'}</p></section>`}function load(){fetch('/sitewatch/reports').then(r=>r.json()).then(x=>content.innerHTML=x.reports.length?x.reports.map(card).join(''):'Aucune synthèse reçue.')}load();setInterval(load,3000)</script>)HTML";
+<script>const contentEl=document.getElementById('content'),n=v=>Number(v||0).toLocaleString('fr-FR'),top=o=>Object.entries(o||{}).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>`${x[0]} (${n(x[1])})`).join(' · ')||'aucune',peak=o=>{const x=Object.entries(o||{}).sort((a,b)=>b[1]-a[1])[0];return x?`${x[0]} (${n(x[1])})`:'aucune'};function card(r){const s=r.stats||r,e=(s.errors_404||0)+(s.errors_403||0)+(s.errors_500||0),rate=s.requests?((e/s.requests)*100).toFixed(2):0,v=s.errors_500?'À surveiller : erreurs serveur détectées.':s.attacks?'À surveiller : tentatives sensibles détectées.':'Activité globalement normale.';return `<section class=card><h2>${r.site_label||r.site_id}</h2><p>${v}</p><div class=grid><div><span class=number>${n(s.requests)}</span><br><span class=muted>requêtes analysées</span></div><div><span class=number>${n(e)}</span><br><span class=muted>erreurs HTTP (${rate} %)</span></div><div><span class=number>${n(s.bots)}</span><br><span class=muted>requêtes de robots</span></div><div><span class=number>${n(s.attacks)}</span><br><span class=muted>tentatives sensibles</span></div></div><h2>Points à examiner</h2><p>Pages les plus touchées : ${top(s.top_attacked)}</p><p>Robots les plus actifs : ${top(s.bot_counts)}</p><p>Pages les plus visitées : ${top(s.top_pages)}</p><h2>Périodes marquantes</h2><p>Pic d'erreurs 404 : ${peak(s.daily_404)} · Pic de robots : ${peak(s.daily_bots)} · Pic de tentatives sensibles : ${peak(s.daily_attacks)}</p><p class=muted>Période : ${r.from||'?'} → ${r.to||'?'}</p></section>`}function load(){fetch('/sitewatch/reports').then(r=>r.json()).then(x=>contentEl.innerHTML=x.reports.length?x.reports.map(card).join('')).catch(()=>contentEl.textContent='Impossible de lire les données SiteWatch.')}load();setInterval(load,3000)</script>)HTML";
 }
 
 QByteArray HttpServer::landingPage() {
