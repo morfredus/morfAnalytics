@@ -30,8 +30,10 @@
 #include <QPair>
 #include <QVector>
 #include <QStringList>
+#include <QDate>
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace morfanalytics {
@@ -149,6 +151,22 @@ QJsonArray HttpServer::siteWatchReports() const {
     // Compatibilité seulement si une ancienne synthèse QSettings est en cours
     // de migration ou si SQLite n'est pas disponible au démarrage.
     for (const QJsonObject& report : m_siteWatchReports) reports.append(report);
+    return reports;
+}
+
+QJsonArray HttpServer::siteWatchHistory(const QString& siteId, int limit) const {
+    QJsonArray reports;
+    if (!m_siteWatchDb.isOpen() || siteId.isEmpty()) return reports;
+    QSqlQuery q(m_siteWatchDb);
+    q.prepare(QStringLiteral("SELECT payload FROM sitewatch_report WHERE site_id = ? "
+                             "ORDER BY received_at DESC LIMIT ?"));
+    q.addBindValue(siteId);
+    q.addBindValue(qBound(1, limit, 365));
+    if (!q.exec()) return reports;
+    while (q.next()) {
+        const QJsonObject report = QJsonDocument::fromJson(q.value(0).toByteArray()).object();
+        if (!report.isEmpty()) reports.append(report);
+    }
     return reports;
 }
 
@@ -393,6 +411,33 @@ QByteArray HttpServer::siteWatchPage() const {
             result << QStringLiteral("%1 (%2)").arg(ranked[i].first.toHtmlEscaped(), formatNumber(ranked[i].second));
         return result.isEmpty() ? QStringLiteral("aucune") : result.join(QStringLiteral(" · "));
     };
+    const auto sumDaily = [](const QJsonObject& values) {
+        double sum = 0;
+        for (auto it = values.begin(); it != values.end(); ++it) sum += it.value().toDouble();
+        return sum;
+    };
+    const auto peakDay = [&formatNumber](const QJsonObject& values) {
+        QString day;
+        double peak = 0;
+        for (auto it = values.begin(); it != values.end(); ++it) {
+            if (it.value().toDouble() > peak) { day = it.key(); peak = it.value().toDouble(); }
+        }
+        return day.isEmpty() ? QStringLiteral("aucun")
+                             : QStringLiteral("%1 (%2)").arg(day.toHtmlEscaped(), formatNumber(peak));
+    };
+    const auto unusualDays = [&formatNumber](const QJsonObject& values) {
+        QVector<double> samples;
+        for (auto it = values.begin(); it != values.end(); ++it) samples.append(it.value().toDouble());
+        if (samples.size() < 7) return QStringLiteral("pas assez de jours observés");
+        double mean = 0; for (double value : samples) mean += value; mean /= samples.size();
+        double variance = 0; for (double value : samples) variance += (value - mean) * (value - mean);
+        const double threshold = mean + 2.0 * std::sqrt(variance / samples.size());
+        QStringList result;
+        for (auto it = values.begin(); it != values.end(); ++it)
+            if (it.value().toDouble() > threshold)
+                result << QStringLiteral("%1 (%2)").arg(it.key().toHtmlEscaped(), formatNumber(it.value().toDouble()));
+        return result.isEmpty() ? QStringLiteral("aucune journée anormale") : result.join(QStringLiteral(" · "));
+    };
 
     const QJsonArray reports = siteWatchReports();
     QString page = QStringLiteral(R"HTML(<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="30"><title>morfAnalytics — SiteWatch</title><style>body{margin:0;background:#15171b;color:#e7e9ec;font:16px system-ui;padding:2rem}.wrap{max-width:70rem;margin:auto}.card{background:#1e2126;border:1px solid #2c3037;border-radius:12px;padding:1.25rem;margin:1rem 0}h1{margin:0}h2{font-size:1.05rem}.muted{color:#99a1ad}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:1rem}.number{font-size:2rem;font-weight:700}</style><body><div class="wrap"><p><a href="/" style="color:#6f9bff">← morfAnalytics</a></p><h1>Analyse des sites</h1><p class="muted">Synthèses reçues de SiteWatch · actualisation automatique toutes les 30 secondes.</p>)HTML");
@@ -414,6 +459,16 @@ QByteArray HttpServer::siteWatchPage() const {
         const QString site = report.value(QStringLiteral("site_label")).toString(
             report.value(QStringLiteral("site_id")).toString()).toHtmlEscaped();
         const QString rate = requests > 0 ? QLocale(QLocale::French, QLocale::France).toString(errors * 100.0 / requests, 'f', 2) : QStringLiteral("0,00");
+        const QString siteId = report.value(QStringLiteral("site_id")).toString();
+        const QJsonArray history = siteWatchHistory(siteId);
+        QJsonObject dailyTraffic = stats.value(QStringLiteral("daily_humans")).toObject();
+        const QJsonObject dailyBots = stats.value(QStringLiteral("daily_bots")).toObject();
+        const QJsonObject dailyAttacks = stats.value(QStringLiteral("daily_attacks")).toObject();
+        for (auto it = dailyBots.begin(); it != dailyBots.end(); ++it)
+            dailyTraffic[it.key()] = dailyTraffic.value(it.key()).toDouble() + it.value().toDouble();
+        int attackDays = 0;
+        for (auto it = dailyAttacks.begin(); it != dailyAttacks.end(); ++it)
+            if (it.value().toDouble() > 0) ++attackDays;
         page += QStringLiteral("<section class=\"card\"><h2>%1</h2><p>%2</p><div class=\"grid\"><div><span class=\"number\">%3</span><br><span class=\"muted\">requêtes analysées</span></div><div><span class=\"number\">%4</span><br><span class=\"muted\">erreurs HTTP (%5 %)</span></div><div><span class=\"number\">%6</span><br><span class=\"muted\">requêtes de robots</span></div><div><span class=\"number\">%7</span><br><span class=\"muted\">tentatives sensibles</span></div></div><h2>Points à examiner</h2><p>Pages les plus touchées : %8</p><p>Robots les plus actifs : %9</p><p>Pages les plus visitées : %10</p><p class=\"muted\">Période : %11 → %12</p></section>")
             .arg(site).arg(verdict).arg(formatNumber(requests)).arg(formatNumber(errors)).arg(rate)
             .arg(formatNumber(stats.value(QStringLiteral("bots")).toDouble()))
@@ -423,6 +478,32 @@ QByteArray HttpServer::siteWatchPage() const {
             .arg(topEntries(stats.value(QStringLiteral("top_pages")).toObject()))
             .arg(report.value(QStringLiteral("from")).toString().toHtmlEscaped())
             .arg(report.value(QStringLiteral("to")).toString().toHtmlEscaped());
+        if (history.size() < 2) {
+            const int progress = std::min(100, static_cast<int>(history.size()) * 50);
+            page += QStringLiteral("<section class=\"card\"><h2>Analyses approfondies · en apprentissage</h2><p>Une synthèse supplémentaire permettra de comparer l'activité dans le temps.</p><div style=\"background:#2c3037;border-radius:5px;height:8px\"><div style=\"background:#6f9bff;border-radius:5px;height:8px;width:%1%\"></div></div><p class=\"muted\">%2 synthèse sur 2 nécessaire pour les comparaisons.</p></section>")
+                .arg(progress).arg(history.size());
+        } else {
+            const QJsonObject previousStats = history.at(1).toObject().value(QStringLiteral("stats")).toObject();
+            const double previousRequests = previousStats.value(QStringLiteral("requests")).toDouble();
+            const double requestChange = previousRequests > 0 ? (requests - previousRequests) * 100.0 / previousRequests : 0;
+            const double previousErrors = previousStats.value(QStringLiteral("errors_404")).toDouble()
+                + previousStats.value(QStringLiteral("errors_403")).toDouble() + previousStats.value(QStringLiteral("errors_500")).toDouble();
+            const double previousRate = previousRequests > 0 ? previousErrors * 100.0 / previousRequests : 0;
+            QStringList newBots;
+            const QJsonObject previousBots = previousStats.value(QStringLiteral("bot_counts")).toObject();
+            const QJsonObject currentBots = stats.value(QStringLiteral("bot_counts")).toObject();
+            for (auto it = currentBots.begin(); it != currentBots.end(); ++it)
+                if (!previousBots.contains(it.key())) newBots << it.key().toHtmlEscaped();
+            const QString botNovelty = newBots.isEmpty() ? QStringLiteral("aucun nouveau robot détecté")
+                : newBots.mid(0, 3).join(QStringLiteral(" · "));
+            page += QStringLiteral("<section class=\"card\"><h2>Analyses approfondies</h2><div class=\"grid\"><div><strong>%1 %</strong><br><span class=\"muted\">évolution des requêtes vs analyse précédente</span></div><div><strong>%2 % → %3 %</strong><br><span class=\"muted\">taux d'erreurs HTTP</span></div><div><strong>%4</strong><br><span class=\"muted\">jours avec tentatives sensibles</span></div></div><p>Variation inhabituelle du trafic : %5.</p><p>Pic de trafic : %6. Pic de robots : %7. Pic d'erreurs 404 : %8.</p><p>Nouveaux robots : %9.</p><p>Pages ciblées de façon récurrente : %10.</p></section>")
+                .arg(QLocale(QLocale::French, QLocale::France).toString(requestChange, 'f', 1))
+                .arg(QLocale(QLocale::French, QLocale::France).toString(previousRate, 'f', 2)).arg(rate)
+                .arg(attackDays).arg(unusualDays(dailyTraffic)).arg(peakDay(dailyTraffic))
+                .arg(peakDay(stats.value(QStringLiteral("daily_bots")).toObject()))
+                .arg(peakDay(stats.value(QStringLiteral("daily_404")).toObject())).arg(botNovelty)
+                .arg(topEntries(stats.value(QStringLiteral("top_attacked")).toObject()));
+        }
     }
     page += QStringLiteral("</div></body></html>");
     return page.toUtf8();

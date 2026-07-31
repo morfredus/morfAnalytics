@@ -3,6 +3,17 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.17.0] - 2026-08-01
+
+### Ajouté
+
+- **Analyses SiteWatch approfondies.** morfAnalytics compare les synthèses
+  successives d'un site, détecte les variations inhabituelles de trafic, les
+  pics quotidiens, les nouveaux robots, la répétition des tentatives sensibles
+  et l'évolution du taux d'erreurs HTTP.
+- Une barre d'apprentissage indique clairement lorsqu'une seconde synthèse est
+  encore nécessaire pour établir les comparaisons dans le temps.
+
 ## [0.16.0] - 2026-07-31
 
 ### Changed

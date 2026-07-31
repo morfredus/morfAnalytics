@@ -54,6 +54,7 @@ private:
     void loadSiteWatchReports();
     bool saveSiteWatchReport(const QJsonObject& report);
     QJsonArray siteWatchReports() const;
+    QJsonArray siteWatchHistory(const QString& siteId, int limit = 90) const;
     void closeSiteWatchStore();
     QByteArray buildStatusJson() const;
     void reply(QTcpSocket* sock, int code, const QByteArray& reason, const QByteArray& body,
