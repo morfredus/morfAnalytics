@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.15.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.15.2-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -110,7 +110,9 @@ source de vérité reste MeteoHub.
   Chaque synthèse est historisée dans
   `/opt/morfanalytics/cache/sitewatch-history.sqlite` ; les journaux source ne
   quittent jamais SiteWatch. La page lit directement cette base à chaque
-  actualisation, y compris après un redémarrage du service.
+  actualisation, y compris après un redémarrage du service. Si elle ne peut pas
+  lire l'API, elle affiche un message explicite au lieu de conserver l'état
+  d'attente.
 
 Consulter la page `http://<adresse-du-serveur>:8799/`, ou interroger une analyse
 directement :

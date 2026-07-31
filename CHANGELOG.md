@@ -3,6 +3,16 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.15.2] - 2026-07-31
+
+### Fixed
+
+- Correction d'une erreur de syntaxe JavaScript dans la page `/sitewatch` qui
+  empêchait entièrement son chargement et laissait « En attente de données »
+  affiché, même lorsque SQLite contenait des synthèses valides.
+- Le script de la page est désormais contrôlé syntaxiquement lors de la
+  vérification locale du service.
+
 ## [0.15.1] - 2026-07-31
 
 ### Fixed
