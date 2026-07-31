@@ -27,7 +27,10 @@
 namespace morfanalytics {
 
 namespace {
-constexpr int kMaxRequestBytes = 65536;
+// Les rapports SiteWatch peuvent contenir des classements et des séries
+// journalières. Une limite d'un mégaoctet reste protectrice sur le réseau local
+// tout en acceptant les rapports produits par les versions antérieures.
+constexpr int kMaxRequestBytes = 1024 * 1024;
 
 QByteArray toJson(const QJsonObject& o) {
     return QJsonDocument(o).toJson(QJsonDocument::Compact);
@@ -91,6 +94,7 @@ void HttpServer::onSocketReadyRead(QTcpSocket* sock) {
     const QByteArray headerBlock = buf.left(headerEnd);
     const int needed = contentLength(headerBlock);
     const int bodyStart = headerEnd + 4;
+    if (needed < 0 || needed > kMaxRequestBytes) { sock->abort(); return; }
     if (buf.size() - bodyStart < needed) {
         if (buf.size() > kMaxRequestBytes) { sock->abort(); return; }
         sock->setProperty("buf", buf);
@@ -253,7 +257,7 @@ QByteArray HttpServer::siteWatchPage() {
     return R"HTML(<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>morfAnalytics — SiteWatch</title><style>body{margin:0;background:#15171b;color:#e7e9ec;font:16px system-ui;padding:2rem}.wrap{max-width:70rem;margin:auto}.card{background:#1e2126;border:1px solid #2c3037;border-radius:12px;padding:1.25rem;margin:1rem 0}h1{margin:0}h2{font-size:1.05rem}.muted{color:#99a1ad}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1rem}.number{font-size:2rem;font-weight:700}table{width:100%;border-collapse:collapse}td,th{padding:.55rem;border-bottom:1px solid #2c3037;text-align:left}</style>
 <div class="wrap"><p><a href="/" style="color:#6f9bff">← morfAnalytics</a></p><h1>Analyse des sites</h1><p class="muted">Synthèses reçues de SiteWatch.</p><div id="content" class="card">En attente de données SiteWatch.</div></div>
-<script>const n=v=>Number(v||0).toLocaleString('fr-FR'),top=o=>Object.entries(o||{}).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>`${x[0]} (${n(x[1])})`).join(' · ')||'aucune';function card(r){const s=r.stats||r,e=(s.errors_404||0)+(s.errors_403||0)+(s.errors_500||0),rate=s.requests?((e/s.requests)*100).toFixed(2):0,v=s.errors_500?'À surveiller : erreurs serveur détectées.':s.attacks?'À surveiller : tentatives sensibles détectées.':'Activité globalement normale.';return `<section class=card><h2>${r.site_label||r.site_id}</h2><p>${v}</p><div class=grid><div><span class=number>${n(s.requests)}</span><br><span class=muted>requêtes analysées</span></div><div><span class=number>${n(e)}</span><br><span class=muted>erreurs HTTP (${rate} %)</span></div><div><span class=number>${n(s.bots)}</span><br><span class=muted>requêtes de robots</span></div><div><span class=number>${n(s.attacks)}</span><br><span class=muted>tentatives sensibles</span></div></div><h2>Points à examiner</h2><p>Pages les plus touchées : ${top(s.top_attacked)}</p><p>Robots les plus actifs : ${top(s.bot_counts)}</p><p>Pages les plus visitées : ${top(s.top_pages)}</p><p class=muted>Période : ${r.from||'?'} → ${r.to||'?'}</p></section>`}function load(){fetch('/sitewatch/reports').then(r=>r.json()).then(x=>content.innerHTML=x.reports.length?x.reports.map(card).join(''):'Aucune synthèse reçue.')}load();setInterval(load,3000)</script>)HTML";
+<script>const n=v=>Number(v||0).toLocaleString('fr-FR'),top=o=>Object.entries(o||{}).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>`${x[0]} (${n(x[1])})`).join(' · ')||'aucune',peak=o=>{const x=Object.entries(o||{}).sort((a,b)=>b[1]-a[1])[0];return x?`${x[0]} (${n(x[1])})`:'aucune'};function card(r){const s=r.stats||r,e=(s.errors_404||0)+(s.errors_403||0)+(s.errors_500||0),rate=s.requests?((e/s.requests)*100).toFixed(2):0,v=s.errors_500?'À surveiller : erreurs serveur détectées.':s.attacks?'À surveiller : tentatives sensibles détectées.':'Activité globalement normale.';return `<section class=card><h2>${r.site_label||r.site_id}</h2><p>${v}</p><div class=grid><div><span class=number>${n(s.requests)}</span><br><span class=muted>requêtes analysées</span></div><div><span class=number>${n(e)}</span><br><span class=muted>erreurs HTTP (${rate} %)</span></div><div><span class=number>${n(s.bots)}</span><br><span class=muted>requêtes de robots</span></div><div><span class=number>${n(s.attacks)}</span><br><span class=muted>tentatives sensibles</span></div></div><h2>Points à examiner</h2><p>Pages les plus touchées : ${top(s.top_attacked)}</p><p>Robots les plus actifs : ${top(s.bot_counts)}</p><p>Pages les plus visitées : ${top(s.top_pages)}</p><h2>Périodes marquantes</h2><p>Pic d'erreurs 404 : ${peak(s.daily_404)} · Pic de robots : ${peak(s.daily_bots)} · Pic de tentatives sensibles : ${peak(s.daily_attacks)}</p><p class=muted>Période : ${r.from||'?'} → ${r.to||'?'}</p></section>`}function load(){fetch('/sitewatch/reports').then(r=>r.json()).then(x=>content.innerHTML=x.reports.length?x.reports.map(card).join(''):'Aucune synthèse reçue.')}load();setInterval(load,3000)</script>)HTML";
 }
 
 QByteArray HttpServer::landingPage() {

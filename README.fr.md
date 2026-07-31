@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.14.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.14.3-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -105,7 +105,8 @@ source de vérité reste MeteoHub.
   SiteWatch publie à la fin de chaque analyse les compteurs de requêtes, erreurs,
   robots et tentatives sensibles ; morfAnalytics les conserve localement. La page
   se met à jour automatiquement dans les secondes qui suivent et met en avant le
-  taux d'erreurs, les pages concernées et les robots les plus actifs.
+  taux d'erreurs, les pages concernées, les robots les plus actifs et les journées
+  qui concentrent les erreurs ou les tentatives sensibles.
 
 Consulter la page `http://<adresse-du-serveur>:8799/`, ou interroger une analyse
 directement :

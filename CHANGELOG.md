@@ -3,6 +3,19 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.14.3] - 2026-07-31
+
+### Fixed
+
+- La limite de réception des rapports SiteWatch est portée à 1 Mio. Les rapports
+  enrichis d'une version déjà installée de SiteWatch ne sont donc plus rejetés
+  lorsque leurs listes de pages ou de robots sont importantes.
+
+### Ajouté
+
+- L'espace SiteWatch signale les journées de pic d'erreurs 404, de robots et de
+  tentatives sensibles, en complément des classements principaux.
+
 ## [0.14.2] - 2026-07-31
 
 ### Fixed
