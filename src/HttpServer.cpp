@@ -246,14 +246,14 @@ QByteArray HttpServer::landingPage() {
             --card: #1e2126; --line: #2c3037; --accent: #6f9bff; }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 2rem 1rem 4rem; background: var(--bg); color: var(--fg);
+  body { margin: 0; padding: 2.5rem 1.25rem 5rem; background: var(--bg); color: var(--fg);
          font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.5; }
-  .wrap { max-width: 60rem; margin: 0 auto; }
+  .wrap { max-width: 72rem; margin: 0 auto; }
   header.top { margin-bottom: 2rem; }
   a.back { display: inline-block; margin-bottom: .6rem; color: var(--accent);
            text-decoration: none; font-size: .9rem; }
   a.back:hover { text-decoration: underline; }
-  h1 { margin: 0 0 .2rem; font-size: 1.75rem; letter-spacing: -.02em; }
+  h1 { margin: 0 0 .2rem; font-size: 2rem; letter-spacing: -.025em; }
   .version-badge { font-size: .8rem; font-weight: 600; vertical-align: middle;
                    color: var(--accent);
                    background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -264,11 +264,16 @@ QByteArray HttpServer::landingPage() {
   h2.section { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em;
                color: var(--muted); margin: 2.5rem 0 .9rem; font-weight: 600; }
 
-  .grid { display: grid; gap: 1rem;
-          grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); }
+  .grid { display: grid; gap: 1.25rem;
+          grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .analysis-row + .analysis-row { margin-top: 1.25rem; }
+  .analysis-row .card { height: 100%; }
+  .analysis-row.solo { grid-template-columns: minmax(0, 1fr); }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: .75rem;
-          padding: 1.1rem 1.25rem; }
-  .card h3 { margin: 0 0 .8rem; font-size: .95rem; font-weight: 600; }
+          padding: 1.35rem 1.5rem; }
+  .card h3 { margin: 0 0 1rem; font-size: 1.05rem; font-weight: 650; }
+  .card h4 { margin: 1.4rem 0 .65rem; font-size: .95rem; }
+  .card h4:first-child { margin-top: 0; }
   .card.wide { grid-column: 1 / -1; }
   .summary { margin: 0 0 2rem; }
   .summary h2 { margin: 0 0 .65rem; font-size: .8rem; text-transform: uppercase;
@@ -301,7 +306,7 @@ QByteArray HttpServer::landingPage() {
   .badge.warn { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
   .badge.bad  { background: color-mix(in srgb, var(--bad) 18%, transparent);  color: var(--bad); }
 
-  .note { font-size: .82rem; color: var(--muted); margin: .8rem 0 0; }
+  .note { font-size: .9rem; color: var(--muted); margin: .9rem 0 0; }
   .warning { font-size: .82rem; margin: .8rem 0 0; padding: .5rem .7rem; border-radius: .4rem;
              background: color-mix(in srgb, var(--warn) 12%, transparent);
              border-left: 3px solid var(--warn); }
@@ -316,12 +321,23 @@ QByteArray HttpServer::landingPage() {
                                   text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
   details.maintenance[open] > summary { margin-bottom: .9rem; }
 
-  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-  th, td { text-align: right; padding: .3rem .4rem; border-bottom: 1px solid var(--line); }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: right; padding: .55rem .4rem; border-bottom: 1px solid var(--line); }
   th:first-child, td:first-child { text-align: left; }
   th { color: var(--muted); font-weight: 500; font-size: .8rem; }
   tbody tr:last-child td { border-bottom: none; }
   .scroll { overflow-x: auto; }
+  details.analysis-detail { margin-top: 1rem; }
+  details.analysis-detail > summary { cursor: pointer; color: var(--accent); font-size: .9rem; }
+  details.analysis-detail[open] > summary { margin-bottom: .8rem; }
+  details.advanced-section { margin-top: 2.75rem; }
+  details.advanced-section > summary { cursor: pointer; color: var(--muted); font-size: .8rem;
+                                       text-transform: uppercase; letter-spacing: .08em; font-weight: 650; }
+  details.advanced-section[open] > summary { margin-bottom: .9rem; }
+  details.service-details { margin-top: 2.75rem; }
+  details.service-details > summary { cursor: pointer; color: var(--muted); font-size: .8rem;
+                                      text-transform: uppercase; letter-spacing: .08em; font-weight: 650; }
+  details.service-details[open] > summary { margin-bottom: .9rem; }
 
   .bars { display: grid; gap: .3rem; margin-top: .3rem; }
   .bar-row { display: grid; grid-template-columns: 4.5rem 1fr auto; gap: .5rem;
@@ -355,10 +371,19 @@ QByteArray HttpServer::landingPage() {
   .anomaly.warm { color: var(--warm); }
   .anomaly.cold { color: var(--cold); }
 
-  svg.spark { width: 100%; height: 5.5rem; display: block; margin-top: .3rem; }
+  svg.spark { width: 100%; height: 7rem; display: block; margin-top: .3rem; }
+  .spark-grid { stroke: var(--line); stroke-width: .6; }
+  .spark-label { fill: var(--muted); font-size: 3px; font-family: inherit; }
+  .spark-point { fill: var(--accent); stroke: var(--card); stroke-width: .8; }
   code { background: color-mix(in srgb, var(--muted) 15%, transparent);
          padding: .1rem .35rem; border-radius: .25rem; font-size: .85em; }
   footer { margin-top: 3rem; font-size: .82rem; color: var(--muted); }
+  @media (max-width: 42rem) {
+    body { padding: 1.5rem 1rem 3rem; }
+    .card { padding: 1.15rem; }
+    h1 { font-size: 1.7rem; }
+    .grid { grid-template-columns: minmax(0, 1fr); }
+  }
 </style>
 </head>
 <body>
@@ -375,29 +400,31 @@ QByteArray HttpServer::landingPage() {
 
   <section id="summary" class="card summary" hidden aria-live="polite"></section>
 
-  <h2 class="section">Service et collecte</h2>
-  <div class="grid">
-    <div class="card">
-      <h3>Service</h3>
-      <dl>
-        <dt>État</dt><dd id="state">…</dd>
-        <dt>Version</dt><dd id="version">…</dd>
-        <dt>Machine</dt><dd id="host">…</dd>
-      </dl>
-    </div>
-    <div class="card">
-      <h3>Collecte</h3>
-      <dl>
-        <dt>Source</dt><dd id="source">…</dd>
-        <dt>Mesures en cache</dt><dd id="points">…</dd>
-        <dt>Période couverte</dt><dd id="period">…</dd>
-        <dt>Dernière collecte</dt><dd id="lastsync">…</dd>
-      </dl>
-      <div id="collecte-warn"></div>
-    </div>
-  </div>
-
   <div id="groups"></div>
+
+  <details class="service-details">
+    <summary>Service et collecte</summary>
+    <div class="grid">
+      <div class="card">
+        <h3>Service</h3>
+        <dl>
+          <dt>État</dt><dd id="state">…</dd>
+          <dt>Version</dt><dd id="version">…</dd>
+          <dt>Machine</dt><dd id="host">…</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Collecte</h3>
+        <dl>
+          <dt>Source</dt><dd id="source">…</dd>
+          <dt>Mesures en cache</dt><dd id="points">…</dd>
+          <dt>Période couverte</dt><dd id="period">…</dd>
+          <dt>Dernière collecte</dt><dd id="lastsync">…</dd>
+        </dl>
+        <div id="collecte-warn"></div>
+      </div>
+    </div>
+  </details>
 
   <details class="maintenance">
     <summary>Maintenance avancée</summary>
@@ -464,14 +491,32 @@ QByteArray HttpServer::landingPage() {
 const GROUP_LABELS = {
   nowcast: 'Conditions et prévision locale',
   climat: 'Climatologie',
-  qualite: 'Qualité des données'
+  qualite: 'Qualité des données',
+  avancé: 'Analyses approfondies'
 };
+
+// Les noms de champs de l'API restent stables pour les integrations, mais ils
+// ne doivent jamais devenir des intitulés bruts dans l'interface.
+const FIELD_LABELS = {
+  days: 'Période analysée', window_days: 'Période analysée',
+  heat_threshold: 'Seuil de chaleur', cold_threshold: 'Seuil de froid',
+  min_days: 'Durée minimale', threshold: 'Sensibilité de détection',
+  max_lag_hours: 'Décalage maximal recherché', channel: 'Mesure analysée',
+  total_anomalies: 'Valeurs inhabituelles détectées', residual_std: 'Variations non expliquées'
+};
+
+const humanLabel = (key) => FIELD_LABELS[key] || key
+  .replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+const channelLabel = (key) => ({ temp: 'Température', hum: 'Humidité', pres: 'Pression' }[key] || key);
+const pairLabel = (pair) => String(pair).split('~').map(channelLabel).join(' et ');
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const fmtDate = (ts) => (!ts || ts <= 0)
-  ? 'jamais' : new Date(ts * 1000).toLocaleString('fr-FR');
+  ? 'jamais' : new Intl.DateTimeFormat('fr-FR', {
+    dateStyle: 'medium', timeStyle: 'short'
+  }).format(new Date(ts * 1000));
 const fmtDay = (iso) => {
   const d = new Date(iso);
   return isNaN(d) ? iso : d.toLocaleDateString('fr-FR');
@@ -543,28 +588,44 @@ function renderSummary(results) {
   if (forecast && forecast.ok !== false && forecast.forecast)
     lines.push(esc(forecast.forecast));
 
-  summary.innerHTML = `<h2>Situation actuelle</h2><p class="summary-main">${headline}</p>` +
+  summary.innerHTML = `<h2>En un coup d’œil</h2><p class="summary-main">${headline}</p>` +
     `<p class="summary-lines">${lines.map((line) => `<span>${line}</span>`).join('')}</p>`;
   summary.hidden = false;
 }
 
 // Courbe simple, tracee a la main : evite d'embarquer une bibliotheque de
-// graphiques pour une seule serie de 24 valeurs.
+// graphiques pour une seule serie de 24 valeurs. Les bornes et les heures
+// donnent une echelle explicite : une courbe seule ne permet pas de juger une
+// valeur ni l'amplitude reelle du cycle.
 function sparkline(values) {
   const pts = values.map((v, i) => [i, v]).filter(([, v]) => v !== null);
   if (pts.length < 2) return '';
   const ys = pts.map(([, v]) => v);
   const lo = Math.min(...ys), hi = Math.max(...ys);
   const span = (hi - lo) || 1;
-  const W = 100, H = 30, pad = 3;
+  const W = 100, H = 36, left = 16, right = 3, top = 4, bottom = 7;
+  const yFor = (v) => H - bottom - ((v - lo) / span) * (H - top - bottom);
   const coords = pts.map(([i, v]) => {
-    const x = pad + (i / 23) * (W - 2 * pad);
-    const y = H - pad - ((v - lo) / span) * (H - 2 * pad);
+    const x = left + (i / 23) * (W - left - right);
+    const y = yFor(v);
     return `${x.toFixed(2)},${y.toFixed(2)}`;
   }).join(' ');
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+  const peak = pts.reduce((best, point) => point[1] > best[1] ? point : best);
+  const low = pts.reduce((best, point) => point[1] < best[1] ? point : best);
+  const point = ([i, v]) => `${(left + (i / 23) * (W - left - right)).toFixed(2)},${yFor(v).toFixed(2)}`;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
+      role="img" aria-label="Cycle journalier moyen, de ${lo.toFixed(1)} à ${hi.toFixed(1)} degrés Celsius">
+    <line class="spark-grid" x1="${left}" y1="${top}" x2="${W - right}" y2="${top}"/>
+    <line class="spark-grid" x1="${left}" y1="${H - bottom}" x2="${W - right}" y2="${H - bottom}"/>
+    <text class="spark-label" x="0" y="${top + 2.5}">${hi.toFixed(1)} °C</text>
+    <text class="spark-label" x="0" y="${H - bottom}">${lo.toFixed(1)} °C</text>
     <polyline points="${coords}" fill="none" stroke="var(--accent)"
               stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle class="spark-point" cx="${point(peak).split(',')[0]}" cy="${point(peak).split(',')[1]}" r="1.2"/>
+    <circle class="spark-point" cx="${point(low).split(',')[0]}" cy="${point(low).split(',')[1]}" r="1.2"/>
+    <text class="spark-label" x="${left}" y="${H - 1}">0 h</text>
+    <text class="spark-label" x="${left + (12 / 23) * (W - left - right)}" y="${H - 1}" text-anchor="middle">12 h</text>
+    <text class="spark-label" x="${W - right}" y="${H - 1}" text-anchor="end">23 h</text>
   </svg>`;
 }
 
@@ -749,6 +810,65 @@ const RENDERERS = {
         `</tbody></table></div>`;
     }
     return html + notes(r);
+  },
+
+  anomalies: (r) => {
+    const channels = r.channels || {};
+    const sections = Object.entries(channels).map(([key, values]) => {
+      const listed = values.anomalies || [];
+      const rows = listed.length ? `<details class="analysis-detail"><summary>Voir quelques relevés concernés</summary><div class="scroll"><table>
+        <thead><tr><th>Jour</th><th>Valeur</th><th>Constat</th></tr></thead>
+        <tbody>${listed.slice(0, 5).map((a) => `<tr><td>${fmtDay(new Date(a.ts * 1000).toISOString())}</td>
+          <td>${num(a.value, key === 'temp' ? '°C' : key === 'hum' ? '%' : 'hPa')}</td>
+          <td>${a.direction === 'haut' ? 'plus élevée' : 'plus basse'} que d'habitude</td></tr>`).join('')}</tbody>
+        </table></div></details>` : '<p class="note">Aucune valeur inhabituellement éloignée des mesures habituelles.</p>';
+      return `<h4>${esc(channelLabel(key))}</h4>` + dl([
+        ['Mesures étudiées', values.count], ['Valeurs inhabituelles', values.anomalies_count]
+      ]) + rows + (values.note ? `<p class="note">${esc(values.note)}</p>` : '');
+    }).join('');
+    return `<p class="note">Sur les ${r.window_days} derniers jours, cette analyse repère les relevés vraiment éloignés des valeurs habituelles. Les détails sont volontairement regroupés pour garder une vue utile.</p>` + sections;
+  },
+
+  correlations: (r) => {
+    const rows = (r.pairs || []).map((p) => {
+      const delay = p.best_lag_hours;
+      const timing = delay > 0 ? `la seconde mesure suit environ ${delay} h après`
+        : delay < 0 ? `la première mesure suit environ ${Math.abs(delay)} h après`
+        : 'les deux mesures évoluent au même moment';
+      return `<tr><td>${esc(pairLabel(p.pair))}</td><td>${p.best_r}</td><td>${timing}</td></tr>`;
+    }).join('');
+    return `<p class="note">Comparaison des ${r.window_days} derniers jours, avec une recherche de décalage jusqu'à ${r.max_lag_hours} h. Une corrélation décrit un lien observé, pas une cause.</p>` +
+      `<div class="scroll"><table><thead><tr><th>Mesures comparées</th><th>Lien observé</th><th>Décalage le plus net</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  },
+
+  episodes: (r) => {
+    const episodes = r.episodes || [];
+    const rows = episodes.length ? `<div class="scroll"><table>
+      <thead><tr><th>Épisode</th><th>Du</th><th>Au</th><th>Durée</th><th>Température la plus marquée</th></tr></thead>
+      <tbody>${episodes.map((e) => `<tr><td>${e.type === 'canicule' ? 'Période de forte chaleur' : 'Période de froid'}</td>
+        <td>${fmtDay(e.start)}</td><td>${fmtDay(e.end)}</td><td>${e.days} jours</td><td>${num(e.extreme, '°C')}</td></tr>`).join('')}</tbody>
+      </table></div>` : '<p class="note">Aucun épisode répondant à ces critères sur la période analysée.</p>';
+    return `<p class="note">Recherche sur les ${r.window_days} derniers jours.</p>` + rows +
+      `<details class="analysis-detail"><summary>Critères d'identification</summary>` + dl([
+        ['Chaleur marquée', `${num(r.heat_threshold, '°C')} au maximum de la journée`],
+        ['Froid marqué', `${num(r.cold_threshold, '°C')} au minimum de la journée`],
+        ['Durée retenue', `${r.min_days} jours consécutifs`]
+      ]) + `<p class="note">Une période est retenue lorsque le seuil est atteint chaque jour pendant la durée indiquée.</p></details>`;
+  },
+
+  decomposition: (r) => {
+    const unit = r.channel === 'temp' ? '°C' : r.channel === 'hum' ? '%' : 'hPa';
+    const trend = r.trend || {}, seasonal = r.seasonal || {}, strength = r.strength || {};
+    return dl([
+      ['Mesure analysée', channelLabel(r.channel)], ['Période analysée', `${r.window_days} jours`],
+      ['Évolution de fond', trend.change === undefined ? null : num(trend.change, unit)],
+      ['Variation habituelle au cours d’une journée', num(seasonal.amplitude, unit)]
+    ]) + `<p class="note">Cette lecture sépare l'évolution progressive de la mesure de son rythme habituel sur 24 h.</p>` +
+      `<details class="analysis-detail"><summary>Indicateurs complémentaires</summary>` + dl([
+        ['Évolution moyenne par jour', trend.slope_per_day === undefined ? null : num(trend.slope_per_day, `${unit}/jour`)],
+        ['Part expliquée par la tendance', strength.trend === undefined ? null : `${Math.round(strength.trend * 100)} %`],
+        ['Part expliquée par le cycle quotidien', strength.seasonal === undefined ? null : `${Math.round(strength.seasonal * 100)} %`]
+      ]) + `</details>`;
   }
 };
 
@@ -758,7 +878,7 @@ function renderGeneric(r) {
   const skip = new Set(['ok', 'id', 'title', 'group', 'ts', 'note', 'warning']);
   const rows = Object.entries(r).filter(([k, v]) =>
     !skip.has(k) && (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean'));
-  return dl(rows.map(([k, v]) => [k, esc(v)])) + notes(r);
+  return dl(rows.map(([k, v]) => [humanLabel(k), esc(v)])) + notes(r);
 }
 
 function renderCard(meta, result) {
@@ -782,9 +902,22 @@ function renderCard(meta, result) {
     try { body = renderer(result); }
     catch (e) { body = renderGeneric(result); }
   }
-  return `<div class="card${meta.id === 'records' || meta.id === 'streaks'
-    || meta.id === 'degree_days' || meta.id === 'data_quality' ? ' wide' : ''}">
+  return `<div class="card">
       <h3>${esc(meta.title)}</h3>${body}</div>`;
+}
+
+function renderRow(ids, catalogById, resultsById) {
+  const cards = ids.map((id) => {
+    const meta = catalogById[id];
+    return meta ? renderCard(meta, resultsById[id]) : '';
+  }).filter(Boolean);
+  if (!cards.length) return '';
+  return `<div class="grid analysis-row${cards.length === 1 ? ' solo' : ''}">${cards.join('')}</div>`;
+}
+
+function renderSection(title, rows, catalogById, resultsById) {
+  const body = rows.map((ids) => renderRow(ids, catalogById, resultsById)).join('');
+  return body ? `${title ? `<h2 class="section">${esc(title)}</h2>` : ''}${body}` : '';
 }
 
 async function loadAnalyses() {
@@ -810,17 +943,43 @@ async function loadAnalyses() {
       body: JSON.stringify({ type: meta.id })
     }).then((r) => r.json()).catch(() => null)));
 
-  const byGroup = {};
   const byId = {};
+  const catalogById = {};
   catalog.forEach((meta, i) => {
-    (byGroup[meta.group] = byGroup[meta.group] || []).push([meta, results[i]]);
     byId[meta.id] = results[i];
+    catalogById[meta.id] = meta;
   });
 
-  container.innerHTML = Object.entries(byGroup).map(([group, items]) =>
-    `<h2 class="section">${esc(GROUP_LABELS[group] || group)}</h2>
-     <div class="grid">${items.map(([m, r]) => renderCard(m, r)).join('')}</div>`
-  ).join('');
+  // L'affichage suit une lecture naturelle : ce qui se passe maintenant,
+  // ce qui s'est passe, puis les outils de diagnostic. Des rangees explicites
+  // evitent qu'une carte haute laisse des vides au milieu de la page.
+  const layout = [
+    ['Situation actuelle', [
+      ['current']
+    ]],
+    ['Conditions locales', [
+      ['zambretti', 'temp_trend'], ['pressure_trend', 'heat_risk'],
+      ['dry_air', 'fog_risk'], ['frost_risk']
+    ]],
+    ['Historique et repères', [
+      ['normals', 'daily_cycle'], ['streaks', 'diurnal_amplitude'],
+      ['degree_days'], ['records'], ['data_quality']
+    ]]
+  ];
+  const displayed = new Set(layout.flatMap(([, rows]) => rows.flat()));
+  const main = layout.map(([title, rows]) =>
+    renderSection(title, rows, catalogById, byId)).join('');
+  const advancedIds = ['episodes', 'anomalies', 'correlations', 'decomposition'];
+  advancedIds.forEach((id) => displayed.add(id));
+  const advanced = renderSection('', [
+    ['episodes', 'anomalies'], ['correlations', 'decomposition']
+  ], catalogById, byId);
+  const remaining = catalog.filter((meta) => !displayed.has(meta.id));
+  const extra = remaining.length ? renderSection('Autres analyses',
+    remaining.map((meta) => [meta.id]), catalogById, byId) : '';
+  container.innerHTML = main + (advanced
+    ? `<details class="advanced-section"><summary>Analyses approfondies et diagnostic</summary>${advanced}</details>`
+    : '') + extra;
   renderSummary(byId);
   requestAnimationFrame(fitDefinitionLists);
   document.getElementById('refreshed').textContent =

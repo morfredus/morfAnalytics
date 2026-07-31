@@ -3,6 +3,24 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.12.0] - 2026-07-31
+
+### Modifié
+
+- **Page d'analyse réorganisée pour la lecture.** Elle présente désormais la
+  situation actuelle, les conditions locales, l'historique et les repères, puis
+  les analyses approfondies. Les informations de service et les outils de
+  maintenance n'interrompent plus la consultation météo ; ils restent
+  accessibles dans leurs sections repliées. Les cartes sont disposées par rangées
+  cohérentes afin d'éviter les vides qui rendaient la page difficile à parcourir.
+- **Analyses avancées rendues lisibles.** Les noms internes de l'API ne sont plus
+  présentés comme des libellés utilisateur ; les seuils et détails de diagnostic
+  sont expliqués et repliables. Les relevés atypiques sont résumés plutôt que
+  présentés minute par minute.
+- **Cycle journalier moyen gradué.** La courbe affiche maintenant sa température
+  minimale, sa température maximale et les heures 0 h, 12 h et 23 h ; sa forme
+  peut ainsi être interprétée directement.
+
 ## [0.11.0] - 2026-07-29
 
 ### Ajouté
