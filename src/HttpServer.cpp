@@ -25,6 +25,7 @@
 #include <QJsonParseError>
 #include <QDateTime>
 #include <QUrl>
+#include <QUrlQuery>
 #include <QSettings>
 #include <QSqlQuery>
 #include <QSqlError>
@@ -315,6 +316,28 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             {"last_error", QStringLiteral("aucun module 'photo' configure")}};
         reply(sock, 200, "OK", pages::PhotoPage::render(snap), "text/html; charset=utf-8");
         return;
+    } else if (path == "/photo/data") {
+        // Donnees brutes de la page Photo (instantane du module = agregats + dataset
+        // compact rapatries de morfPhoto). La page /photo les recupere en JS et fait
+        // toute l'agregation/le filtrage cote navigateur. Separer donnees et rendu
+        // evite d'inliner un gros dataset dans le HTML et permet de recharger seul.
+        auto* module = m_registry
+            ? qobject_cast<PhotoAnalyticsModule*>(m_registry->firstOfType(QStringLiteral("photo")))
+            : nullptr;
+        // Handoff PhotoHub : ?source=<baseUrl morfPhoto> => analyser CETTE photothèque,
+        // rapatriée à la demande, plutôt que la source périodique configurée.
+        QString source;
+        const int qm = rawPath.indexOf('?');
+        if (qm >= 0) {
+            const QUrlQuery q(QString::fromUtf8(rawPath.mid(qm + 1)));
+            source = q.queryItemValue(QStringLiteral("source"), QUrl::FullyDecoded);
+        }
+        if (module && !source.isEmpty())
+            out = toJson(module->fetchNow(source));
+        else
+            out = toJson(module ? module->snapshot()
+                                : QJsonObject{{"reachable", false},
+                                              {"last_error", QStringLiteral("aucun module 'photo' configure")}});
     } else if (path == "/sitewatch/reports") {
         out = toJson(QJsonObject{{"reports", siteWatchReports()}, {"storage", "sqlite"}});
     } else if (path == "/analyses") {

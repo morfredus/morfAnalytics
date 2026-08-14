@@ -10,6 +10,7 @@
 #include "morfanalytics/PhotoAnalyticsModule.h"
 
 #include <QJsonArray>
+#include <QStringList>
 
 namespace morfanalytics {
 namespace ModuleFactory {
@@ -52,7 +53,13 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
             if (b.size() == 3)
                 buckets.append({b[0].toDouble(), b[1].toDouble(), b[2].toString()});
         }
-        return new PhotoAnalyticsModule(def.id, sourceUrl, refreshMs, buckets, parent);
+        // Périmètre de pratique (corpus ≠ pratique) : boîtiers exclus par politique.
+        // La donnée reste souveraine dans morfPhoto ; exclure est une interprétation.
+        QStringList excludeCameras;
+        for (const QJsonValue& v : def.params.value("exclude_cameras").toArray())
+            if (v.isString())
+                excludeCameras << v.toString();
+        return new PhotoAnalyticsModule(def.id, sourceUrl, refreshMs, buckets, excludeCameras, parent);
     }
 
     if (error)

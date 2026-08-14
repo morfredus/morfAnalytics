@@ -7,6 +7,7 @@
 #pragma once
 #include "morfanalytics/IModule.h"
 #include <QString>
+#include <QStringList>
 #include <QVector>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -46,7 +47,8 @@ public:
     struct FocalBucket { double min; double max; QString label; };
 
     PhotoAnalyticsModule(const QString& id, QString sourceUrl, int refreshMs,
-                         QVector<FocalBucket> buckets, QObject* parent = nullptr);
+                         QVector<FocalBucket> buckets, QStringList excludeCameras = {},
+                         QObject* parent = nullptr);
     ~PhotoAnalyticsModule() override;
 
     bool start() override;
@@ -56,6 +58,13 @@ public:
     // Instantané interprété, lu par la page /photo. Toujours sûr, même avant le
     // premier pull (reachable=false).
     QJsonObject snapshot() const { return m_snapshot; }
+
+    // Handoff (PhotoHub → /photo?source=) : rapatrie À LA DEMANDE le dataset d'une
+    // AUTRE instance morfPhoto que celle configurée, et renvoie un instantané de la
+    // même forme que snapshot(). Fetch synchrone borné (boucle d'événements imbriquée
+    // avec délai maximal) : la page ne pilote alors pas la source périodique du module,
+    // elle analyse la photothèque désignée. Vide/injoignable => reachable=false.
+    QJsonObject fetchNow(const QString& sourceUrl) const;
 
     // Regroupe des focales brutes ({focal_length,count}) selon les règles. Pur et
     // statique : testable sans réseau (cœur de l'interprétation).
@@ -74,6 +83,7 @@ private:
     QString              m_sourceUrl;
     int                  m_refreshMs;
     QVector<FocalBucket> m_buckets;
+    QStringList          m_excludeCameras;   // boîtiers hors pratique (politique service)
 
     QTimer*                m_timer = nullptr;
     QNetworkAccessManager* m_net = nullptr;

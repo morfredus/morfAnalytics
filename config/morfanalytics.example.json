@@ -51,7 +51,10 @@
         [47, 53, "50 mm"],
         [66, 72, "70 mm"],
         [295, 305, "300 mm"]
-      ]
+      ],
+
+      "_comment_exclude_cameras": "Perimetre de pratique (corpus != pratique) : la presence d'un fichier n'implique ni appartenance ni usage personnel. Boitiers exclus PAR DEFAUT des analyses (noms exacts du modele, tels qu'exposes par morfPhoto), par exemple du materiel emprunte ou des fichiers importes d'autrui. Exclure est une INTERPRETATION : elle vit ici, jamais dans morfPhoto (souverain). La page /photo fusionne ces exclusions avec celles choisies dans le navigateur (memorisees localement), et chacune reste levable a la main.",
+      "exclude_cameras": []
     }
   ]
 }

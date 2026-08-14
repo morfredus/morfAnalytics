@@ -7,6 +7,7 @@
 #include "morfanalytics/PhotoAnalyticsModule.h"
 
 #include <QTimer>
+#include <QEventLoop>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -30,6 +31,9 @@ const Endpoint kEndpoints[] = {
     {"/api/v1/photos/cameras", "cameras"},
     {"/api/v1/photos/lenses",  "lenses"},
     {"/api/v1/photos/focals",  "focals"},
+    // Export compact (colonnaire + dictionnaires) de toutes les photos presentes :
+    // c'est LUI qui alimente l'interface d'exploration cote page (agregation en JS).
+    {"/api/v1/photos/dataset", "dataset"},
 };
 
 QString nowIso() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODate); }
@@ -37,11 +41,12 @@ QString nowIso() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 
 PhotoAnalyticsModule::PhotoAnalyticsModule(const QString& id, QString sourceUrl,
                                            int refreshMs, QVector<FocalBucket> buckets,
-                                           QObject* parent)
+                                           QStringList excludeCameras, QObject* parent)
     : IModule(id, QStringLiteral("photo"), parent),
       m_sourceUrl(std::move(sourceUrl)),
       m_refreshMs(refreshMs > 0 ? refreshMs : 60000),
-      m_buckets(std::move(buckets)) {
+      m_buckets(std::move(buckets)),
+      m_excludeCameras(std::move(excludeCameras)) {
     if (m_buckets.isEmpty())
         m_buckets = defaultBuckets();
     // Instantané initial sûr : la page fonctionne avant tout pull.
@@ -144,6 +149,26 @@ void PhotoAnalyticsModule::finalize() {
     snap["focals_raw_count"] = rawFocals.size();
     // INTERPRÉTATION : regroupement des focales brutes en focales usuelles.
     snap["focals_grouped"] = groupFocals(rawFocals, m_buckets);
+
+    // Jeu de données complet (colonnaire) : la matière première de l'exploration.
+    // La page l'agrège et le filtre en JS ; morfAnalytics ne le stocke pas, il n'en
+    // est qu'un relais depuis morfPhoto (source de vérité).
+    snap["dataset"] = m_partial.value(QStringLiteral("dataset")).toObject();
+
+    // Règles d'interprétation exposées à la page : elle réutilise le même
+    // regroupement de focales configuré (jamais recodé dans le navigateur).
+    QJsonArray buckets;
+    for (const FocalBucket& b : m_buckets)
+        buckets.append(QJsonObject{{"min", b.min}, {"max", b.max}, {"label", b.label}});
+    snap["focal_buckets"] = buckets;
+
+    // Périmètre de pratique côté service (corpus ≠ pratique) : boîtiers exclus par
+    // politique. La page les fusionne avec les exclusions locales du navigateur.
+    QJsonArray excl;
+    for (const QString& c : m_excludeCameras)
+        excl.append(c);
+    snap["exclude_cameras"] = excl;
+
     m_snapshot = snap;
     emit updated(id());
 }
@@ -192,6 +217,57 @@ QVector<PhotoAnalyticsModule::FocalBucket> PhotoAnalyticsModule::defaultBuckets(
         {98, 105, QStringLiteral("100 mm")}, {130, 140, QStringLiteral("135 mm")},
         {195, 210, QStringLiteral("200 mm")},{290, 310, QStringLiteral("300 mm")},
     };
+}
+
+QJsonObject PhotoAnalyticsModule::fetchNow(const QString& sourceUrl) const {
+    // Interprétation identique quelle que soit la source (regroupement de focales,
+    // périmètre de pratique) : la page les réutilise telles quelles.
+    QJsonArray buckets;
+    for (const FocalBucket& b : m_buckets)
+        buckets.append(QJsonObject{{"min", b.min}, {"max", b.max}, {"label", b.label}});
+    QJsonArray excl;
+    for (const QString& c : m_excludeCameras)
+        excl.append(c);
+
+    QJsonObject snap{
+        {"source_url", sourceUrl}, {"reachable", false},
+        {"fetched_at", QJsonValue(QJsonValue::Null)}, {"last_error", QJsonValue(QJsonValue::Null)},
+        {"focal_buckets", buckets}, {"exclude_cameras", excl},
+    };
+    if (sourceUrl.isEmpty()) {
+        snap["last_error"] = QStringLiteral("source vide");
+        return snap;
+    }
+
+    // Fetch synchrone borné : boucle d'événements imbriquée quittée par la fin de la
+    // requête OU un délai de garde. Acceptable pour une action ponctuelle (le handoff
+    // n'est pas la voie chaude périodique) ; la source périodique du module n'est pas
+    // touchée. On ne bloque jamais indéfiniment sur une source muette.
+    QNetworkAccessManager nam;
+    QNetworkRequest req{QUrl(sourceUrl + QStringLiteral("/api/v1/photos/dataset"))};
+    req.setTransferTimeout(8000);
+    QEventLoop loop;
+    QNetworkReply* reply = nam.get(req);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QTimer guard;
+    guard.setSingleShot(true);
+    QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+    guard.start(10000);
+    loop.exec();
+
+    if (reply->isRunning())
+        reply->abort();
+    if (reply->error() != QNetworkReply::NoError) {
+        snap["last_error"] = reply->errorString();
+        reply->deleteLater();
+        return snap;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    reply->deleteLater();
+    snap["dataset"]    = doc.object();
+    snap["reachable"]  = true;
+    snap["fetched_at"] = nowIso();
+    return snap;
 }
 
 QJsonObject PhotoAnalyticsModule::statusJson() const {

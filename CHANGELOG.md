@@ -3,6 +3,62 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.21.0] - 2026-08-14
+
+### Ajouté
+
+- **Analyses approfondies** sur la page Photo (Phase 2) :
+  - **Tendances (médianes)** de focale, ouverture, ISO et vitesse, avec le nombre de
+    valeurs connues.
+  - **Focales — détail** : focales exactes (au mm) les plus fréquentes, qui révèlent
+    les positions réellement utilisées d'un zoom sans les présupposer.
+  - **Vitesses d'obturation** : distribution par plages, filtrable et croisable comme
+    les autres dimensions.
+  - **Boîtiers — chronologie** : années d'usage et période (première → dernière photo)
+    par boîtier ; fait apparaître naturellement les changements de matériel.
+  - **Objectifs** : boîtiers associés listés quand un objectif est filtré.
+- **Comparaison de deux sous-ensembles** (par année, boîtier ou objectif) : colonnes
+  A/B côte à côte (photos, médianes focale/ouverture/ISO/vitesse, top focales) pour
+  visualiser des différences de pratique, dans le périmètre filtré courant.
+- **Périmètre de pratique côté service** (`exclude_cameras`) : des boîtiers peuvent être
+  exclus par défaut des analyses (matériel emprunté, fichiers importés d'autrui). La
+  page fusionne ces exclusions de politique avec celles choisies dans le navigateur.
+  Corpus ≠ pratique : la présence d'un fichier n'implique ni appartenance ni usage.
+- **Passage de contexte depuis PhotoHub** : `GET /photo?source=<baseUrl morfPhoto>`
+  ouvre les analyses de CETTE photothèque. Nouveau comportement de `GET /photo/data` :
+  si `?source=` est fourni, morfAnalytics rapatrie cette instance à la demande (fetch
+  synchrone borné) au lieu de sa source périodique configurée.
+
+## [0.20.0] - 2026-08-14
+
+### Ajouté
+
+- **Page Photo transformée en interface d'exploration.** Jusqu'ici la page `/photo`
+  n'affichait que quelques compteurs statiques rendus côté serveur. Elle devient une
+  véritable exploration de la pratique photographique : on part d'une vue générale
+  puis on descend dans les données via un **système de filtres croisés unique** qui
+  pilote toute la page (année, mois, boîtier, objectif, focale, ISO, ouverture,
+  combinables ; les graphiques eux-mêmes servent de filtres). Le calcul se fait
+  désormais **côté navigateur**, sans dépendance externe.
+- **Principe corpus ≠ pratique.** La présence d'un fichier n'implique ni appartenance
+  ni usage personnel. Les boîtiers peuvent être **inclus ou exclus** pour délimiter le
+  périmètre réel de sa pratique ; les exclusions sont **mémorisées localement**
+  (localStorage). Exclure un boîtier est une interprétation : elle vit dans
+  morfAnalytics, jamais dans morfPhoto (souverain).
+- **Qualité des métadonnées rendue visible.** Chaque statistique affiche son
+  dénominateur (« calculé sur 18 000 / 23 000 photos »), sans donner de précision
+  artificielle à des données partielles.
+- **Pull du nouvel export compact de morfPhoto** (`GET /api/v1/photos/dataset`,
+  morfPhoto ≥ 0.5.0) : morfAnalytics rapatrie le jeu de données colonnaire et fait
+  toute l'agrégation. Nouveau point d'entrée **`GET /photo/data`** (JSON) que la page
+  récupère ; les données restent séparées de la présentation.
+
+### Note
+
+- Phase 1 du chantier « morfAnalytics Photo ». À venir : approfondissements par
+  boîtier/objectif (timelines, focales réelles d'un zoom), vitesses d'obturation,
+  comparaison de deux sous-ensembles, et passage de contexte depuis PhotoHub.
+
 ## [0.19.6] - 2026-08-14
 
 ### Corrigé
