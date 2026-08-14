@@ -84,7 +84,12 @@ Un fichier pr&eacute;sent n'implique ni appartenance ni usage&nbsp;: affinez le 
 const LS_KEY="morfanalytics.photo.excludedCameras";
 function loadExcluded(){try{return JSON.parse(localStorage.getItem(LS_KEY)||"[]")}catch(e){return []}}
 function saveExcluded(s){try{localStorage.setItem(LS_KEY,JSON.stringify([...s]))}catch(e){}}
-const S={year:null,month:null,cam:null,lens:null,folder:null,focal:null,aperture:null,iso:null,shutter:null,
+// Filtres MULTI-CRITÈRES : plusieurs valeurs par dimension (OR à l'intérieur d'une
+// dimension : plusieurs boîtiers, plusieurs ISO, plusieurs focales...), combinées
+// entre dimensions (AND). Catégoriel = Set de valeurs ; numérique = tableau de
+// plages [min,max,libellé].
+const S={year:new Set(),month:new Set(),cam:new Set(),lens:new Set(),
+         focal:[],aperture:[],iso:[],shutter:[],
          camExcl:new Set()};   // camExcl = boitiers hors de MA pratique (config + local)
 const CMP={dim:null,a:null,b:null};   // mode comparaison A vs B
 let D=null;   // donnees decodees
@@ -131,20 +136,26 @@ function decode(snap){
 }
 
 // ---- Filtre : un fichier passe-t-il la selection courante ? -------------------
+// Une valeur numérique tombe-t-elle dans AU MOINS une des plages sélectionnées ?
+function inAnyRange(v,ranges){return v!==null&&ranges.some(r=>v>=r[0]&&v<=r[1]);}
+// Une plage est-elle déjà sélectionnée (comparaison sur min/max/libellé) ?
+function rangeOn(ranges,k){return ranges.some(x=>x[0]===k[0]&&x[1]===k[1]&&x[2]===k[2]);}
+function rmRange(arr,r){const i=arr.findIndex(x=>x[0]===r[0]&&x[1]===r[1]&&x[2]===r[2]);if(i>=0)arr.splice(i,1);}
 function matches(i){
   const c=D.cols;
-  if(S.year!==null && D.years[i]!==S.year) return false;
-  if(S.month!==null && D.months[i]!==S.month) return false;
-  if(S.cam!==null && c.camera[i]!==S.cam) return false;
+  // Chaque dimension : OR interne (un Set/tableau non vide => la valeur doit
+  // correspondre à AU MOINS un critère), AND entre dimensions.
+  if(S.year.size && !S.year.has(D.years[i])) return false;
+  if(S.month.size && !S.month.has(D.months[i])) return false;
+  if(S.cam.size && (c.camera[i]===null || !S.cam.has(c.camera[i]))) return false;
   // Exclusion de boitier : ne retire QUE les boitiers connus et exclus ; une photo
   // sans boitier connu n'est jamais ecartee par ce critere.
   if(S.camExcl.size && c.camera[i]!==null && S.camExcl.has(D.dict.camera[c.camera[i]])) return false;
-  if(S.lens!==null && c.lens[i]!==S.lens) return false;
-  if(S.folder!==null && c.folder_id[i]!==S.folder) return false;
-  if(S.focal){const f=c.focal_length[i]; if(f===null||f<S.focal[0]||f>S.focal[1]) return false;}
-  if(S.aperture){const a=c.aperture[i]; if(a===null||a<S.aperture[0]||a>S.aperture[1]) return false;}
-  if(S.iso){const v=c.iso[i]; if(v===null||v<S.iso[0]||v>S.iso[1]) return false;}
-  if(S.shutter){const s=c.shutter_speed_s[i]; if(s===null||s<S.shutter[0]||s>S.shutter[1]) return false;}
+  if(S.lens.size && (c.lens[i]===null || !S.lens.has(c.lens[i]))) return false;
+  if(S.focal.length && !inAnyRange(c.focal_length[i],S.focal)) return false;
+  if(S.aperture.length && !inAnyRange(c.aperture[i],S.aperture)) return false;
+  if(S.iso.length && !inAnyRange(c.iso[i],S.iso)) return false;
+  if(S.shutter.length && !inAnyRange(c.shutter_speed_s[i],S.shutter)) return false;
   return true;
 }
 function filtered(){const out=[];for(let i=0;i<D.n;i++)if(matches(i))out.push(i);return out;}
@@ -228,15 +239,16 @@ function chip(label,onClear){const id="c"+(chip._n=(chip._n||0)+1);chip._h=chip.
 function activeChips(){
   chip._h={};
   const cs=[];
-  if(S.year!==null)cs.push(chip("Année "+S.year,()=>S.year=null));
-  if(S.month!==null)cs.push(chip("Mois "+String(S.month).padStart(2,"0"),()=>S.month=null));
-  if(S.cam!==null)cs.push(chip("Boîtier "+(D.dict.camera[S.cam]||S.cam),()=>S.cam=null));
-  if(S.lens!==null)cs.push(chip("Objectif "+(D.dict.lens[S.lens]||S.lens),()=>S.lens=null));
-  if(S.folder!==null)cs.push(chip("Dossier #"+S.folder,()=>S.folder=null));
-  if(S.focal)cs.push(chip("Focale "+S.focal[2],()=>S.focal=null));
-  if(S.aperture)cs.push(chip("Ouverture "+S.aperture[2],()=>S.aperture=null));
-  if(S.iso)cs.push(chip("ISO "+S.iso[2],()=>S.iso=null));
-  if(S.shutter)cs.push(chip("Vitesse "+S.shutter[2],()=>S.shutter=null));
+  const pad=m=>String(m).padStart(2,"0");
+  // Un chip PAR valeur sélectionnée (multi-critères) : chacun se retire seul.
+  [...S.year].sort((a,b)=>a-b).forEach(y=>cs.push(chip("Année "+y,()=>S.year.delete(y))));
+  [...S.month].sort((a,b)=>a-b).forEach(m=>cs.push(chip("Mois "+pad(m),()=>S.month.delete(m))));
+  [...S.cam].forEach(k=>cs.push(chip("Boîtier "+(D.dict.camera[k]||k),()=>S.cam.delete(k))));
+  [...S.lens].forEach(k=>cs.push(chip("Objectif "+(D.dict.lens[k]||k),()=>S.lens.delete(k))));
+  S.focal.forEach(r=>cs.push(chip("Focale "+r[2],()=>rmRange(S.focal,r))));
+  S.aperture.forEach(r=>cs.push(chip("Ouverture "+r[2],()=>rmRange(S.aperture,r))));
+  S.iso.forEach(r=>cs.push(chip("ISO "+r[2],()=>rmRange(S.iso,r))));
+  S.shutter.forEach(r=>cs.push(chip("Vitesse "+r[2],()=>rmRange(S.shutter,r))));
   for(const c of S.camExcl)cs.push(chip("exclu: "+c,()=>{S.camExcl.delete(c);
     const l=new Set(loadExcluded());l.delete(c);saveExcluded(l);}));
   if(!cs.length)return '<span class="muted">aucun filtre &mdash; corpus complet</span>';
@@ -391,41 +403,41 @@ function render(){
 
   h+='<div class="cols">';
   h+='<div><h2>Par année</h2><div class="card">'+denom(yq.known,total)+
-     bars(yearRows,{filterKey:"year",isOn:r=>S.year===r.k})+'</div></div>';
+     bars(yearRows,{filterKey:"year",isOn:r=>S.year.has(r.k)})+'</div></div>';
   h+='<div><h2>Par mois</h2><div class="card">'+denom(mq.known,total)+
-     bars(monthRows,{filterKey:"month",isOn:r=>S.month===r.k})+'</div></div>';
+     bars(monthRows,{filterKey:"month",isOn:r=>S.month.has(r.k)})+'</div></div>';
   h+='</div>';
 
   h+='<div class="cols">';
   h+='<div><h2>Boîtiers</h2><div class="card">'+denom(camAgg.known,total)+
      '<p class="note">Clic&nbsp;: filtrer &middot; &empty;&nbsp;: exclure de ma pratique (mémorisé).</p>'+
-     bars(camAgg.rows,{filterKey:"cam",isOn:r=>S.cam===r.key,excludable:true,isExcluded:r=>S.camExcl.has(r.label)})+'</div></div>';
+     bars(camAgg.rows,{filterKey:"cam",isOn:r=>S.cam.has(r.key),excludable:true,isExcluded:r=>S.camExcl.has(r.label)})+'</div></div>';
   h+='<div><h2>Objectifs</h2><div class="card">'+denom(lensAgg.known,total)+
-     bars(lensAgg.rows,{filterKey:"lens",isOn:r=>S.lens===r.key})+
-     (S.lens!==null?'<p class="note">Boîtiers associés&nbsp;: '+
+     bars(lensAgg.rows,{filterKey:"lens",isOn:r=>S.lens.has(r.key)})+
+     (S.lens.size?'<p class="note">Boîtiers associés&nbsp;: '+
         esc(countDict(idx,"camera","camera").rows.map(r=>r.label+" ("+r.count+")").join(", ")||"—")+'</p>':"")+
      '</div></div>';
   h+='</div>';
 
   h+='<div class="cols">';
   h+='<div><h2>Focales usuelles</h2><div class="card">'+denom(fg.known,total)+
-     bars(fgRows,{filterKey:"focal",isOn:r=>S.focal&&S.focal[2]===r.k[2]})+
+     bars(fgRows,{filterKey:"focal",isOn:r=>rangeOn(S.focal,r.k)})+
      '<p class="note">Regroupement interprété ; valeurs brutes souveraines dans morfPhoto.</p></div></div>';
   h+='<div><h2>Focales — détail (top)</h2><div class="card">'+denom(fg.known,total)+
-     bars(topF,{filterKey:"focal",isOn:r=>S.focal&&S.focal[2]===r.k[2]})+
+     bars(topF,{filterKey:"focal",isOn:r=>rangeOn(S.focal,r.k)})+
      '<p class="note">Focales exactes (au mm) les plus fréquentes&nbsp;: révèle les positions réellement utilisées d\'un zoom.</p></div></div>';
   h+='</div>';
 
   h+='<div class="cols">';
   h+='<div><h2>Sensibilité ISO</h2><div class="card">'+denom(isoH.known,total)+
-     bars(isoRows,{filterKey:"iso",isOn:r=>S.iso&&S.iso[2]===r.k[2]})+'</div></div>';
+     bars(isoRows,{filterKey:"iso",isOn:r=>rangeOn(S.iso,r.k)})+'</div></div>';
   h+='<div><h2>Ouvertures</h2><div class="card">'+denom(apH.known,total)+
-     bars(apRows,{filterKey:"aperture",isOn:r=>S.aperture&&S.aperture[2]===r.k[2]})+'</div></div>';
+     bars(apRows,{filterKey:"aperture",isOn:r=>rangeOn(S.aperture,r.k)})+'</div></div>';
   h+='</div>';
 
   h+='<div class="cols">';
   h+='<div><h2>Vitesses d\'obturation</h2><div class="card">'+denom(shH.known,total)+
-     bars(shRows,{filterKey:"shutter",isOn:r=>S.shutter&&S.shutter[2]===r.k[2]})+'</div></div>';
+     bars(shRows,{filterKey:"shutter",isOn:r=>rangeOn(S.shutter,r.k)})+'</div></div>';
   h+='<div><h2>Boîtiers — chronologie</h2><div class="card">'+cameraTimeline(idx)+'</div></div>';
   h+='</div>';
 
@@ -438,13 +450,21 @@ function render(){
   wire();
 }
 
-// Toggle : reclic sur un filtre deja actif le retire.
-function toggle(field,val){S[field]=(JSON.stringify(S[field])===JSON.stringify(val))?null:val;}
+// Ajoute/retire un critère (multi-critères). Reclic sur un critère actif le retire.
+// Catégoriel (year/month/cam/lens) => Set ; numérique (focal/aperture/iso/shutter)
+// => tableau de plages.
+function toggleFilter(field,val){
+  if(field==="year"||field==="month"||field==="cam"||field==="lens"){
+    if(S[field].has(val))S[field].delete(val);else S[field].add(val);
+  }else{
+    rangeOn(S[field],val)?rmRange(S[field],val):S[field].push(val);
+  }
+}
 function wire(){
   document.querySelectorAll("[data-f]").forEach(el=>{
     el.addEventListener("click",ev=>{
       if(ev.target.classList.contains("ex"))return;
-      toggle(el.getAttribute("data-f"),JSON.parse(el.getAttribute("data-k"))); render();
+      toggleFilter(el.getAttribute("data-f"),JSON.parse(el.getAttribute("data-k"))); render();
     });
   });
   document.querySelectorAll(".ex").forEach(el=>{
@@ -461,7 +481,8 @@ function wire(){
     el.addEventListener("click",()=>{const fn=chip._h[el.getAttribute("data-chip")];if(fn)fn();render();});
   });
   const rs=$("#reset");if(rs)rs.addEventListener("click",()=>{
-    S.year=S.month=S.cam=S.lens=S.folder=S.focal=S.aperture=S.iso=S.shutter=null; render();});
+    S.year.clear();S.month.clear();S.cam.clear();S.lens.clear();
+    S.focal.length=0;S.aperture.length=0;S.iso.length=0;S.shutter.length=0; render();});
   const rl=$("#reload");if(rl)rl.addEventListener("click",reload);
   const cd=$("#cmpdim");if(cd)cd.addEventListener("change",e=>{CMP.dim=e.target.value||null;CMP.a=CMP.b=null;render();});
   const ca=$("#cmpa");if(ca)ca.addEventListener("change",e=>{CMP.a=e.target.value;render();});

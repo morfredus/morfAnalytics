@@ -3,6 +3,20 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.22.0] - 2026-08-14
+
+### Ajouté
+
+- **Filtres multi-critères** sur la page Photo. Chaque dimension accepte désormais
+  PLUSIEURS valeurs : plusieurs boîtiers, plusieurs objectifs, plusieurs plages de
+  focales, d'ISO, d'ouvertures, de vitesses, plusieurs années/mois. La logique est
+  **OR à l'intérieur d'une dimension** (une photo passe si elle correspond à au moins
+  un critère de cette dimension) et **AND entre dimensions**. Un clic ajoute un
+  critère, un reclic le retire ; chaque valeur active a son propre chip, retirable
+  individuellement, et « tout réinitialiser » les efface tous. Exemple : deux boîtiers
+  + deux plages ISO restreint aux photos de l'un OU l'autre boîtier, à l'une OU l'autre
+  sensibilité.
+
 ## [0.21.0] - 2026-08-14
 
 ### Ajouté
