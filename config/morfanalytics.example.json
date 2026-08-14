@@ -37,8 +37,8 @@
       "type": "photo",
       "id": "photo-1",
 
-      "_comment_source": "Base de l'API morfPhoto, p. ex. http://127.0.0.1:8793 (meme machine) ou http://192.168.1.42:8793. Laisse VIDE, la page /photo indique la source manquante et rien n'est interroge.",
-      "source_url": "",
+      "_comment_source": "Base de l'API morfPhoto. Par defaut http://127.0.0.1:8793 (morfPhoto sur la meme machine, cas courant du parc). Mettre http://IP:8793 si morfPhoto tourne ailleurs, ou VIDE pour desactiver la specialisation Photo (la page /photo indique alors la source manquante et rien n'est interroge).",
+      "source_url": "http://127.0.0.1:8793",
 
       "_comment_refresh": "Periode de rafraichissement de l'instantane, en ms.",
       "refresh_ms": 60000,

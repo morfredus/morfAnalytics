@@ -3,6 +3,18 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.19.4] - 2026-08-14
+
+### Modifié
+
+- **`config/morfanalytics.example.json`** : le `source_url` du module `photo`
+  vaut désormais `http://127.0.0.1:8793` par défaut (morfPhoto sur la même
+  machine, cas courant du parc) au lieu d'une chaîne vide. Une installation neuve
+  affiche donc la page `/photo` sans étape de configuration manuelle ; mettre une
+  autre IP si morfPhoto tourne ailleurs, ou vider pour désactiver la
+  spécialisation Photo. Les configs déjà déployées dans `/etc` ne sont pas
+  touchées (à ajuster à la main).
+
 ## [0.19.3] - 2026-08-14
 
 ### Corrigé
