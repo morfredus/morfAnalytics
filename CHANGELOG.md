@@ -3,6 +3,25 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.19.6] - 2026-08-14
+
+### Corrigé
+
+- README (FR/EN) : lien de la vue d'ensemble repointé vers
+  `../morfSystem/docs/ARCHITECTURE.md`. L'ancien `MORFSYSTEM_ARCHITECTURE.md`
+  (racine du parc) a été déplacé dans le dépôt morfSystem ; la référence était
+  devenue un lien mort.
+
+## [0.19.5] - 2026-08-14
+
+### Documentation
+
+- **README (FR/EN) : spécialisation Photo documentée.** L'espace `/photo`
+  consommant **morfPhoto** (boîtiers, objectifs, focales regroupées, années) et
+  son module de configuration `photo` (`source_url`) étaient absents des README
+  depuis leur ajout en 0.19.0. FR : nouvelle entrée dans « Espaces Web » + liste
+  des pages complétée ; EN : section « Photo library (morfPhoto) ».
+
 ## [0.19.4] - 2026-08-14
 
 ### Modifié

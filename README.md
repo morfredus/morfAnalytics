@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.19.4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.19.6-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -21,7 +21,7 @@ always **optional**: if no server is available, the devices keep measuring, stor
 charting and exporting exactly as before; only the advanced analyses become
 unavailable.
 
-See the ecosystem vision in `../MORFSYSTEM_ARCHITECTURE.md`.
+See the ecosystem vision in `../morfSystem/docs/ARCHITECTURE.md`.
 
 > **Status: operational.** Incremental collection, thirteen weather analyses, cache cleanup and a
 > web page are in place. Still to be written: publishing results to **morfSync**,
@@ -92,6 +92,16 @@ SiteWatch summaries are stored separately in
 `/opt/morfanalytics/cache/sitewatch-history.sqlite`. This historical database
 contains only calculated summaries: SiteWatch remains the sovereign owner of
 the source access logs.
+
+## Photo library (morfPhoto)
+
+The `/photo` space reads the photo library indexed by **morfPhoto** (the source
+of truth): camera bodies, lenses, focal lengths (bucketed into usual values) and
+years. morfAnalytics only polls morfPhoto's aggregate endpoints at a regular
+interval (never the file list) and keeps a snapshot. Configure the source through
+the `photo` module of the configuration (`source_url`, e.g.
+`http://127.0.0.1:8793`); if morfPhoto is unreachable or the module is missing,
+the page says so explicitly.
 
 ## Available analyses
 

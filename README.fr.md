@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.19.4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.19.6-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -23,7 +23,7 @@ est toujours **optionnelle** : sans serveur, les équipements continuent de mesu
 stocker, tracer et exporter comme avant ; seules les analyses avancées deviennent
 indisponibles.
 
-Voir la vision d'ensemble de l'écosystème dans `../MORFSYSTEM_ARCHITECTURE.md`.
+Voir la vision d'ensemble de l'écosystème dans `../morfSystem/docs/ARCHITECTURE.md`.
 
 > **État : opérationnel.** Collecte incrémentale, treize analyses météo, nettoyage du cache et page
 > web sont en place. Reste à écrire : la publication des résultats vers
@@ -118,11 +118,18 @@ source de vérité reste MeteoHub.
   comparaisons temporelles, les jours anormaux, les pics, nouveaux robots et
   répétitions de tentatives sensibles : ces analyses n'existent pas dans la
   vue de bureau de SiteWatch.
+- `/photo` lit la photothèque indexée par **morfPhoto** (source de vérité) :
+  boîtiers, objectifs, focales (regroupées en focales usuelles) et années.
+  morfAnalytics n'interroge que les agrégats de morfPhoto à intervalle régulier
+  (jamais la liste des fichiers) et en garde un instantané. La source se règle
+  via le module `photo` de la configuration (`source_url`, p. ex.
+  `http://127.0.0.1:8793`) ; si morfPhoto est injoignable ou le module absent, la
+  page l'indique explicitement.
 
 ## Architecture des pages Web
 
-Les espaces `/`, `/meteohub` et `/sitewatch` sont organisés comme des pages
-compilées distinctes dans `src/pages/`. Le serveur HTTP assure les routes et les
+Les espaces `/`, `/meteohub`, `/sitewatch` et `/photo` sont organisés comme des
+pages compilées distinctes dans `src/pages/`. Le serveur HTTP assure les routes et les
 pages reçoivent uniquement les données nécessaires à leur rendu. Cette
 organisation permet d'ajouter de nouvelles sources d'analyse sans transformer
 `HttpServer` en fichier monolithique.
