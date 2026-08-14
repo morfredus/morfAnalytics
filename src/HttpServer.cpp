@@ -479,7 +479,7 @@ QByteArray HttpServer::siteWatchPage() const {
     };
 
     const QJsonArray reports = siteWatchReports();
-    QString page = QStringLiteral(R"HTML(<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="30"><title>morfAnalytics — SiteWatch</title><style>body{margin:0;background:#15171b;color:#e7e9ec;font:16px system-ui;padding:2rem}.wrap{max-width:70rem;margin:auto}.card{background:#1e2126;border:1px solid #2c3037;border-radius:12px;padding:1.25rem;margin:1rem 0}h1{margin:0}h2{font-size:1.05rem}.muted{color:#99a1ad}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:1rem}.number{font-size:2rem;font-weight:700}</style><body><div class="wrap"><p><a href="/" style="color:#6f9bff">← morfAnalytics</a></p><h1>Analyse des sites</h1><p class="muted">Synthèses reçues de SiteWatch · actualisation automatique toutes les 30 secondes.</p>)HTML");
+    QString page = QStringLiteral(R"HTML(<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="30"><title>morfAnalytics - SiteWatch</title><style>body{margin:0;background:#15171b;color:#e7e9ec;font:16px system-ui;padding:2rem}.wrap{max-width:70rem;margin:auto}.card{background:#1e2126;border:1px solid #2c3037;border-radius:12px;padding:1.25rem;margin:1rem 0}h1{margin:0}h2{font-size:1.05rem}.muted{color:#99a1ad}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:1rem}.number{font-size:2rem;font-weight:700}.vb{font-size:.8rem;font-weight:600;vertical-align:middle;color:#6f9bff;background:rgba(111,155,255,.12);border:1px solid rgba(111,155,255,.3);border-radius:999px;padding:.1rem .5rem;margin-left:.4rem}</style><body><div class="wrap"><p><a href="/" style="color:#6f9bff">← morfAnalytics</a></p><h1>Analyse des sites <span class="vb">v%1</span></h1><p class="muted">Synthèses reçues de SiteWatch · actualisation automatique toutes les 30 secondes.</p>)HTML").arg(morfanalytics::version());
     if (reports.isEmpty()) {
         page += QStringLiteral("<section class=\"card\">Aucune synthèse SiteWatch n'est encore enregistrée.</section>");
     }
@@ -563,7 +563,7 @@ QByteArray HttpServer::landingPage() {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>morfAnalytics</title>
+<title>morfAnalytics - Météo</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -721,7 +721,7 @@ QByteArray HttpServer::landingPage() {
 <div class="wrap">
   <header class="top">
     <a id="backlink" class="back" href="#" hidden>&larr; Retour à MeteoHub</a>
-    <h1>morfAnalytics <span id="version-badge" class="version-badge"></span></h1>
+    <h1>Analyse de la météo <span id="version-badge" class="version-badge"></span></h1>
     <p class="sub">Analyses avancées - <span id="hostline">…</span></p>
     <div class="refresh-line">
       <span>Analyses actualisées : <span id="refreshed">…</span></span>

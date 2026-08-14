@@ -3,6 +3,27 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.23.3] - 2026-08-14
+
+### Modifié
+
+- **Titre de la page MeteoHub conforme aux pages sœurs.** Le `<h1>` affichait
+  « morfAnalytics » ; il devient **« Analyse de la météo »**, dans la même famille
+  que « Analyse de la photothèque » et « Analyse des sites ». Le `<title>` d'onglet
+  passe à « morfAnalytics - Météo » (aligné sur « morfAnalytics - Photo »).
+- Tiret cadratin résiduel corrigé dans le `<title>` de la page SiteWatch
+  (« — » -> « - »), conforme à la constitution.
+
+## [0.23.2] - 2026-08-14
+
+### Ajouté
+
+- **Badge de version sur les pages Photo et SiteWatch**, comme sur la page MeteoHub.
+  La page `/photo` lit `/status` côté navigateur et affiche `v<version>` à côté du
+  titre ; la page `/sitewatch` (rendue côté serveur, sans JS) reçoit la version
+  injectée directement via `morfanalytics::version()`. Les trois pages exposent
+  désormais la version du service de façon cohérente.
+
 ## [0.23.1] - 2026-08-14
 
 ### Corrigé

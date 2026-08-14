@@ -41,6 +41,7 @@ QByteArray PhotoPage::render(const QJsonObject& /*snapshot*/) {
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui,sans-serif;padding:1.5rem}
 .wrap{max-width:82rem;margin:auto}h1{margin:.2rem 0}h2{font-size:1.05rem;margin:1.4rem 0 .5rem}
 .muted{color:var(--muted)}a{color:var(--accent)}
+.vb{font-size:.8rem;font-weight:600;vertical-align:middle;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;padding:.1rem .5rem;margin-left:.4rem}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1rem 1.25rem;margin:1rem 0}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:.8rem}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.9rem}
@@ -75,7 +76,7 @@ th{color:var(--muted);font-weight:600}tr+tr td{border-top:1px solid var(--line)}
 .controls{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.5rem}
 </style></head><body><div class="wrap">
 <p><a href="/">&larr; morfAnalytics</a></p>
-<h1>Analyse de la phototh&egrave;que</h1>
+<h1>Analyse de la phototh&egrave;que <span id="vb" class="vb"></span></h1>
 <p class="muted">Poser des questions au corpus&nbsp;: croiser boîtiers, focales, ISO, ouvertures,
 vitesses, périodes&hellip; La donnée reste souveraine dans morfPhoto ; ici on l'explore.</p>
 <div id="app"><p class="muted">Chargement des donn&eacute;es&hellip;</p></div>
@@ -555,6 +556,9 @@ function wire(){
   on("capClr","click",()=>{GRP.a=GRP.b=null;render();});
 }
 
+// Badge de version : lit /status (comme la page MeteoHub) pour afficher la version
+// du service courant a cote du titre. Silencieux si /status est indisponible.
+fetch("/status").then(r=>r.json()).then(s=>{const b=document.getElementById("vb");if(b)b.textContent=s.version?"v"+s.version:"";}).catch(()=>{});
 reload();
 </script>
 </body></html>)PAGE";
