@@ -3,6 +3,42 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.23.1] - 2026-08-14
+
+### Corrigé
+
+- Resynchronisation de la copie vendorée de **morfBeacon**
+  (`third_party/morf/beacon`) en 0.6.1, qui corrige la troncature des grandes réponses
+  `/status` dans `StatusServer` (fermeture sans drainage du tampon d'écriture). Même
+  classe de bug que le correctif déjà appliqué au `HttpServer` de morfAnalytics pour la
+  page `/photo`. On attend désormais que `bytesToWrite()` retombe à zéro avant de fermer.
+
+## [0.23.0] - 2026-08-14
+
+### Ajouté
+
+- **Moteur de filtres unifié et croisements analytiques.** La page Photo devient un
+  vrai outil pour poser des questions au corpus, pas seulement réduire l'affichage.
+  - **Nouvelles dimensions filtrables** : type de fichier, dossiers (libellés exposés
+    par morfPhoto ≥ 0.5.1) et **période libre** (fenêtre d'années de … à …), qui
+    s'ajoutent aux boîtiers, objectifs, années, mois, focales, ouvertures, ISO,
+    vitesses. Toutes combinables (OR interne, AND entre dimensions), toutes cliquables
+    depuis leur graphique.
+  - **Filtres actifs restructurés** : le **périmètre de pratique** (boîtiers exclus,
+    persistant) est affiché à part ; les **filtres analytiques** sont groupés par
+    dimension, chaque valeur retirable individuellement ; « réinitialiser les filtres »
+    n'efface plus le périmètre.
+  - **Matrice analytique** : croisement libre Lignes × Colonnes (deux dimensions au
+    choix) avec une mesure (nombre de photos, focale/ouverture/ISO/vitesse médiane).
+    Répond à « quelles focales avec quel boîtier ? », « quels ISO par année ? »… sans
+    multiplier les graphiques figés.
+  - **Comparaison de groupes de filtres** : capturer le sous-ensemble courant comme
+    Groupe A, puis un autre comme Groupe B, et comparer (photos, médianes, top focales,
+    objectifs les plus utilisés). Plus puissant qu'un simple « boîtier A contre B ».
+  - **Correctif serveur** : `reply()` vidait mal son tampon d'écriture ; les réponses
+    dépassant ~20 Ko (la page Photo enrichie) étaient tronquées. Le corps est désormais
+    entièrement drainé avant fermeture.
+
 ## [0.22.0] - 2026-08-14
 
 ### Ajouté

@@ -1519,7 +1519,13 @@ void HttpServer::reply(QTcpSocket* sock, int code, const QByteArray& reason, con
     resp += "Connection: close\r\n\r\n";
     resp += body;
     sock->write(resp);
-    sock->flush();
+    // Vider le tampon d'écriture AVANT de fermer : sur une grande réponse (la page
+    // Photo dépasse 20 Ko), le corps déborde du tampon socket et `disconnectFromHost`
+    // seul en tronquait la fin. On draine jusqu'à ce qu'il ne reste rien à écrire,
+    // avec un délai de garde pour ne jamais bloquer indéfiniment.
+    while (sock->bytesToWrite() > 0)
+        if (!sock->waitForBytesWritten(2000))
+            break;
     sock->disconnectFromHost();
 }
 
