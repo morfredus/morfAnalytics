@@ -24,10 +24,15 @@ namespace morfanalytics {
 //
 // En-tete (inline) : aucun fichier source ni entree CMake supplementaires.
 inline void fillAnnouncedDetail(morfbeacon::PresenceConfig& pc) {
-    pc.webUiPath        = QStringLiteral("/meteohub");
+    // Annoncer le PORTAIL (racine), pas une specialisation : morfAnalytics est un
+    // service multi-domaines (Meteo, SiteWatch, Photo...). Un consommateur (ex.
+    // morfMonitor) doit ouvrir la racine qui liste les specialisations, et non une
+    // page precise. Chaque specialisation reste accessible sous son propre chemin.
+    pc.webUiPath        = QStringLiteral("/");
     pc.webUiLabel       = QStringLiteral("Analyses");
     pc.webUiDescription = QStringLiteral(
-        "Statistiques longue periode et correlations sur l'historique des equipements.");
+        "Portail d'analyses avancees : statistiques longue periode et correlations "
+        "par domaine (meteo, journaux Web, photo...).");
 
     // API metier (les routes de cadre -- /status, /healthz, /modules -- ne sont
     // pas listees : un observateur les connait deja par le protocole). Chemins

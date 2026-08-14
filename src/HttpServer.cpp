@@ -12,6 +12,8 @@
 #include "morfanalytics/pages/PortalPage.h"
 #include "morfanalytics/pages/MeteoHubPage.h"
 #include "morfanalytics/pages/SiteWatchPage.h"
+#include "morfanalytics/pages/PhotoPage.h"
+#include "morfanalytics/PhotoAnalyticsModule.h"
 
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -302,6 +304,16 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
     } else if (path == "/sitewatch") {
         const QJsonArray reports = siteWatchReports();
         reply(sock, 200, "OK", pages::SiteWatchPage::render(siteWatchPage(), reports), "text/html; charset=utf-8");
+        return;
+    } else if (path == "/photo") {
+        // Specialisation Photo : lit l'instantane du module (agregats de morfPhoto
+        // deja interpretes), sans interroger morfPhoto a chaque requete.
+        auto* module = m_registry
+            ? qobject_cast<PhotoAnalyticsModule*>(m_registry->firstOfType(QStringLiteral("photo")))
+            : nullptr;
+        const QJsonObject snap = module ? module->snapshot() : QJsonObject{{"reachable", false},
+            {"last_error", QStringLiteral("aucun module 'photo' configure")}};
+        reply(sock, 200, "OK", pages::PhotoPage::render(snap), "text/html; charset=utf-8");
         return;
     } else if (path == "/sitewatch/reports") {
         out = toJson(QJsonObject{{"reports", siteWatchReports()}, {"storage", "sqlite"}});

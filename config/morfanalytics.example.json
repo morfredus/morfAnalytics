@@ -31,6 +31,27 @@
       "_comment_morfsync": "Publication (facultative) d'une synthese par jour vers le hub morfSync, pour rendre les resultats consultables par le reste du parc (morfDashboard, SiteWatch...). Ecriture SEULE, a sens unique : jamais vers l'appareil. Laisse VIDE, aucune publication n'est faite. Sur le Pi ou tourne aussi morfSync : http://127.0.0.1:8080. Le jeton reste vide sur un LAN de confiance.",
       "morfsync_url": "",
       "morfsync_token": ""
+    },
+    {
+      "_comment": "Specialisation Photo : lit les agregats de morfPhoto (source de verite) via son API HTTP et les interprete (regroupement de focales). Ne touche jamais au disque ni a la base de morfPhoto.",
+      "type": "photo",
+      "id": "photo-1",
+
+      "_comment_source": "Base de l'API morfPhoto, p. ex. http://127.0.0.1:8793 (meme machine) ou http://192.168.1.42:8793. Laisse VIDE, la page /photo indique la source manquante et rien n'est interroge.",
+      "source_url": "",
+
+      "_comment_refresh": "Periode de rafraichissement de l'instantane, en ms.",
+      "refresh_ms": 60000,
+
+      "_comment_focal_buckets": "Regles de regroupement des focales BRUTES en focales usuelles : tableau de [min, max, libelle]. Configurable et documente ; si absent, un jeu par defaut est utilise. Les valeurs brutes ne sont jamais remplacees (morfPhoto reste souverain) : c'est une lecture interpretee.",
+      "focal_buckets": [
+        [23, 25, "24 mm"],
+        [26, 30, "28 mm"],
+        [33, 37, "35 mm"],
+        [47, 53, "50 mm"],
+        [66, 72, "70 mm"],
+        [295, 305, "300 mm"]
+      ]
     }
   ]
 }

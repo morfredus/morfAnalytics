@@ -3,6 +3,61 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.19.3] - 2026-08-14
+
+### Corrigé
+
+- Description de l'unité systemd : remplacement du tiret cadratin par un tiret
+  simple, conformément à la règle de ponctuation du parc.
+
+## [0.19.2] - 2026-08-14
+
+### Modifié
+
+- Resynchronisation de la copie vendorée de **morfBeacon**
+  (`third_party/morf/beacon`) en 0.6.0, alignée sur le dépôt source
+  (`IMetricsProvider.h`, `StatusServer.cpp`). Aucun changement de comportement.
+- Ajout du marqueur de version manquant à la copie vendorée de **morfdeploy**
+  (`third_party/morf/morfdeploy/VERSION` = 0.1.0) ; le code Python était déjà à
+  jour. `morf doctor` de nouveau vert sur les copies vendorées.
+
+## [0.19.1] - 2026-08-11
+
+### Ajouté
+
+- **Capacité morfBeacon `photo_analytics`** (ajout additif à `advanced_analysis`).
+  Permet à PhotoHub de découvrir morfAnalytics par capacité et de proposer un lien
+  vers la page `/photo`. Aucune dépendance forte : simple enrichissement optionnel.
+
+## [0.19.0] - 2026-08-11
+
+### Ajouté
+
+- **Spécialisation Photo** : nouvelle page `/photo` et module `photo`. morfAnalytics
+  lit les agrégats de morfPhoto (source de vérité de la photothèque) via son API
+  `/api/v1`, n'émet que des GET, ne touche jamais au disque ni à sa base. Modèle
+  « pull » comme la collecte Meteo : rafraîchissement périodique vers un instantané
+  en mémoire, lu par la page sans bloquer le serveur.
+- **L'interprétation vit ici** : regroupement des focales BRUTES en focales usuelles
+  (`focal_buckets` configurable, jeu par défaut fourni), les valeurs brutes restant
+  souveraines dans morfPhoto. La page affiche photos présentes, boîtiers, objectifs,
+  répartition par année et focales regroupées.
+- Entrée « Analyses Photo » ajoutée au portail racine ; type de module `photo` dans
+  la fabrique ; configuration d'exemple (`source_url`, `refresh_ms`, `focal_buckets`).
+
+## [0.18.2] - 2026-08-11
+
+### Corrigé
+
+- **L'interface web annoncée pointait sur `/meteohub` au lieu du portail racine.**
+  morfAnalytics est un service multi-domaines (Meteo, SiteWatch, Photo à venir) ;
+  son `web_ui` doit désigner la racine `/` qui liste les spécialisations, pas l'une
+  d'elles. Un consommateur comme morfMonitor liait donc vers `:8799/meteohub` au
+  lieu de `:8799`. Corrigé dans le point unique `fillAnnouncedDetail`
+  (`SelfDescription.h`) : `webUiPath = "/"`.
+- **Badge de version des README réaligné sur `VERSION`** (0.18.2) : il était resté
+  à 0.17.0. `morf doctor` vérifie cette cohérence.
+
 ## [0.18.1] - 2026-08-01
 
 ### Fixed

@@ -7,6 +7,9 @@
 #include "morfanalytics/ModuleFactory.h"
 #include "morfanalytics/IModule.h"
 #include "morfanalytics/AnalyticsModule.h"
+#include "morfanalytics/PhotoAnalyticsModule.h"
+
+#include <QJsonArray>
 
 namespace morfanalytics {
 namespace ModuleFactory {
@@ -38,7 +41,19 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
                                    morfsyncUrl, morfsyncToken, parent);
     }
 
-    // >>> AJOUTER D'AUTRES TYPES ICI (au fur et à mesure des analyses) <<<
+    // Spécialisation Photo : lit les agrégats de morfPhoto et les interprète.
+    if (type == QLatin1String("photo")) {
+        const QString sourceUrl = def.params.value("source_url").toString();
+        const int refreshMs     = def.params.value("refresh_ms").toInt(60000);
+        // Règles de regroupement facultatives : tableau de [min, max, "libellé"].
+        QVector<PhotoAnalyticsModule::FocalBucket> buckets;
+        for (const QJsonValue& v : def.params.value("focal_buckets").toArray()) {
+            const QJsonArray b = v.toArray();
+            if (b.size() == 3)
+                buckets.append({b[0].toDouble(), b[1].toDouble(), b[2].toString()});
+        }
+        return new PhotoAnalyticsModule(def.id, sourceUrl, refreshMs, buckets, parent);
+    }
 
     if (error)
         *error = QStringLiteral("type de module inconnu : '%1'").arg(def.type);
@@ -46,7 +61,7 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
 }
 
 QStringList knownTypes() {
-    return { QStringLiteral("analytics") };
+    return { QStringLiteral("analytics"), QStringLiteral("photo") };
 }
 
 } // namespace ModuleFactory

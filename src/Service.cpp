@@ -54,7 +54,10 @@ bool Service::start() {
         // Capacite annoncee : c'est par elle que MeteoHub reconnait un service
         // d'analyse, et non par son nom — que l'utilisateur peut changer.
         // Renommer l'application n'interrompt donc pas l'integration.
-        pc.capabilities        = {QStringLiteral("advanced_analysis")};
+        // `photo_analytics` : capacite specifique du domaine photo, pour que
+        // PhotoHub decouvre morfAnalytics et propose un lien vers la page /photo.
+        pc.capabilities        = {QStringLiteral("advanced_analysis"),
+                                  QStringLiteral("photo_analytics")};
 
         // Detail annonce (interface web + API) : renseigne par le point unique
         // fillAnnouncedDetail, le meme qu'utilise /status. Declarer web_ui ajoute

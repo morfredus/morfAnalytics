@@ -11,7 +11,7 @@
 # defaut du service).
 
 [Unit]
-Description=morfAnalytics — moteur d'analyse morfSystem
+Description=morfAnalytics - moteur d'analyse morfSystem
 After=local-fs.target network-online.target
 Wants=network-online.target
 

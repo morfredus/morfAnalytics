@@ -50,9 +50,11 @@ add_library(morfAnalytics STATIC
     src/pages/PortalPage.cpp
     src/pages/MeteoHubPage.cpp
     src/pages/SiteWatchPage.cpp
+    src/pages/PhotoPage.cpp               # page de la specialisation Photo
     src/Service.cpp
     src/ModuleFactory.cpp
     src/AnalyticsModule.cpp               # logique metier : moteur d'analyse
+    src/PhotoAnalyticsModule.cpp          # specialisation Photo : lit morfPhoto, interprete
     src/data/SampleStore.cpp              # cache de travail local (SQLite)
     src/collect/MeteoHubCollector.cpp     # collecte incrementale depuis MeteoHub
     src/publish/MeteoSyncPublisher.cpp    # publication des syntheses journalieres vers morfSync
@@ -76,6 +78,8 @@ add_library(morfAnalytics STATIC
     include/morfanalytics/pages/PortalPage.h
     include/morfanalytics/pages/MeteoHubPage.h
     include/morfanalytics/pages/SiteWatchPage.h
+    include/morfanalytics/pages/PhotoPage.h
+    include/morfanalytics/PhotoAnalyticsModule.h
     include/morfanalytics/Service.h
     include/morfanalytics/AnalyticsModule.h # logique metier : moteur d'analyse
     include/morfanalytics/Version.h

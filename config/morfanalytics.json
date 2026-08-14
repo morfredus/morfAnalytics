@@ -27,6 +27,27 @@
 
       "_comment_altitude": "Altitude de la station, en metres (environ 0,12 hPa par metre). A adapter. Une altitude nulle est une valeur valide : c'est l'absence de ce parametre qui est signalee dans les analyses de pression.",
       "altitude_m": 8
+    },
+    {
+      "_comment": "Specialisation Photo : lit les agregats de morfPhoto (source de verite) via son API HTTP et les interprete (regroupement de focales). Ne touche jamais au disque ni a la base de morfPhoto.",
+      "type": "photo",
+      "id": "photo-1",
+
+      "_comment_source": "Base de l'API morfPhoto. Sur le Pi ou tourne aussi morfPhoto : http://127.0.0.1:8793. Laisse VIDE, la page /photo indique la source manquante et rien n'est interroge.",
+      "source_url": "http://127.0.0.1:8793",
+
+      "_comment_refresh": "Periode de rafraichissement de l'instantane, en ms.",
+      "refresh_ms": 60000,
+
+      "_comment_focal_buckets": "Regroupement des focales BRUTES en focales usuelles : [min, max, libelle]. Les valeurs brutes ne sont jamais remplacees (morfPhoto reste souverain) : lecture interpretee.",
+      "focal_buckets": [
+        [23, 25, "24 mm"],
+        [26, 30, "28 mm"],
+        [33, 37, "35 mm"],
+        [47, 53, "50 mm"],
+        [66, 72, "70 mm"],
+        [295, 305, "300 mm"]
+      ]
     }
   ]
 }
