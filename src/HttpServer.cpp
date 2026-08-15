@@ -13,7 +13,9 @@
 #include "morfanalytics/pages/MeteoHubPage.h"
 #include "morfanalytics/pages/SiteWatchPage.h"
 #include "morfanalytics/pages/PhotoPage.h"
+#include "morfanalytics/pages/MonitorPage.h"
 #include "morfanalytics/PhotoAnalyticsModule.h"
+#include "morfanalytics/MonitorModule.h"
 
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -338,6 +340,36 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             out = toJson(module ? module->snapshot()
                                 : QJsonObject{{"reachable", false},
                                               {"last_error", QStringLiteral("aucun module 'photo' configure")}});
+    } else if (path == "/monitor") {
+        // Domaine Monitor : historique des machines. Page autonome qui récupère
+        // ses données via /monitor/data.
+        reply(sock, 200, "OK", pages::MonitorPage::render(), "text/html; charset=utf-8");
+        return;
+    } else if (path == "/monitor/data") {
+        // Données de la page Monitor : machines connues + vue d'ensemble + séries
+        // sous-échantillonnées pour la machine et la période demandées.
+        auto* module = m_registry
+            ? qobject_cast<MonitorModule*>(m_registry->firstOfType(QStringLiteral("monitor")))
+            : nullptr;
+        QString machine;
+        int periodS = 86400;                 // 24 h par défaut
+        const int qm = rawPath.indexOf('?');
+        if (qm >= 0) {
+            const QUrlQuery q(QString::fromUtf8(rawPath.mid(qm + 1)));
+            machine = q.queryItemValue(QStringLiteral("machine"), QUrl::FullyDecoded);
+            const int p = q.queryItemValue(QStringLiteral("period")).toInt();
+            if (p > 0)
+                periodS = p;
+        }
+        if (!module) {
+            out = toJson(QJsonObject{{"machines", QJsonArray{}},
+                                     {"error", QStringLiteral("aucun module 'monitor' configure")}});
+        } else {
+            const qint64 to = QDateTime::currentSecsSinceEpoch();
+            const qint64 from = to - periodS;
+            // ~300 points : assez pour un tracé net, sans jamais déverser le brut.
+            out = toJson(module->data(machine, from, to, 300));
+        }
     } else if (path == "/sitewatch/reports") {
         out = toJson(QJsonObject{{"reports", siteWatchReports()}, {"storage", "sqlite"}});
     } else if (path == "/analyses") {

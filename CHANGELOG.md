@@ -3,6 +3,32 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.24.0] - 2026-08-15
+
+### Ajouté
+
+- **Domaine Monitor — page `/monitor` (premier incrément).** morfAnalytics historise
+  désormais les métriques des machines du parc remontées par morfMonitor et les
+  représente dans le temps ; c'est le point où morfSystem acquiert une mémoire de son
+  propre fonctionnement.
+  - **Module `monitor`** : interroge périodiquement un ou plusieurs morfMonitor
+    (`/api/all`), extrait métriques machine et par service, et les écrit dans un
+    historique SQLite local. Frontière tenue : morfMonitor reste la sonde, ce module
+    ne fait qu'échantillonner, stocker et représenter.
+  - **`MonitorStore`** : schéma **hybride** (table large `sample_machine` +
+    `sample_service`), déjà taillé pour les rollups/rétention/purge à venir. **NULL
+    préservés** : une valeur absente n'est jamais un 0 (température sous Windows, source
+    hors ligne…).
+  - **Sous-échantillonnage côté serveur** : la série renvoyée par `/monitor/data` suit
+    la période demandée (~300 points), jamais le brut ; les trous restent des trous.
+  - **Page `/monitor`** : vue d'ensemble (CPU, RAM, température, charge, stockage,
+    services actifs, uptime) + séries temporelles CPU / RAM / température / charge, avec
+    sélecteur de machine et de période (1 h → 30 j), filtres persistants (localStorage),
+    badge de version. Lien ajouté au portail. Configurée via le module `monitor`
+    (`sources`, `interval_ms`, `db_path`).
+  - Détail par service, activités (compilations…), baseline et anomalies : incréments
+    suivants.
+
 ## [0.23.3] - 2026-08-14
 
 ### Modifié

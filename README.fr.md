@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.23.3-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.24.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -125,6 +125,14 @@ source de vérité reste MeteoHub.
   via le module `photo` de la configuration (`source_url`, p. ex.
   `http://127.0.0.1:8793`) ; si morfPhoto est injoignable ou le module absent, la
   page l'indique explicitement.
+- `/monitor` historise les métriques des machines du parc remontées par
+  **morfMonitor** (CPU, mémoire, température, charge, services actifs) et les
+  représente **dans le temps** : vue d'ensemble et séries CPU / RAM / température,
+  avec sélecteur de machine et de période. morfMonitor reste la sonde
+  (« maintenant ») ; ce domaine donne la mémoire dans la durée. Les relevés sont
+  historisés dans `/opt/morfanalytics/cache/monitor.sqlite`. Premier incrément :
+  le détail par service, les activités et les anomalies viendront ensuite. Réglé
+  via le module `monitor` (`sources`, une entrée par morfMonitor à interroger).
 
 ## Architecture des pages Web
 

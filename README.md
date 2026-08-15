@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.23.3-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.24.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -102,6 +102,16 @@ interval (never the file list) and keeps a snapshot. Configure the source throug
 the `photo` module of the configuration (`source_url`, e.g.
 `http://127.0.0.1:8793`); if morfPhoto is unreachable or the module is missing,
 the page says so explicitly.
+
+## Machine history (morfMonitor)
+
+The `/monitor` space historises the machine metrics reported by **morfMonitor**
+(CPU, memory, temperature, load, active services) and charts them **over time**: an
+overview plus CPU / RAM / temperature series, with a machine and period selector.
+morfMonitor stays the probe ("now"); this domain provides the memory over time.
+Samples are stored in `/opt/morfanalytics/cache/monitor.sqlite`. First increment:
+per-service detail, activities and anomalies come next. Configure it through the
+`monitor` module (`sources`, one entry per morfMonitor to poll).
 
 ## Available analyses
 

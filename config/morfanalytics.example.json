@@ -55,6 +55,20 @@
 
       "_comment_exclude_cameras": "Perimetre de pratique (corpus != pratique) : la presence d'un fichier n'implique ni appartenance ni usage personnel. Boitiers exclus PAR DEFAUT des analyses (noms exacts du modele, tels qu'exposes par morfPhoto), par exemple du materiel emprunte ou des fichiers importes d'autrui. Exclure est une INTERPRETATION : elle vit ici, jamais dans morfPhoto (souverain). La page /photo fusionne ces exclusions avec celles choisies dans le navigateur (memorisees localement), et chacune reste levable a la main.",
       "exclude_cameras": []
+    },
+    {
+      "_comment": "Domaine Monitor : historise les metriques d'un ou plusieurs morfMonitor (leur /api/all) et sert la page /monitor. morfMonitor reste la sonde (maintenant) ; ce module donne la memoire dans le temps. Aucune sonde systeme ici.",
+      "type": "monitor",
+      "id": "monitor-1",
+
+      "_comment_sources": "morfMonitor a interroger. Sur le Pi ou tourne aussi morfMonitor : http://127.0.0.1:8790. Ajouter une entree par machine du parc a historiser (ex. http://pi4dev:8790). Sans source, la page /monitor reste vide.",
+      "sources": [ "http://127.0.0.1:8790" ],
+
+      "_comment_interval": "Cadence d'echantillonnage, en ms. 15 s par defaut : assez fin pour CPU/RAM, assez doux pour ne pas peser. Une passe re-lit /api/all et ecrit un releve par machine.",
+      "interval_ms": 15000,
+
+      "_comment_db": "Cache historique (SQLite). Vide => <cache_dir>/monitor.sqlite, defaut /opt/morfanalytics/cache/monitor.sqlite.",
+      "db_path": ""
     }
   ]
 }

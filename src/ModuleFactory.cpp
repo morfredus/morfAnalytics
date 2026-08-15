@@ -8,6 +8,7 @@
 #include "morfanalytics/IModule.h"
 #include "morfanalytics/AnalyticsModule.h"
 #include "morfanalytics/PhotoAnalyticsModule.h"
+#include "morfanalytics/MonitorModule.h"
 
 #include <QJsonArray>
 #include <QStringList>
@@ -62,13 +63,35 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
         return new PhotoAnalyticsModule(def.id, sourceUrl, refreshMs, buckets, excludeCameras, parent);
     }
 
+    // Domaine Monitor : historise les métriques d'un ou plusieurs morfMonitor.
+    if (type == QLatin1String("monitor")) {
+        const int intervalMs = def.params.value("interval_ms").toInt(15000);
+        QStringList sources;
+        for (const QJsonValue& v : def.params.value("sources").toArray())
+            if (v.isString())
+                sources << v.toString();
+        // Tolère aussi une source unique (source_url), comme les autres modules.
+        const QString single = def.params.value("source_url").toString();
+        if (!single.isEmpty() && !sources.contains(single))
+            sources << single;
+        // Emplacement du cache historique : db_path explicite, sinon dérivé de
+        // cache_dir, sinon l'emplacement standard du service.
+        QString dbPath = def.params.value("db_path").toString();
+        if (dbPath.isEmpty()) {
+            const QString cacheDir = def.params.value("cache_dir")
+                .toString(QStringLiteral("/opt/morfanalytics/cache"));
+            dbPath = cacheDir + QStringLiteral("/monitor.sqlite");
+        }
+        return new MonitorModule(def.id, sources, intervalMs, dbPath, parent);
+    }
+
     if (error)
         *error = QStringLiteral("type de module inconnu : '%1'").arg(def.type);
     return nullptr;
 }
 
 QStringList knownTypes() {
-    return { QStringLiteral("analytics"), QStringLiteral("photo") };
+    return { QStringLiteral("analytics"), QStringLiteral("photo"), QStringLiteral("monitor") };
 }
 
 } // namespace ModuleFactory
