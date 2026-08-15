@@ -46,6 +46,18 @@ select{background:#242830;border:1px solid var(--line);color:var(--ink);border-r
 .chart .ax{fill:var(--muted);font-size:10px}.chart .grid-l{stroke:var(--line);stroke-width:1}
 .dot{width:.55rem;height:.55rem;border-radius:50%;display:inline-block;margin-right:.35rem;vertical-align:middle}
 .pill{font-size:.74rem;border:1px solid var(--line);border-radius:999px;padding:.1rem .5rem;color:var(--muted)}
+.cols2{display:grid;grid-template-columns:repeat(auto-fit,minmax(20rem,1fr));gap:1rem}
+.brow{display:flex;align-items:center;gap:.6rem;margin:.35rem 0}
+.blab{width:9rem;text-align:right;color:var(--soft);font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{flex:1;background:var(--track);border-radius:6px;overflow:hidden;height:.8rem}
+.bar i{display:block;height:100%}
+.bval{width:5.5rem;text-align:right;color:var(--muted);font-size:.85rem;font-variant-numeric:tabular-nums}
+.tscroll{overflow-x:auto}
+table.svc{width:100%;border-collapse:collapse;font-size:.86rem;min-width:32rem}
+table.svc th,table.svc td{padding:.3rem .55rem;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+table.svc th:first-child,table.svc td:first-child{text-align:left;font-variant-numeric:normal}
+table.svc thead th{color:var(--muted);border-bottom:1px solid var(--line);font-weight:600}
+table.svc tbody tr:nth-child(even){background:#1a1d22}
 </style></head><body><div class="wrap">
 <p><a href="/">&larr; morfAnalytics</a></p>
 <h1>Analyse des machines <span id="vb" class="vb"></span></h1>
@@ -143,6 +155,28 @@ function render(data){
   html+=card("Température CPU","temp" in sr?sr.temp:[], fmtNum(ov.temp_cpu,1)+" °C", {unit:"°",dec:0,color:"#e6a54e"});
   html+=card("Charge (load 1 min)","load" in sr?sr.load:[], fmtNum(ov.load1,2), {dec:1,color:"#a487f2"});
   if(sr.bucket_s)html+='<p class="muted" style="font-size:.8rem">Résolution&nbsp;: 1 point ≈ '+fmtDur(sr.bucket_s)+'. Les trous (source hors ligne) restent visibles, jamais comblés par des zéros.</p>';
+
+  // Qui consomme quoi : consommation par service, agrégée sur la période.
+  const svc=(data.services||[]).filter(s=>s.service);
+  html+='<h2>Qui consomme quoi <span class="muted" style="font-size:.8rem;font-weight:400">(moyenne sur la période)</span></h2>';
+  if(!svc.length){
+    html+='<div class="chart"><p class="muted">Aucun service supervisé remonté par cette machine sur la période. '+
+      'La consommation par service dépend de <code>systemd_services</code> côté morfMonitor '+
+      '(sous Windows, des processus <code>&lt;unit&gt;.exe</code>).</p></div>';
+  } else {
+    const cpuTop=svc.filter(s=>s.cpu_avg!=null).slice(0,8);
+    const cpuMax=Math.max.apply(null,[1].concat(cpuTop.map(s=>s.cpu_avg)));
+    const memTop=svc.filter(s=>s.mem_avg!=null).slice().sort((a,b)=>b.mem_avg-a.mem_avg).slice(0,8);
+    const memMax=Math.max.apply(null,[1].concat(memTop.map(s=>s.mem_avg)));
+    function bars(rows,val,mx,fmt,col){return rows.map(s=>{const v=val(s);const w=Math.max(1,100*v/mx);
+      return '<div class="brow"><span class="blab">'+s.service+'</span><span class="bar"><i style="width:'+w.toFixed(0)+'%;background:'+col+'"></i></span><span class="bval">'+fmt(v)+'</span></div>';}).join("");}
+    html+='<div class="cols2">'+
+      '<div class="chart"><h3>CPU</h3>'+(cpuTop.length?bars(cpuTop,s=>s.cpu_avg,cpuMax,v=>v.toFixed(1)+" %","#6f9bff"):'<span class="muted">—</span>')+'</div>'+
+      '<div class="chart"><h3>Mémoire</h3>'+(memTop.length?bars(memTop,s=>s.mem_avg,memMax,fmtBytes,"#7ee0b8"):'<span class="muted">—</span>')+'</div></div>';
+    html+='<div class="chart tscroll"><table class="svc"><thead><tr><th>Service</th><th>CPU moy</th><th>CPU max</th><th>RAM moy</th><th>RAM max</th><th>relevés</th></tr></thead><tbody>'+
+      svc.map(s=>'<tr><td>'+s.service+'</td><td>'+(s.cpu_avg==null?"—":s.cpu_avg.toFixed(1)+" %")+'</td><td>'+(s.cpu_max==null?"—":s.cpu_max.toFixed(1)+" %")+'</td><td>'+fmtBytes(s.mem_avg)+'</td><td>'+fmtBytes(s.mem_max)+'</td><td>'+fmtNum(s.samples)+'</td></tr>').join("")+
+      '</tbody></table></div>';
+  }
   app.innerHTML=html;
 }
 

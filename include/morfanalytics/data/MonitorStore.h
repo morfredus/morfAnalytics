@@ -84,6 +84,17 @@ public:
     // masquer les pics). Les trous restent des null, jamais des zéros.
     QJsonObject machineSeries(int machineId, qint64 from, qint64 to, int maxPoints) const;
 
+    // « Qui consomme quoi » : consommation par service agrégée sur [from, to]
+    // (moyenne et maximum de CPU et de mémoire), triée par CPU moyen décroissant.
+    // C'est la matière de la vue Services du domaine Monitor.
+    QJsonArray serviceStats(int machineId, qint64 from, qint64 to) const;
+
+    // Rétention : supprime les relevés BRUTS antérieurs à `cutoffTs`, pour borner
+    // la base sur une machine modeste. Étape simple ; la compaction par paliers
+    // (rollups + mémoire remarquable) viendra ensuite. Renvoie le nombre de lignes
+    // supprimées (machine + service), ou -1 en cas d'erreur.
+    qint64 purgeSamplesBefore(qint64 cutoffTs);
+
     int machineIdForKey(const QString& key) const;
 
 private:

@@ -60,6 +60,9 @@
       "_comment_interval": "Cadence d'echantillonnage, en ms. 15 s par defaut : assez fin pour le CPU/RAM, assez doux pour ne pas peser. La cadence par famille de metriques viendra dans un incrément ulterieur.",
       "interval_ms": 15000,
 
+      "_comment_retention": "Retention des releves BRUTS, en jours. 0 => illimite. Etape simple avant la compaction par paliers (rollups + memoire remarquable) a venir.",
+      "retention_days": 90,
+
       "_comment_db": "Emplacement du cache historique (SQLite). Vide => <cache_dir>/monitor.sqlite, defaut /opt/morfanalytics/cache/monitor.sqlite.",
       "db_path": ""
     }

@@ -3,6 +3,22 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.25.0] - 2026-08-15
+
+### Ajouté
+
+- **Monitor — vue « qui consomme quoi » (par service).** La page `/monitor` gagne une
+  section Services : classement des services par CPU et par mémoire (moyenne sur la
+  période) en barres, et tableau détaillé (CPU moy/max, RAM moy/max, nombre de relevés)
+  par service. Les relevés par service étaient déjà collectés depuis 0.24.0 ; ils sont
+  maintenant agrégés (`MonitorStore::serviceStats`) et exposés dans `/monitor/data`.
+  C'est la partie que la spec appelle essentielle : passer de « la machine travaille » à
+  « ce service coûte tant ».
+- **Rétention des relevés bruts** (`retention_days`, défaut 90 ; `0` = illimité). Le
+  module purge une fois par jour les relevés machine et service antérieurs à l'horizon,
+  pour borner la base sur une machine modeste. Étape simple avant la compaction par
+  paliers (rollups + mémoire remarquable) prévue ensuite. Exposée dans `/modules`.
+
 ## [0.24.0] - 2026-08-15
 
 ### Ajouté

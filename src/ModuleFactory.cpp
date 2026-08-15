@@ -82,7 +82,10 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
                 .toString(QStringLiteral("/opt/morfanalytics/cache"));
             dbPath = cacheDir + QStringLiteral("/monitor.sqlite");
         }
-        return new MonitorModule(def.id, sources, intervalMs, dbPath, parent);
+        // Rétention des relevés bruts, en jours (0 => illimité). Étape simple avant
+        // la compaction par paliers à venir.
+        const int retentionDays = def.params.value("retention_days").toInt(90);
+        return new MonitorModule(def.id, sources, intervalMs, dbPath, retentionDays, parent);
     }
 
     if (error)

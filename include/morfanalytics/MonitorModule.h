@@ -37,7 +37,7 @@ class MonitorModule : public IModule {
     Q_OBJECT
 public:
     MonitorModule(const QString& id, QStringList sources, int intervalMs,
-                  QString dbPath, QObject* parent = nullptr);
+                  QString dbPath, int retentionDays, QObject* parent = nullptr);
     ~MonitorModule() override;
 
     bool start() override;
@@ -62,6 +62,8 @@ private:
     QStringList m_sources;
     int         m_intervalMs;
     QString     m_dbPath;
+    int         m_retentionDays;   // 0 => conserver indéfiniment
+    qint64      m_lastPurgeAt = 0; // throttle de la purge de rétention
 
     std::unique_ptr<MonitorStore> m_store;
     QTimer*                m_timer = nullptr;

@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.24.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.25.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -107,11 +107,15 @@ the page says so explicitly.
 
 The `/monitor` space historises the machine metrics reported by **morfMonitor**
 (CPU, memory, temperature, load, active services) and charts them **over time**: an
-overview plus CPU / RAM / temperature series, with a machine and period selector.
+overview, CPU / RAM / temperature / load series, and a **who-consumes-what**
+per-service breakdown (top CPU and RAM consumers, plus per-service averages and
+maxima over the period), with a machine and period selector (1 h - 30 d).
 morfMonitor stays the probe ("now"); this domain provides the memory over time.
-Samples are stored in `/opt/morfanalytics/cache/monitor.sqlite`. First increment:
-per-service detail, activities and anomalies come next. Configure it through the
-`monitor` module (`sources`, one entry per morfMonitor to poll).
+Samples are stored in `/opt/morfanalytics/cache/monitor.sqlite`, with a
+configurable raw-sample retention (`retention_days`, 90 by default; `0` = keep
+forever) as a first step before tiered compaction. Activities (builds), baseline
+and anomalies come next. Configure it through the `monitor` module (`sources`, one
+entry per morfMonitor to poll, plus `interval_ms` and `retention_days`).
 
 ## Available analyses
 

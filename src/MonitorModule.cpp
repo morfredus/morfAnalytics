@@ -27,11 +27,12 @@ double num(const QJsonValue& v) { return v.isDouble() ? v.toDouble() : qQNaN(); 
 } // namespace
 
 MonitorModule::MonitorModule(const QString& id, QStringList sources, int intervalMs,
-                             QString dbPath, QObject* parent)
+                             QString dbPath, int retentionDays, QObject* parent)
     : IModule(id, QStringLiteral("monitor"), parent),
       m_sources(std::move(sources)),
       m_intervalMs(intervalMs > 0 ? intervalMs : 15000),
-      m_dbPath(std::move(dbPath)) {}
+      m_dbPath(std::move(dbPath)),
+      m_retentionDays(retentionDays) {}
 
 MonitorModule::~MonitorModule() { stop(); }
 
@@ -65,6 +66,16 @@ void MonitorModule::poll() {
         return;
     for (const QString& s : m_sources)
         fetch(s);
+
+    // Rétention : au plus une fois par jour, supprimer les relevés bruts au-delà de
+    // l'horizon configuré. Borne la base sur une machine modeste. 0 => illimité.
+    if (m_store && m_retentionDays > 0) {
+        const qint64 now = QDateTime::currentSecsSinceEpoch();
+        if (now - m_lastPurgeAt > 86400) {
+            m_lastPurgeAt = now;
+            m_store->purgeSamplesBefore(now - static_cast<qint64>(m_retentionDays) * 86400);
+        }
+    }
 }
 
 void MonitorModule::fetch(const QString& baseUrl) {
@@ -186,6 +197,7 @@ QJsonObject MonitorModule::data(const QString& machineKey, qint64 fromTs, qint64
         if (mid >= 0) {
             o["overview"] = m_store->latestMachine(mid);
             o["series"]   = m_store->machineSeries(mid, fromTs, toTs, maxPoints);
+            o["services"] = m_store->serviceStats(mid, fromTs, toTs);
         }
     }
     if (!m_store)
@@ -197,6 +209,7 @@ QJsonObject MonitorModule::statusJson() const {
     QJsonObject o;
     o["sources"]        = QJsonArray::fromStringList(m_sources);
     o["interval_ms"]    = m_intervalMs;
+    o["retention_days"] = m_retentionDays;
     o["machines_known"] = m_store ? m_store->machines().size() : 0;
     o["last_poll_at"]   = m_lastPollAt ? QJsonValue(static_cast<double>(m_lastPollAt))
                                        : QJsonValue(QJsonValue::Null);

@@ -279,4 +279,48 @@ QJsonObject MonitorStore::machineSeries(int machineId, qint64 from, qint64 to,
     };
 }
 
+QJsonArray MonitorStore::serviceStats(int machineId, qint64 from, qint64 to) const {
+    QJsonArray arr;
+    QSqlQuery q(m_db);
+    // AVG/MAX ignorent les NULL : un service dont le CPU n'a jamais été mesuré sur
+    // la fenêtre ressort avec cpu_avg null, pas 0. Tri par CPU moyen décroissant :
+    // « qui a le plus consommé sur la période » en tête.
+    q.prepare(QStringLiteral(
+        "SELECT service, AVG(cpu_percent), MAX(cpu_percent), "
+        " AVG(mem_bytes), MAX(mem_bytes), COUNT(*) "
+        "FROM sample_service WHERE machine_id=? AND ts>=? AND ts<=? "
+        "GROUP BY service ORDER BY AVG(cpu_percent) DESC, service"));
+    q.addBindValue(machineId);
+    q.addBindValue(static_cast<qlonglong>(from));
+    q.addBindValue(static_cast<qlonglong>(to));
+    if (q.exec()) {
+        while (q.next()) {
+            arr.append(QJsonObject{
+                {"service", q.value(0).toString()},
+                {"cpu_avg", numOrNull(q.value(1))},
+                {"cpu_max", numOrNull(q.value(2))},
+                {"mem_avg", numOrNull(q.value(3))},
+                {"mem_max", numOrNull(q.value(4))},
+                {"samples", static_cast<double>(q.value(5).toLongLong())},
+            });
+        }
+    }
+    return arr;
+}
+
+qint64 MonitorStore::purgeSamplesBefore(qint64 cutoffTs) {
+    QSqlQuery q(m_db);
+    qint64 total = 0;
+    for (const char* table : {"sample_machine", "sample_service"}) {
+        q.prepare(QStringLiteral("DELETE FROM %1 WHERE ts < ?").arg(QLatin1String(table)));
+        q.addBindValue(static_cast<qlonglong>(cutoffTs));
+        if (!q.exec()) {
+            m_lastError = q.lastError().text();
+            return -1;
+        }
+        total += q.numRowsAffected();
+    }
+    return total;
+}
+
 } // namespace morfanalytics
