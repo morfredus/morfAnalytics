@@ -85,6 +85,9 @@ function fmtNum(v,d){return (v===null||v===undefined)?"—":(+v).toFixed(d===und
 function fmtBytes(b){if(b===null||b===undefined)return "—";const u=["o","Ko","Mo","Go","To"];let i=0;b=+b;while(b>=1024&&i<u.length-1){b/=1024;i++;}return b.toFixed(b<10&&i>0?1:0)+" "+u[i];}
 function fmtDur(s){if(s===null||s===undefined)return "—";s=+s;const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);if(d>0)return d+" j "+h+" h";if(h>0)return h+" h "+m+" min";return m+" min";}
 function fmtClock(ts){const d=new Date(ts*1000);return d.toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});}
+function statusPill(s){const c=s==="success"?"var(--ok)":s==="failed"?"var(--bad)":"var(--muted)";
+  const t=s==="success"?"succès":s==="failed"?"échec":s==="cancelled"?"interrompu":(s||"—");
+  return '<span class="dot" style="background:'+c+'"></span>'+t;}
 
 // Petit graphe en ligne (SVG), auto-echelle, trous preserves (les null coupent
 // le trait au lieu d'inventer une valeur). Grille et valeur courante discretes.
@@ -176,6 +179,32 @@ function render(data){
     html+='<div class="chart tscroll"><table class="svc"><thead><tr><th>Service</th><th>CPU moy</th><th>CPU max</th><th>RAM moy</th><th>RAM max</th><th>relevés</th></tr></thead><tbody>'+
       svc.map(s=>'<tr><td>'+s.service+'</td><td>'+(s.cpu_avg==null?"—":s.cpu_avg.toFixed(1)+" %")+'</td><td>'+(s.cpu_max==null?"—":s.cpu_max.toFixed(1)+" %")+'</td><td>'+fmtBytes(s.mem_avg)+'</td><td>'+fmtBytes(s.mem_max)+'</td><td>'+fmtNum(s.samples)+'</td></tr>').join("")+
       '</tbody></table></div>';
+  }
+
+  // Activités & compilations : signalées par le composant qui les connaît (morfDeploy
+  // pour un build), historisées, et croisées avec le coût système de leur fenêtre.
+  const bd=data.builds||{}, bt=bd.total||{}, acts=data.activities||[];
+  html+='<h2>Activités &amp; compilations</h2>';
+  if(!(bt.count>0)&&!acts.length){
+    html+='<div class="chart"><p class="muted">Aucune activité enregistrée sur la période. '+
+      'Les compilations y apparaissent quand morfDeploy signale un build '+
+      '(<code>POST /api/monitor/activity</code>) ; même mécanisme pour indexations, sauvegardes, déploiements.</p></div>';
+  } else {
+    if(bt.count>0){
+      html+='<div class="grid">'+
+        tile("Compilations",fmtNum(bt.count),fmtNum(bt.success)+" réussies · "+fmtNum(bt.failed)+" échouées")+
+        tile("Temps total",fmtDur(bt.total_duration_s),"compilations réussies")+
+        '</div>';
+      const pj=bd.projects||[];
+      if(pj.length)html+='<div class="chart tscroll"><table class="svc"><thead><tr><th>Projet</th><th>Builds</th><th>Réussis</th><th>Échoués</th><th>Temps total</th><th>Durée moy</th><th>min</th><th>max</th></tr></thead><tbody>'+
+        pj.map(p=>'<tr><td>'+p.project+'</td><td>'+fmtNum(p.count)+'</td><td>'+fmtNum(p.success)+'</td><td>'+fmtNum(p.failed)+'</td><td>'+fmtDur(p.total_duration_s)+'</td><td>'+fmtDur(p.avg_duration_s)+'</td><td>'+fmtDur(p.min_duration_s)+'</td><td>'+fmtDur(p.max_duration_s)+'</td></tr>').join("")+
+        '</tbody></table></div>';
+    }
+    if(acts.length){
+      html+='<h3>Dernières activités</h3><div class="chart tscroll"><table class="svc"><thead><tr><th>Quand</th><th>Type</th><th>Projet</th><th>Durée</th><th>Résultat</th><th>CPU max</th><th>Temp max</th></tr></thead><tbody>'+
+        acts.map(a=>{const w=a.window||{};return '<tr><td>'+fmtClock(a.start_ts)+'</td><td>'+a.type+'</td><td>'+(a.project||"—")+'</td><td>'+fmtDur(a.duration_s)+'</td><td>'+statusPill(a.status)+'</td><td>'+(w.cpu_max==null?"—":w.cpu_max.toFixed(0)+" %")+'</td><td>'+(w.temp_max==null?"—":w.temp_max.toFixed(0)+" °C")+'</td></tr>';}).join("")+
+        '</tbody></table></div>';
+    }
   }
   app.innerHTML=html;
 }

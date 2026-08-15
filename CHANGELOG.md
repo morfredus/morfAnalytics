@@ -3,6 +3,23 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.26.0] - 2026-08-16
+
+### Ajouté
+
+- **Monitor — activités & compilations.** Le domaine gagne un modèle d'activité
+  générique et la vue Builds, le cas d'usage central de la spec.
+  - **Endpoint d'ingestion** `POST /api/monitor/activity` : un composant qui connaît
+    son activité (compilation, indexation…) la signale ; elle est historisée dans une
+    table `activity` **indépendante des samples** (elle survit à la purge du brut). On
+    ne devine jamais une activité d'un pic CPU.
+  - **Vue Builds** sur `/monitor` : compilations par projet (nombre, réussites/échecs,
+    temps total, durée moyenne/min/max — sur les builds réussis pour ne pas fausser la
+    moyenne), et liste des dernières activités avec le **coût système** mesuré sur la
+    fenêtre exacte de chacune (`MonitorStore::windowStats`).
+  - Correctif : les builds/activités sont renvoyés même quand aucune machine n'est
+    encore historisée (ils ne dépendent pas des samples).
+
 ## [0.25.0] - 2026-08-15
 
 ### Ajouté

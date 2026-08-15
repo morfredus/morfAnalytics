@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.25.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.26.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -113,9 +113,14 @@ maxima over the period), with a machine and period selector (1 h - 30 d).
 morfMonitor stays the probe ("now"); this domain provides the memory over time.
 Samples are stored in `/opt/morfanalytics/cache/monitor.sqlite`, with a
 configurable raw-sample retention (`retention_days`, 90 by default; `0` = keep
-forever) as a first step before tiered compaction. Activities (builds), baseline
-and anomalies come next. Configure it through the `monitor` module (`sources`, one
-entry per morfMonitor to poll, plus `interval_ms` and `retention_days`).
+forever) as a first step before tiered compaction. **Activities** are historised
+too: any component that knows what it is doing posts one to
+`POST /api/monitor/activity`. **Compilations** are the first case — morfDeploy emits
+one per build (set `MORFANALYTICS_ACTIVITY_URL` on the build machine), and the page
+shows per-project build stats (count, success rate, total/average/min/max duration)
+plus the system cost measured over each build's exact window. Baseline and anomalies
+come next. Configure it through the `monitor` module (`sources`, one entry per
+morfMonitor to poll, plus `interval_ms` and `retention_days`).
 
 ## Available analyses
 

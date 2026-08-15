@@ -95,6 +95,29 @@ public:
     // supprimées (machine + service), ou -1 en cas d'erreur.
     qint64 purgeSamplesBefore(qint64 cutoffTs);
 
+    // --- Activités (compilations, indexations…) -----------------------------
+    // Une activité est signalée par le composant qui la connaît (§34) : on ne la
+    // devine pas d'un pic CPU. `metadata` est un objet libre (preset, commit…).
+    // Renvoie l'id, ou -1.
+    qint64 insertActivity(const QString& type, const QString& project,
+                          const QString& machine, qint64 startTs, qint64 endTs,
+                          const QString& status, const QJsonObject& metadata);
+
+    // Statistiques système (CPU, température, mémoire, charge : moyenne et max)
+    // sur la fenêtre [from, to] d'une machine. Sert à mesurer le COÛT réel d'une
+    // activité (ce que faisait la machine pendant qu'elle compilait).
+    QJsonObject windowStats(int machineId, qint64 from, qint64 to) const;
+
+    // Statistiques de compilation par projet sur [from, to] : nombre, réussites,
+    // échecs, temps total et durée moyenne/min/max (sur les builds RÉUSSIS, pour
+    // qu'un échec de 3 s ne fausse pas la durée normale, §43). Plus des totaux.
+    QJsonObject buildStats(const QString& machine, qint64 from, qint64 to) const;
+
+    // Dernières activités sur [from, to], chacune enrichie de ses stats système
+    // (fenêtre exacte de l'activité). `machine` vide => toutes machines.
+    QJsonArray recentActivities(const QString& machine, qint64 from, qint64 to,
+                                int limit) const;
+
     int machineIdForKey(const QString& key) const;
 
 private:

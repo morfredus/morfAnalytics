@@ -13,6 +13,7 @@
 #include <QDir>
 #include <QUuid>
 #include <QDateTime>
+#include <QJsonDocument>
 
 #include <cmath>
 
@@ -91,7 +92,24 @@ bool MonitorStore::open() {
     q.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS idx_ss_svc "
                           "ON sample_service (machine_id, service, ts)"));
 
-    if (!okMachine || !okSM || !okSS) {
+    // Table des activités (compilations, indexations…), INDÉPENDANTE des samples :
+    // la mémoire remarquable survit à la purge du brut. Signalées par le composant
+    // qui les connaît (jamais devinées).
+    const bool okAct = q.exec(QStringLiteral(
+        "CREATE TABLE IF NOT EXISTS activity ("
+        " id INTEGER PRIMARY KEY,"
+        " type TEXT NOT NULL,"
+        " project TEXT,"
+        " machine TEXT,"
+        " start_ts INTEGER,"
+        " end_ts INTEGER,"
+        " duration_s INTEGER,"
+        " status TEXT,"
+        " metadata TEXT)"));
+    q.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS idx_activity_time "
+                          "ON activity (machine, start_ts)"));
+
+    if (!okMachine || !okSM || !okSS || !okAct) {
         m_lastError = q.lastError().text();
         return false;
     }
@@ -321,6 +339,140 @@ qint64 MonitorStore::purgeSamplesBefore(qint64 cutoffTs) {
         total += q.numRowsAffected();
     }
     return total;
+}
+
+qint64 MonitorStore::insertActivity(const QString& type, const QString& project,
+                                    const QString& machine, qint64 startTs, qint64 endTs,
+                                    const QString& status, const QJsonObject& metadata) {
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral(
+        "INSERT INTO activity (type, project, machine, start_ts, end_ts, duration_s, status, metadata) "
+        "VALUES (?,?,?,?,?,?,?,?)"));
+    q.addBindValue(type);
+    q.addBindValue(project.isEmpty() ? QVariant() : QVariant(project));
+    q.addBindValue(machine.isEmpty() ? QVariant() : QVariant(machine));
+    q.addBindValue(static_cast<qlonglong>(startTs));
+    q.addBindValue(static_cast<qlonglong>(endTs));
+    q.addBindValue(static_cast<qlonglong>(endTs >= startTs ? endTs - startTs : 0));
+    q.addBindValue(status.isEmpty() ? QVariant() : QVariant(status));
+    q.addBindValue(metadata.isEmpty() ? QVariant()
+                                      : QVariant(QString::fromUtf8(QJsonDocument(metadata).toJson(QJsonDocument::Compact))));
+    if (!q.exec()) { m_lastError = q.lastError().text(); return -1; }
+    return q.lastInsertId().toLongLong();
+}
+
+QJsonObject MonitorStore::windowStats(int machineId, qint64 from, qint64 to) const {
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral(
+        "SELECT AVG(cpu_percent), MAX(cpu_percent), AVG(temp_cpu), MAX(temp_cpu), "
+        " AVG(mem_percent), MAX(mem_percent), MAX(load1), COUNT(*) "
+        "FROM sample_machine WHERE machine_id=? AND ts>=? AND ts<=?"));
+    q.addBindValue(machineId);
+    q.addBindValue(static_cast<qlonglong>(from));
+    q.addBindValue(static_cast<qlonglong>(to));
+    if (!q.exec() || !q.next())
+        return {};
+    return QJsonObject{
+        {"cpu_avg",  numOrNull(q.value(0))}, {"cpu_max",  numOrNull(q.value(1))},
+        {"temp_avg", numOrNull(q.value(2))}, {"temp_max", numOrNull(q.value(3))},
+        {"mem_avg",  numOrNull(q.value(4))}, {"mem_max",  numOrNull(q.value(5))},
+        {"load_max", numOrNull(q.value(6))},
+        {"samples",  static_cast<double>(q.value(7).toLongLong())},
+    };
+}
+
+QJsonObject MonitorStore::buildStats(const QString& machine, qint64 from, qint64 to) const {
+    QJsonArray projects;
+    QSqlQuery q(m_db);
+    // Filtre machine optionnel : chaîne vide => toutes machines.
+    const QString machineClause = machine.isEmpty() ? QString()
+                                                    : QStringLiteral(" AND machine=?");
+    // Durées sur les builds RÉUSSIS uniquement (CASE => NULL sinon, ignoré par AVG/MIN/MAX).
+    q.prepare(QStringLiteral(
+        "SELECT project, COUNT(*), "
+        " SUM(CASE WHEN status='success' THEN 1 ELSE 0 END), "
+        " SUM(CASE WHEN status='failed'  THEN 1 ELSE 0 END), "
+        " SUM(CASE WHEN status='success' THEN duration_s END), "
+        " AVG(CASE WHEN status='success' THEN duration_s END), "
+        " MIN(CASE WHEN status='success' THEN duration_s END), "
+        " MAX(CASE WHEN status='success' THEN duration_s END) "
+        "FROM activity WHERE type='compile' AND start_ts>=? AND start_ts<=?") + machineClause +
+        QStringLiteral(" GROUP BY project ORDER BY SUM(CASE WHEN status='success' THEN duration_s END) DESC"));
+    q.addBindValue(static_cast<qlonglong>(from));
+    q.addBindValue(static_cast<qlonglong>(to));
+    if (!machine.isEmpty()) q.addBindValue(machine);
+
+    qint64 totalCount = 0, totalSucc = 0, totalFail = 0, totalDur = 0;
+    if (q.exec()) {
+        while (q.next()) {
+            const qint64 c = q.value(1).toLongLong();
+            const qint64 s = q.value(2).toLongLong();
+            const qint64 f = q.value(3).toLongLong();
+            totalCount += c; totalSucc += s; totalFail += f;
+            totalDur += q.value(4).toLongLong();
+            projects.append(QJsonObject{
+                {"project", q.value(0).toString().isEmpty() ? QStringLiteral("(inconnu)") : q.value(0).toString()},
+                {"count", static_cast<double>(c)},
+                {"success", static_cast<double>(s)},
+                {"failed", static_cast<double>(f)},
+                {"total_duration_s", numOrNull(q.value(4))},
+                {"avg_duration_s", numOrNull(q.value(5))},
+                {"min_duration_s", numOrNull(q.value(6))},
+                {"max_duration_s", numOrNull(q.value(7))},
+            });
+        }
+    }
+    return QJsonObject{
+        {"projects", projects},
+        {"total", QJsonObject{
+            {"count", static_cast<double>(totalCount)},
+            {"success", static_cast<double>(totalSucc)},
+            {"failed", static_cast<double>(totalFail)},
+            {"total_duration_s", static_cast<double>(totalDur)}}},
+    };
+}
+
+QJsonArray MonitorStore::recentActivities(const QString& machine, qint64 from, qint64 to,
+                                          int limit) const {
+    QJsonArray arr;
+    if (limit < 1) limit = 20;
+    QSqlQuery q(m_db);
+    const QString machineClause = machine.isEmpty() ? QString()
+                                                    : QStringLiteral(" AND machine=?");
+    q.prepare(QStringLiteral(
+        "SELECT id, type, project, machine, start_ts, end_ts, duration_s, status, metadata "
+        "FROM activity WHERE end_ts>=? AND start_ts<=?") + machineClause +
+        QStringLiteral(" ORDER BY start_ts DESC LIMIT ?"));
+    q.addBindValue(static_cast<qlonglong>(from));
+    q.addBindValue(static_cast<qlonglong>(to));
+    if (!machine.isEmpty()) q.addBindValue(machine);
+    q.addBindValue(limit);
+    if (!q.exec())
+        return arr;
+    while (q.next()) {
+        const QString mkey = q.value(3).toString();
+        const qint64 st = q.value(4).toLongLong();
+        const qint64 en = q.value(5).toLongLong();
+        QJsonObject a{
+            {"id", static_cast<double>(q.value(0).toLongLong())},
+            {"type", q.value(1).toString()},
+            {"project", q.value(2).toString()},
+            {"machine", mkey},
+            {"start_ts", static_cast<double>(st)},
+            {"end_ts", static_cast<double>(en)},
+            {"duration_s", static_cast<double>(q.value(6).toLongLong())},
+            {"status", q.value(7).toString()},
+        };
+        const QString meta = q.value(8).toString();
+        if (!meta.isEmpty())
+            a["metadata"] = QJsonDocument::fromJson(meta.toUtf8()).object();
+        // Coût système réel de l'activité : stats sur sa fenêtre exacte.
+        const int mid = machineIdForKey(mkey);
+        if (mid >= 0)
+            a["window"] = windowStats(mid, st, en);
+        arr.append(a);
+    }
+    return arr;
 }
 
 } // namespace morfanalytics

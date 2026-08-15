@@ -192,17 +192,50 @@ QJsonObject MonitorModule::data(const QString& machineKey, qint64 fromTs, qint64
     o["from"] = static_cast<double>(fromTs);
     o["to"]   = static_cast<double>(toTs);
 
-    if (m_store && !key.isEmpty()) {
-        const int mid = m_store->machineIdForKey(key);
-        if (mid >= 0) {
-            o["overview"] = m_store->latestMachine(mid);
-            o["series"]   = m_store->machineSeries(mid, fromTs, toTs, maxPoints);
-            o["services"] = m_store->serviceStats(mid, fromTs, toTs);
+    if (m_store) {
+        if (!key.isEmpty()) {
+            const int mid = m_store->machineIdForKey(key);
+            if (mid >= 0) {
+                o["overview"] = m_store->latestMachine(mid);
+                o["series"]   = m_store->machineSeries(mid, fromTs, toTs, maxPoints);
+                o["services"] = m_store->serviceStats(mid, fromTs, toTs);
+            }
         }
+        // Activités et builds (indépendants des samples) : filtrés sur la machine
+        // sélectionnée, ou toutes machines si aucune n'est encore connue.
+        o["builds"]     = m_store->buildStats(key, fromTs, toTs);
+        o["activities"] = m_store->recentActivities(key, fromTs, toTs, 20);
     }
     if (!m_store)
         o["error"] = m_lastError.isEmpty() ? QStringLiteral("stockage indisponible") : m_lastError;
     return o;
+}
+
+qint64 MonitorModule::ingestActivity(const QJsonObject& a) {
+    if (!m_store)
+        return -1;
+    const QString type = a.value(QStringLiteral("type")).toString();
+    if (type.isEmpty())
+        return -1;
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    // Accepte `start`/`end` ou `start_ts`/`end_ts` ; à défaut, l'instant courant
+    // (une activité ponctuelle est un événement daté à maintenant).
+    auto tsOf = [&a, now](const char* k1, const char* k2) -> qint64 {
+        const QJsonValue v1 = a.value(QLatin1String(k1));
+        if (v1.isDouble()) return static_cast<qint64>(v1.toDouble());
+        const QJsonValue v2 = a.value(QLatin1String(k2));
+        if (v2.isDouble()) return static_cast<qint64>(v2.toDouble());
+        return now;
+    };
+    const qint64 start = tsOf("start", "start_ts");
+    const qint64 end   = tsOf("end", "end_ts");
+    return m_store->insertActivity(
+        type,
+        a.value(QStringLiteral("project")).toString(),
+        a.value(QStringLiteral("machine")).toString(),
+        start, end,
+        a.value(QStringLiteral("status")).toString(),
+        a.value(QStringLiteral("metadata")).toObject());
 }
 
 QJsonObject MonitorModule::statusJson() const {

@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.25.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.26.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -134,7 +134,12 @@ source de vérité reste MeteoHub.
   mémoire dans la durée. Les relevés sont historisés dans
   `/opt/morfanalytics/cache/monitor.sqlite`, avec une rétention configurable des
   relevés bruts (`retention_days`, 90 j par défaut ; `0` = illimité), première étape
-  avant la compaction par paliers. Les activités (compilations), la baseline et les
+  avant la compaction par paliers. Les **activités** sont aussi historisées : tout
+  composant qui sait ce qu'il fait en signale une à `POST /api/monitor/activity`. Les
+  **compilations** sont le premier cas — morfDeploy en émet une par build (définir
+  `MORFANALYTICS_ACTIVITY_URL` sur la machine de build), et la page montre les stats
+  de build par projet (nombre, taux de réussite, durée totale/moyenne/min/max) plus le
+  coût système mesuré sur la fenêtre exacte de chaque build. La baseline et les
   anomalies viendront ensuite. Réglé via le module `monitor` (`sources`,
   `interval_ms`, `retention_days`).
 

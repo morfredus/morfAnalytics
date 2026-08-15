@@ -290,6 +290,35 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             out = handleCleanupPost(body, code, reason);
         }
     }
+    // ---- Ingestion d'activite (POST) : compilations, indexations... ------
+    // Signalee par le composant qui CONNAIT l'activite (morfDeploy pour un build),
+    // jamais devinee d'un pic CPU. Historisee dans le domaine Monitor.
+    else if (path == "/api/monitor/activity") {
+        if (method != "POST") {
+            code = 405; reason = "Method Not Allowed";
+            out = "{\"error\":\"use POST /api/monitor/activity\"}";
+        } else {
+            auto* module = m_registry
+                ? qobject_cast<MonitorModule*>(m_registry->firstOfType(QStringLiteral("monitor")))
+                : nullptr;
+            const QJsonDocument doc = QJsonDocument::fromJson(body);
+            if (!module) {
+                code = 503; reason = "Service Unavailable";
+                out = "{\"error\":\"aucun module 'monitor' configure\"}";
+            } else if (!doc.isObject()) {
+                code = 400; reason = "Bad Request";
+                out = "{\"error\":\"corps JSON attendu\"}";
+            } else {
+                const qint64 id = module->ingestActivity(doc.object());
+                if (id < 0) {
+                    code = 400; reason = "Bad Request";
+                    out = "{\"accepted\":false,\"error\":\"champ 'type' manquant ou stockage indisponible\"}";
+                } else {
+                    out = toJson(QJsonObject{{"accepted", true}, {"id", static_cast<double>(id)}});
+                }
+            }
+        }
+    }
     // ---- Routes GET ------------------------------------------------------
     else if (method != "GET") {
         code = 405; reason = "Method Not Allowed";

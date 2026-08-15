@@ -51,6 +51,10 @@ public:
     QJsonObject data(const QString& machineKey, qint64 fromTs, qint64 toTs,
                      int maxPoints) const;
 
+    // Ingestion d'une activité signalée par un composant métier (morfDeploy pour
+    // les compilations, morfPhoto pour les indexations…). Renvoie l'id, ou -1.
+    qint64 ingestActivity(const QJsonObject& a);
+
 private slots:
     void poll();
 
