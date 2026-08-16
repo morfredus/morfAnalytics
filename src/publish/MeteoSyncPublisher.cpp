@@ -28,7 +28,7 @@ QString nowIso8601Utc() {
     return QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 }
 QString tsToIso(qint64 ts) {
-    return QDateTime::fromSecsSinceEpoch(ts, QTimeZone::UTC).toString(Qt::ISODate);
+    return QDateTime::fromSecsSinceEpoch(ts, Qt::UTC).toString(Qt::ISODate);
 }
 
 // Synthese d'un canal sur une journee : min/max/moyenne + premiere/derniere
