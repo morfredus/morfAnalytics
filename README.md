@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.26.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.26.3-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -210,16 +210,18 @@ unchanged.
 
 To **redeploy the configuration** to `/etc/morfsystem/morfanalytics/` after editing
 it (a MeteoHub / morfPhoto / morfMonitor source of the `monitor` module...), without
-a full rebuild:
+a full rebuild, use the parc's unified command (timestamped backup, then restarts;
+Linux and Windows alike):
 
 ```sh
-./scripts/linux/deploy-config.sh          # backs up, shows the diff, then restarts
+sudo ./service.py config push --force     # or, from the parc root: morf config deploy morfAnalytics
 ```
 
-Unlike `service.py update` (which only adds missing keys, never overwrites), this
-replaces the deployed file with the one from the repo - keep a real
+Unlike `service.py update` (which only adds missing keys, never overwrites), `config
+push` replaces the deployed file with the one from the repo - keep a real
 `config/morfanalytics.json` in your clone, with your sources, as the deployed
-reference.
+reference. (Use `service.py config` with no mode to only add a new version's keys
+while keeping your settings.)
 
 Updating never replaces values already present in the configuration, but **adds
 the parameters introduced since installation** and reports them. Without that, a
