@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.26.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.26.2-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -252,6 +252,18 @@ de services change selon la plateforme.
 
 Les anciens scripts `scripts/linux/` et `scripts/windows/` fonctionnent
 toujours, inchanges.
+
+Pour **redéployer la configuration** vers `/etc/morfsystem/morfanalytics/` après
+l'avoir modifiée (une source MeteoHub, morfPhoto, un morfMonitor du module
+`monitor`…), sans tout recompiler :
+
+```sh
+./scripts/linux/deploy-config.sh          # sauvegarde, montre le diff, puis redémarre
+```
+
+Contrairement à `service.py update` (qui n'ajoute que les clés manquantes, sans jamais
+écraser), ce script **remplace** le fichier déployé par celui du dépôt - garder un vrai
+`config/morfanalytics.json` dans le clone, avec vos sources, comme référence déployée.
 
 La mise à jour ne remplace jamais les valeurs déjà présentes dans la
 configuration, mais y **ajoute les paramètres apparus depuis l'installation** et

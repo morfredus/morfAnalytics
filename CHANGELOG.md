@@ -3,6 +3,19 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.26.2] - 2026-08-16
+
+### Ajouté
+
+- **Script `scripts/linux/deploy-config.sh`** (il manquait, comme pour morfPhoto). Il
+  copie `config/morfanalytics.json` (ou l'exemple à défaut) vers
+  `/etc/morfsystem/morfanalytics/morfanalytics.json`, en **sauvegardant** l'ancien
+  fichier (`.bak-<date>`) et en **affichant le diff**, puis redémarre le service.
+  Contrairement à `service.py update` (qui n'ajoute que les clés manquantes), il
+  **remplace** la config déployée — la bonne commande après avoir changé une source
+  (module `monitor`, `photo`, `analytics`). Options `--no-restart`, `--if-absent`,
+  `--help` ; testable sans root via `MORF_SUDO`/`MORF_CONFIG_DIR`.
+
 ## [0.26.1] - 2026-08-16
 
 ### Corrigé
