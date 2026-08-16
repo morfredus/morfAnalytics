@@ -54,8 +54,8 @@
       "type": "monitor",
       "id": "monitor-1",
 
-      "_comment_sources": "morfMonitor a interroger (leur /api/all). Sur le Pi ou tourne aussi morfMonitor : http://127.0.0.1:8790. Ajouter une entree par machine du parc (ex. http://pi4dev:8790).",
-      "sources": [ "http://127.0.0.1:8790" ],
+      "_comment_sources": "morfMonitor a interroger (leur /api/all), une entree par machine du parc a historiser. Un slash de fin est tolere. Une source injoignable est simplement ignoree (visible dans /modules) sans bloquer les autres.",
+      "sources": [ "http://pi4fred:8790", "http://pi4dev:8790" ],
 
       "_comment_interval": "Cadence d'echantillonnage, en ms. 15 s par defaut : assez fin pour le CPU/RAM, assez doux pour ne pas peser. La cadence par famille de metriques viendra dans un incrément ulterieur.",
       "interval_ms": 15000,

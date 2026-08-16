@@ -3,6 +3,14 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.26.1] - 2026-08-16
+
+### Corrigé
+
+- **Monitor : slash de fin toléré dans une source.** `http://pi4fred:8790/` construisait
+  `…8790//api/all` ; les slashes terminaux sont désormais retirés avant d'ajouter le
+  chemin. La config d'exemple et réelle historise pi4fred et pi4dev par défaut.
+
 ## [0.26.0] - 2026-08-16
 
 ### Ajouté

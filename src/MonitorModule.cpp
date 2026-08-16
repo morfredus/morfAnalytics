@@ -79,7 +79,12 @@ void MonitorModule::poll() {
 }
 
 void MonitorModule::fetch(const QString& baseUrl) {
-    QNetworkRequest req{QUrl(baseUrl + QStringLiteral("/api/all"))};
+    // Tolère un slash de fin dans la source (http://pi4fred:8790/) : sans quoi on
+    // construirait « …8790//api/all ». On retire les slashes terminaux.
+    QString base = baseUrl;
+    while (base.endsWith(QLatin1Char('/')))
+        base.chop(1);
+    QNetworkRequest req{QUrl(base + QStringLiteral("/api/all"))};
     // Un morfMonitor lent ne doit pas retenir la collecte : borne courte.
     req.setTransferTimeout(4000);
     QNetworkReply* reply = m_net->get(req);
