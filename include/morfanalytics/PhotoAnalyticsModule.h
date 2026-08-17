@@ -100,6 +100,10 @@ private:
     // Rapatrie le `dataset` d'UNE source (synchrone borné). *ok/false + *error sinon.
     QJsonObject fetchDatasetSync(const QString& sourceUrl, bool* ok, QString* error) const;
     void pruneDiscovered(qint64 nowSec);
+    // Nom LISIBLE d'un poste depuis son URL : le hostname annoncé par le beacon si
+    // connu (pi4fred, macbooklinux…), sinon l'hôte de l'URL (souvent une IP, moins
+    // parlante). Sert les étiquettes de la page et les préfixes de dossiers fusionnés.
+    QString hostForUrl(const QString& url) const;
 
     QString              m_sourceUrl;
     int                  m_refreshMs;
@@ -118,7 +122,10 @@ private:
     quint16                m_discoveryPort;
     bool                   m_discoveryEnabled;
     QUdpSocket*            m_beacon = nullptr;
-    QHash<QString, qint64> m_discovered;       // url morfPhoto -> dernier heartbeat (s Unix)
+    // url morfPhoto -> { dernier heartbeat (s Unix), hostname annoncé }. Le hostname
+    // rend l'affichage lisible (pi4fred plutôt que 192.168.1.x).
+    struct Discovered { qint64 lastSeen = 0; QString host; };
+    QHash<QString, Discovered> m_discovered;
     static constexpr qint64 kDiscoveryForgetAfterS = 86400;   // 24 h sans annonce -> oubli
 };
 

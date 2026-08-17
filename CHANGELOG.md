@@ -3,6 +3,23 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.28.1] - 2026-08-17
+
+### Ajouté
+
+- **Éditeur d'exclusion de boîtiers** sur `/photo` : une liste multi-sélection de tous
+  les boîtiers présents (sélectionnés = exclus des stats), plus rapide que le ∅ des
+  barres pour retirer d'un coup smartphones et boîtiers jamais possédés. Persisté comme
+  périmètre courant et **enregistré dans les vues** (appliquer une vue réapplique ses
+  exclusions).
+
+### Modifié
+
+- **Postes affichés par leur nom, plus par leur IP.** La ligne « Postes analysés » et les
+  préfixes de dossiers fusionnés utilisent désormais le **hostname** annoncé par le
+  beacon (pi4fred, macbooklinux…) plutôt que l'adresse IP, moins lisible. Repli sur
+  l'hôte de l'URL si le nom n'est pas connu.
+
 ## [0.28.0] - 2026-08-17
 
 ### Ajouté

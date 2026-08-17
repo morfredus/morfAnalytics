@@ -118,9 +118,16 @@ function labelToKey(d,label){
   if(d==="folder"){for(const k in D.folders)if(D.folders[k]===label)return isNaN(+k)?k:+k;return -1;}
   return -1;
 }
+// Persiste les exclusions LOCALES (hors périmètre imposé par la config) comme périmètre
+// courant : elles survivent alors au rechargement, comme le ∅ des barres.
+function persistExcl(){
+  const cfg=new Set(D.configExcl||[]);
+  saveExcluded(new Set([...S.camExcl].filter(c=>!cfg.has(c))));
+}
 function applyView(v){
   Object.assign(S,emptyFilters());
   S.camExcl=new Set(v.camExcl||[]);
+  persistExcl();
   ["cam","lens","type","folder"].forEach(d=>(v[d]||[]).forEach(lab=>{
     const k=labelToKey(d,lab); if(k!==-1&&k!==null&&k!==undefined)S[d].add(k);
   }));
@@ -396,6 +403,16 @@ function filtersPanel(){
       S.camExcl.delete(c);const l=new Set(loadExcluded());l.delete(c);saveExcluded(l);})).join("");
   } else per+='<span class="muted">corpus complet</span>';
   per+='</div>';
+  // Éditeur d'exclusion : liste tous les boîtiers présents, cochés = exclus des stats.
+  // Plus rapide que le ∅ des barres pour retirer d'un coup smartphones et boîtiers jamais
+  // possédés. Enregistré dans les vues (camExcl) et persistant comme périmètre courant.
+  const cams=(D.dict.camera||[]).slice().sort((a,b)=>String(a).localeCompare(String(b)));
+  if(cams.length){
+    per+='<div class="fg" style="margin-top:.3rem"><b>Exclure des boîtiers</b> '
+      +'<select id="excsel" multiple size="'+Math.min(6,cams.length)+'" style="min-width:16rem;max-width:100%">'
+      +cams.map(c=>'<option value="'+esc(c)+'"'+(S.camExcl.has(c)?" selected":"")+'>'+esc(c)+'</option>').join("")
+      +'</select> <span class="muted">Ctrl/Maj &middot; sélectionnés = exclus</span></div>';
+  }
 
   // Filtres analytiques, groupés par dimension.
   const lines=[];
@@ -678,6 +695,10 @@ function wire(){
     const v=loadViews()[n]; if(v)applyView(v);});
   on("viewdel","click",()=>{const n=$("#viewsel").value; if(!n)return;
     const v=loadViews(); delete v[n]; saveViews(v); render();});
+  // Éditeur d'exclusion de boîtiers (multi-sélection)
+  on("excsel","change",e=>{
+    S.camExcl=new Set([...e.target.selectedOptions].map(o=>o.value));
+    persistExcl(); render();});
   // Période
   on("pset","click",()=>{const a=$("#pfrom").value,b=$("#pto").value;
     S.period={from:a===""?null:+a,to:b===""?null:+b};render();});

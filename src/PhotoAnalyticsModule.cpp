@@ -124,18 +124,29 @@ void PhotoAnalyticsModule::onBeaconDatagram() {
             ip = ip.mid(ip.lastIndexOf(QLatin1Char(':')) + 1);
         if (ip.isEmpty())
             continue;
-        m_discovered.insert(QStringLiteral("http://%1:%2").arg(ip).arg(statusPort), now);
+        // Le heartbeat porte le hostname de la machine : on le garde pour un affichage
+        // lisible (l'URL, elle, reste construite sur l'IP -- la seule joignable).
+        const QString host = o.value(QStringLiteral("host")).toString();
+        m_discovered.insert(QStringLiteral("http://%1:%2").arg(ip).arg(statusPort),
+                            Discovered{now, host});
     }
     pruneDiscovered(now);
 }
 
 void PhotoAnalyticsModule::pruneDiscovered(qint64 nowSec) {
     for (auto it = m_discovered.begin(); it != m_discovered.end(); ) {
-        if (nowSec - it.value() > kDiscoveryForgetAfterS)
+        if (nowSec - it.value().lastSeen > kDiscoveryForgetAfterS)
             it = m_discovered.erase(it);
         else
             ++it;
     }
+}
+
+QString PhotoAnalyticsModule::hostForUrl(const QString& url) const {
+    const auto it = m_discovered.constFind(url);
+    if (it != m_discovered.constEnd() && !it.value().host.isEmpty())
+        return it.value().host;         // nom annoncé par le beacon (lisible)
+    return QUrl(url).host();            // repli : hôte de l'URL (souvent une IP)
 }
 
 QJsonArray PhotoAnalyticsModule::availableSources() const {
@@ -146,7 +157,7 @@ QJsonArray PhotoAnalyticsModule::availableSources() const {
         if (url.isEmpty() || seen.contains(url))
             return;
         seen.insert(url);
-        arr.append(QJsonObject{{"url", url}, {"host", QUrl(url).host()},
+        arr.append(QJsonObject{{"url", url}, {"host", hostForUrl(url)},
                                {"online", online}, {"configured", configured}});
     };
     // Source déclarée d'abord (toujours proposée, même hors ligne : c'est un choix).
@@ -154,8 +165,8 @@ QJsonArray PhotoAnalyticsModule::availableSources() const {
         add(m_sourceUrl, true, true);
     // Puis les découvertes récentes (annoncées il y a moins du seuil d'oubli).
     for (auto it = m_discovered.constBegin(); it != m_discovered.constEnd(); ++it)
-        if (now - it.value() <= kDiscoveryForgetAfterS)
-            add(it.key(), false, (now - it.value()) < 120);
+        if (now - it.value().lastSeen <= kDiscoveryForgetAfterS)
+            add(it.key(), false, (now - it.value().lastSeen) < 120);
     return arr;
 }
 
@@ -415,7 +426,7 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
         bool ok = false;
         QString err;
         const QJsonObject ds = fetchDatasetSync(src, &ok, &err);
-        const QString host = QUrl(src).host();
+        const QString host = hostForUrl(src);   // nom lisible du poste (beacon), pas l'IP
         if (!ok) {
             sourceStates.append(QJsonObject{{"url", src}, {"host", host},
                 {"reachable", false}, {"last_error", err}, {"count", 0}, {"kept", 0}});
