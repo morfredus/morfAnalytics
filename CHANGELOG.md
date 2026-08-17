@@ -3,6 +3,21 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.29.2] - 2026-08-17
+
+### Corrigé
+
+- **Les sections ne se referment plus toute seules.** Modifier un croisement dans
+  **Analyses croisées** ou cliquer un réglage (focales, ISO...) rendait de nouveau la
+  page et refermait la section qu'on était en train de consulter : il fallait recliquer
+  sur la flèche pour la rouvrir. L'état déplié/replié de chaque section est désormais
+  conservé d'un rendu à l'autre.
+
+### Modifié
+
+- **Analyses croisées** passe avant **Dossiers** dans l'ordre des sections.
+- Derniers tirets cadratin de la page remplacés par le tiret simple.
+
 ## [0.29.1] - 2026-08-17
 
 ### Modifié

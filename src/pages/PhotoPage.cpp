@@ -180,8 +180,8 @@ const SHUTTER_RANGES=[[0,0.001,"≤1/1000"],[0.001,0.004,"1/1000-1/250"],[0.004,
 const $=s=>document.querySelector(s);
 const fr=n=>new Intl.NumberFormat("fr-FR").format(n);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-function fmtShutter(s){if(s===null||s===undefined)return "—";return s<1?("1/"+Math.round(1/s)):(s+" s");}
-function fmtF(v,d){return (v===null||v===undefined)?"—":v.toFixed(d===undefined?1:d);}
+function fmtShutter(s){if(s===null||s===undefined)return "-";return s<1?("1/"+Math.round(1/s)):(s+" s");}
+function fmtF(v,d){return (v===null||v===undefined)?"-":v.toFixed(d===undefined?1:d);}
 
 // ---- Filtres : état multi-critères ------------------------------------------
 // Catégoriel = Set de clés ; numérique = tableau de plages [min,max,libellé].
@@ -258,7 +258,7 @@ function updateSrcInfo(snap){
   const dup=snap.duplicates_removed||0;
   if(dup) parts.push(dup+" doublon"+(dup>1?"s":"")+" écarté"+(dup>1?"s":""));
   (snap.sources||[]).forEach(s=>{ if(s.reachable===false) parts.push(esc(s.host||s.url)+" injoignable"); });
-  el.textContent = parts.length ? ("  —  "+parts.join(" · ")) : "";
+  el.textContent = parts.length ? ("  -  "+parts.join(" · ")) : "";
 }
 
 function loadSources(){
@@ -382,7 +382,7 @@ function topFocals(idx,limit){
   return [...m.entries()].map(([k,count])=>({label:k+" mm",count,k:[k-0.5,k+0.5,k+" mm"]}))
                          .sort((a,b)=>b.count-a.count).slice(0,limit||12);
 }
-function topLenses(idx,limit){return countCat(idx,"lens").rows.slice(0,limit||3).map(r=>r.label+" ("+r.count+")").join(", ")||"—";}
+function topLenses(idx,limit){return countCat(idx,"lens").rows.slice(0,limit||3).map(r=>r.label+" ("+r.count+")").join(", ")||"-";}
 
 // ---- Rendu de base -----------------------------------------------------------
 function bars(rows,opts){
@@ -404,7 +404,7 @@ function bars(rows,opts){
 function denom(known,total){
   if(known>=total) return '<div class="denom">calcul&eacute; sur '+fr(total)+' photo(s)</div>';
   return '<div class="denom">calcul&eacute; sur '+fr(known)+' / '+fr(total)+
-         ' photo(s) &mdash; '+fr(total-known)+' sans cette donn&eacute;e</div>';
+         ' photo(s) - '+fr(total-known)+' sans cette donn&eacute;e</div>';
 }
 function chip(label,cls,onClear){const id="c"+(chip._n=(chip._n||0)+1);chip._h=chip._h||{};chip._h[id]=onClear;
   return '<span class="chip'+(cls?" "+cls:"")+'" data-chip="'+id+'"><b>'+esc(label)+'</b> &times;</span>';}
@@ -427,7 +427,7 @@ function filtersPanel(){
   // Vues enregistrées : mémoriser le jeu de filtres courant pour le réappliquer.
   const views=loadViews(); const vnames=Object.keys(views).sort();
   let vh='<div class="fg"><b>Vues enregistrées</b> '
-    +'<select id="viewsel"><option value="">— choisir —</option>'
+    +'<select id="viewsel"><option value="">- choisir -</option>'
     +vnames.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join("")+'</select> '
     +'<button class="btn" id="viewapply">Appliquer</button> '
     +'<button class="btn" id="viewsave">Enregistrer la sélection actuelle…</button> '
@@ -466,7 +466,7 @@ function filtersPanel(){
       chip((S.period.from??"…")+"–"+(S.period.to??"…"),null,()=>{S.period={from:null,to:null};})+'</div>');
 
   let filt='<div class="fg" style="margin-top:.4rem"><b>Filtres actifs</b> ';
-  if(!lines.length) filt+='<span class="muted">aucun &mdash; tout le périmètre</span></div>';
+  if(!lines.length) filt+='<span class="muted">aucun - tout le périmètre</span></div>';
   else filt+='</div>'+lines.join("")+'<button class="btn" id="resetf">réinitialiser les filtres</button>';
   return '<section class="card">'+per+filt+'</section>';
 }
@@ -484,7 +484,7 @@ function tiles(idx){
     if(c.camera[i]!==null&&hasExp)exifUsable++;
     if(c.focal_length[i]===null||c.aperture[i]===null||c.iso[i]===null)incomplete++;
   }
-  const period=(minT&&maxT)?(minT.slice(0,10)+" → "+maxT.slice(0,10)):"—";
+  const period=(minT&&maxT)?(minT.slice(0,10)+" → "+maxT.slice(0,10)):"-";
   const t=(num,lab)=>'<div class="tile"><div class="number mono">'+num+'</div><div class="sub">'+lab+'</div></div>';
   return '<div class="grid">'+t(fr(idx.length),"Photos (périmètre courant)")+t(esc(period),"Période couverte")+
     t(fr(cams.size),"Boîtiers")+t(fr(lenses.size),"Objectifs")+t(fr(focals.size),"Focales distinctes")+
@@ -494,10 +494,10 @@ function statTiles(idx){
   const f=values(idx,"focal_length"),a=values(idx,"aperture"),s=values(idx,"iso"),sh=values(idx,"shutter_speed_s");
   const t=(num,lab,kn)=>'<div class="tile"><div class="number mono">'+num+'</div><div class="sub">'+lab+' &middot; '+fr(kn)+' conn.</div></div>';
   return '<div class="grid">'+
-    t(f.length?Math.round(median(f))+" mm":"—","Focale médiane",f.length)+
-    t(a.length?"f/"+fmtF(median(a),1):"—","Ouverture médiane",a.length)+
-    t(s.length?fr(Math.round(median(s))):"—","ISO médian",s.length)+
-    t(sh.length?fmtShutter(median(sh)):"—","Vitesse médiane",sh.length)+'</div>';
+    t(f.length?Math.round(median(f))+" mm":"-","Focale médiane",f.length)+
+    t(a.length?"f/"+fmtF(median(a),1):"-","Ouverture médiane",a.length)+
+    t(s.length?fr(Math.round(median(s))):"-","ISO médian",s.length)+
+    t(sh.length?fmtShutter(median(sh)):"-","Vitesse médiane",sh.length)+'</div>';
 }
 function cameraTimeline(idx){
   const c=D.cols; let y0=Infinity,y1=-Infinity; const per=new Map();
@@ -539,9 +539,9 @@ function orderLabels(dim,set){
 function measureVal(idx,measure){
   if(!idx.length)return "";
   if(measure==="count")return fr(idx.length);
-  if(measure==="medfocal"){const m=median(values(idx,"focal_length"));return m===null?"—":Math.round(m)+"";}
-  if(measure==="medaperture"){const m=median(values(idx,"aperture"));return m===null?"—":"f/"+fmtF(m,1);}
-  if(measure==="mediso"){const m=median(values(idx,"iso"));return m===null?"—":fr(Math.round(m));}
+  if(measure==="medfocal"){const m=median(values(idx,"focal_length"));return m===null?"-":Math.round(m)+"";}
+  if(measure==="medaperture"){const m=median(values(idx,"aperture"));return m===null?"-":"f/"+fmtF(m,1);}
+  if(measure==="mediso"){const m=median(values(idx,"iso"));return m===null?"-":fr(Math.round(m));}
   if(measure==="medshutter"){const m=median(values(idx,"shutter_speed_s"));return fmtShutter(m);}
   return "";
 }
@@ -592,9 +592,9 @@ function groupMetrics(F){
   const idx=filteredWith(F);
   const f=values(idx,"focal_length"),a=values(idx,"aperture"),s=values(idx,"iso"),sh=values(idx,"shutter_speed_s");
   return {n:idx.length,
-    mf:f.length?Math.round(median(f))+" mm":"—", ma:a.length?"f/"+fmtF(median(a),1):"—",
-    mi:s.length?fr(Math.round(median(s))):"—", ms:sh.length?fmtShutter(median(sh)):"—",
-    tf:topFocals(idx,3).map(x=>x.label).join(", ")||"—", tl:topLenses(idx,3)};
+    mf:f.length?Math.round(median(f))+" mm":"-", ma:a.length?"f/"+fmtF(median(a),1):"-",
+    mi:s.length?fr(Math.round(median(s))):"-", ms:sh.length?fmtShutter(median(sh)):"-",
+    tf:topFocals(idx,3).map(x=>x.label).join(", ")||"-", tl:topLenses(idx,3)};
 }
 function groupsBlock(){
   let h='<div class="controls"><button class="btn" id="capA">capturer les filtres → Groupe A</button>'+
@@ -620,10 +620,10 @@ function quickCompare(idx){
       if(dim==="year"){v=D.years[i];lab=v;}else{v=DIMS[dim].key(i);lab=v===null?null:DIMS[dim].lab(v);}
       if(v===null||v===undefined)continue;set.set(String(v),lab);}
     return [...set.entries()].sort((a,b)=>String(a[1]).localeCompare(String(b[1])));};
-  let h='<div class="controls"><label class="muted">Comparer par</label><select id="qcd"><option value="">—</option>'+
+  let h='<div class="controls"><label class="muted">Comparer par</label><select id="qcd"><option value="">-</option>'+
     dims.map(d=>'<option value="'+d[0]+'"'+(QC.dim===d[0]?" selected":"")+'>'+d[1]+'</option>').join("")+'</select>';
   if(QC.dim){const vals=valuesFor(QC.dim);
-    const sel=(id,cur)=>'<select id="'+id+'"><option value="">—</option>'+
+    const sel=(id,cur)=>'<select id="'+id+'"><option value="">-</option>'+
       vals.map(v=>'<option value="'+esc(v[0])+'"'+(cur===v[0]?" selected":"")+'>'+esc(v[1])+'</option>').join("")+'</select>';
     h+='<span class="A">A</span>'+sel("qca",QC.a)+'<span class="B">B</span>'+sel("qcb",QC.b);}
   h+='</div>';
@@ -632,8 +632,8 @@ function quickCompare(idx){
     const A=pick(QC.a),B=pick(QC.b);
     const labOf=v=>QC.dim==="year"?v:DIMS[QC.dim].lab(+v);
     const met=idx2=>{const f=values(idx2,"focal_length"),a=values(idx2,"aperture"),s=values(idx2,"iso"),sh=values(idx2,"shutter_speed_s");
-      return {n:idx2.length,mf:f.length?Math.round(median(f))+" mm":"—",ma:a.length?"f/"+fmtF(median(a),1):"—",
-        mi:s.length?fr(Math.round(median(s))):"—",ms:sh.length?fmtShutter(median(sh)):"—",tf:topFocals(idx2,3).map(x=>x.label).join(", ")||"—"};};
+      return {n:idx2.length,mf:f.length?Math.round(median(f))+" mm":"-",ma:a.length?"f/"+fmtF(median(a),1):"-",
+        mi:s.length?fr(Math.round(median(s))):"-",ms:sh.length?fmtShutter(median(sh)):"-",tf:topFocals(idx2,3).map(x=>x.label).join(", ")||"-"};};
     const mA=met(A),mB=met(B),r=(l,x,y)=>'<tr><td class="muted">'+l+'</td><td>'+x+'</td><td>'+y+'</td></tr>';
     h+='<table><tr><th></th><th class="A">'+esc(labOf(QC.a))+'</th><th class="B">'+esc(labOf(QC.b))+'</th></tr>'+
       r("Photos",fr(mA.n),fr(mB.n))+r("Focale médiane",mA.mf,mB.mf)+r("Ouverture médiane",mA.ma,mB.ma)+
@@ -675,7 +675,7 @@ function configPanel(){
 function ownCountText(){
   const total=(D.dict.camera||[]).length;
   return S.camOwned.size? (fr(S.camOwned.size)+' / '+fr(total)+' boîtier(s) possédé(s)')
-                        : ('0 coché — tous les boîtiers comptent ('+fr(total)+')');
+                        : ('0 coché - tous les boîtiers comptent ('+fr(total)+')');
 }
 function wireConfig(){
   const el=$("#owncount"); if(el)el.textContent=ownCountText();
@@ -693,12 +693,21 @@ function wireConfig(){
 }
 
 // ---- Rendu principal ---------------------------------------------------------
+// État déplié/replié des sections, conservé d'un render() à l'autre. Sans cela,
+// toute interaction interne (changer un croisement, cliquer une barre dans les
+// réglages...) reconstruit #app et refermerait la section qu'on est en train de
+// consulter. La clé est le titre de la section (unique). `open` reste la valeur
+// par défaut au tout premier rendu, tant que l'utilisateur n'a rien basculé.
+let SEC_OPEN={};
 // Section repliable : titre cliquable + corps. `open` = dépliée d'emblée.
 function sec(title,inner,open){
-  return '<details class="sec"'+(open?' open':'')+'><summary>'+title+'</summary>'+
+  const isOpen=(title in SEC_OPEN)?SEC_OPEN[title]:open;
+  return '<details class="sec" data-sec="'+esc(title)+'"'+(isOpen?' open':'')+'><summary>'+title+'</summary>'+
     '<div class="secbody">'+inner+'</div></details>';
 }
 function render(){
+  // Mémoriser l'état des sections encore présentes avant de reconstruire #app.
+  document.querySelectorAll("#app details.sec").forEach(d=>{SEC_OPEN[d.getAttribute("data-sec")]=d.open;});
   if(TAB==="config"){ $("#app").innerHTML=configPanel(); wireConfig(); return; }
   const idx=filtered();
   let h="";
@@ -710,7 +719,7 @@ function render(){
   h+=sec("Vue d'ensemble",
       tiles(idx)+'<h3>Tendances (médianes)</h3>'+statTiles(idx), true);
 
-  h+=sec("Quand — années et mois",
+  h+=sec("Quand - années et mois",
       '<div class="cols"><div><h3>Par année</h3>'+catCard("year",
         '<div class="controls" style="margin-top:.5rem"><label class="muted">Période</label>'+
         '<input type="number" id="pfrom" placeholder="de" value="'+(S.period.from??"")+'">'+
@@ -718,15 +727,15 @@ function render(){
         '<button class="btn" id="pset">appliquer</button><button class="btn" id="pclr">effacer</button></div>')+'</div>'+
       '<div><h3>Par mois</h3>'+catCard("month")+'</div></div>', true);
 
-  h+=sec("Avec quoi — matériel",
+  h+=sec("Avec quoi - matériel",
       '<div class="cols"><div><h3>Boîtiers</h3>'+catCard("cam")+'</div>'+
       '<div><h3>Objectifs</h3>'+catCard("lens",
-        (S.lens.size?'<p class="note">Boîtiers associés&nbsp;: '+esc(countCat(idx,"cam").rows.map(r=>r.label+" ("+r.count+")").join(", ")||"—")+'</p>':''))+'</div></div>'+
-      '<h3>Boîtiers — chronologie</h3><div class="card">'+cameraTimeline(idx)+'</div>', true);
+        (S.lens.size?'<p class="note">Boîtiers associés&nbsp;: '+esc(countCat(idx,"cam").rows.map(r=>r.label+" ("+r.count+")").join(", ")||"-")+'</p>':''))+'</div></div>'+
+      '<h3>Boîtiers - chronologie</h3><div class="card">'+cameraTimeline(idx)+'</div>', true);
 
-  h+=sec("Réglages — focales, ISO, ouvertures, vitesses",
+  h+=sec("Réglages - focales, ISO, ouvertures, vitesses",
       '<div class="cols"><div><h3>Focales usuelles</h3>'+rangeCard("focal")+'</div>'+
-      '<div><h3>Focales — détail (top)</h3><div class="card">'+
+      '<div><h3>Focales - détail (top)</h3><div class="card">'+
         bars(topFocals(idx,12),{filterKey:"focal",isOn:r=>rangeOn(S.focal,r.k)})+
         '<p class="note">Focales exactes (au mm) les plus fréquentes.</p></div></div></div>'+
       '<div class="cols"><div><h3>Sensibilité ISO</h3>'+rangeCard("iso")+'</div>'+
@@ -734,12 +743,12 @@ function render(){
       '<div class="cols"><div><h3>Vitesses d\'obturation</h3>'+rangeCard("shutter")+'</div>'+
       '<div><h3>Type de fichier</h3>'+catCard("type")+'</div></div>', false);
 
-  h+=sec("Dossiers", catCard("folder"), false);
-
   h+=sec("Analyses croisées",
       '<h3>Matrice analytique</h3><div class="card">'+matrixBlock()+'</div>'+
       '<h3>Comparaison rapide (une dimension)</h3><div class="card cmp">'+quickCompare(idx)+'</div>'+
       '<h3>Comparaison de groupes de filtres</h3><div class="card cmp">'+groupsBlock()+'</div>', false);
+
+  h+=sec("Dossiers", catCard("folder"), false);
 
   h+='<div class="card"><button class="btn" id="reload">recharger les données</button>'+
      '<div class="denom">'+(D.fetched?('actualisé '+esc(D.fetched)):'')+'<br>source&nbsp;: '+esc(D.source||"")+'</div></div>';
