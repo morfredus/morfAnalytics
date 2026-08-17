@@ -3,6 +3,14 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.29.3] - 2026-08-17
+
+### Corrigé
+
+- **Avertissement de compilation supprimé** (Qt 6) : la surcharge `Qt::UTC` de
+  `QDateTime::fromSecsSinceEpoch` est dépréciée ; remplacée par `QTimeZone::UTC`. Aucun
+  changement de comportement, mais une compilation propre - un warning peut faire douter.
+
 ## [0.29.2] - 2026-08-17
 
 ### Corrigé
