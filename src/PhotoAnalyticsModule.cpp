@@ -11,9 +11,14 @@
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
+#include <QUdpSocket>
+#include <QNetworkDatagram>
+#include <QHostAddress>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QDateTime>
 #include <QUrl>
+#include <QSet>
 
 #include <algorithm>
 #include <utility>
@@ -41,12 +46,15 @@ QString nowIso() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 
 PhotoAnalyticsModule::PhotoAnalyticsModule(const QString& id, QString sourceUrl,
                                            int refreshMs, QVector<FocalBucket> buckets,
-                                           QStringList excludeCameras, QObject* parent)
+                                           QStringList excludeCameras, quint16 discoveryUdpPort,
+                                           bool discoveryEnabled, QObject* parent)
     : IModule(id, QStringLiteral("photo"), parent),
       m_sourceUrl(std::move(sourceUrl)),
       m_refreshMs(refreshMs > 0 ? refreshMs : 60000),
       m_buckets(std::move(buckets)),
-      m_excludeCameras(std::move(excludeCameras)) {
+      m_excludeCameras(std::move(excludeCameras)),
+      m_discoveryPort(discoveryUdpPort),
+      m_discoveryEnabled(discoveryEnabled) {
     if (m_buckets.isEmpty())
         m_buckets = defaultBuckets();
     // Instantané initial sûr : la page fonctionne avant tout pull.
@@ -62,6 +70,22 @@ PhotoAnalyticsModule::~PhotoAnalyticsModule() { stop(); }
 
 bool PhotoAnalyticsModule::start() {
     m_net = new QNetworkAccessManager(this);
+
+    // Écoute du beacon : découverte des morfPhoto du parc (capacité photo_index),
+    // exactement comme le domaine Monitor découvre les morfMonitor. ShareAddress car
+    // morfAnalytics émet déjà son propre heartbeat sur ce port. Un échec de bind ne
+    // fait pas tomber le module : la source configurée reste utilisable.
+    if (m_discoveryEnabled) {
+        m_beacon = new QUdpSocket(this);
+        if (m_beacon->bind(QHostAddress::AnyIPv4, m_discoveryPort,
+                           QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) {
+            connect(m_beacon, &QUdpSocket::readyRead, this, &PhotoAnalyticsModule::onBeaconDatagram);
+        } else {
+            m_beacon->deleteLater();
+            m_beacon = nullptr;
+        }
+    }
+
     m_timer = new QTimer(this);
     m_timer->setInterval(m_refreshMs);
     connect(m_timer, &QTimer::timeout, this, &PhotoAnalyticsModule::refresh);
@@ -71,9 +95,68 @@ bool PhotoAnalyticsModule::start() {
 }
 
 void PhotoAnalyticsModule::stop() {
-    if (m_timer) { m_timer->stop(); m_timer->deleteLater(); m_timer = nullptr; }
-    if (m_net)   { m_net->deleteLater(); m_net = nullptr; }
+    if (m_timer)  { m_timer->stop(); m_timer->deleteLater(); m_timer = nullptr; }
+    if (m_beacon) { m_beacon->close(); m_beacon->deleteLater(); m_beacon = nullptr; }
+    if (m_net)    { m_net->deleteLater(); m_net = nullptr; }
     m_pending = 0;
+}
+
+void PhotoAnalyticsModule::onBeaconDatagram() {
+    if (!m_beacon)
+        return;
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    while (m_beacon->hasPendingDatagrams()) {
+        const QNetworkDatagram dg = m_beacon->receiveDatagram();
+        const QJsonObject o = QJsonDocument::fromJson(dg.data()).object();
+        if (o.isEmpty())
+            continue;
+        // Découverte par CAPACITÉ (photo_index), jamais par nom.
+        bool isPhoto = false;
+        for (const QJsonValue& c : o.value(QStringLiteral("capabilities")).toArray())
+            if (c.toString() == QLatin1String("photo_index")) { isPhoto = true; break; }
+        if (!isPhoto)
+            continue;
+        const int statusPort = o.value(QStringLiteral("status_port")).toInt();
+        if (statusPort <= 0)
+            continue;
+        QString ip = dg.senderAddress().toString();
+        if (ip.startsWith(QLatin1String("::ffff:")))
+            ip = ip.mid(ip.lastIndexOf(QLatin1Char(':')) + 1);
+        if (ip.isEmpty())
+            continue;
+        m_discovered.insert(QStringLiteral("http://%1:%2").arg(ip).arg(statusPort), now);
+    }
+    pruneDiscovered(now);
+}
+
+void PhotoAnalyticsModule::pruneDiscovered(qint64 nowSec) {
+    for (auto it = m_discovered.begin(); it != m_discovered.end(); ) {
+        if (nowSec - it.value() > kDiscoveryForgetAfterS)
+            it = m_discovered.erase(it);
+        else
+            ++it;
+    }
+}
+
+QJsonArray PhotoAnalyticsModule::availableSources() const {
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    QJsonArray arr;
+    QSet<QString> seen;
+    auto add = [&](const QString& url, bool configured, bool online) {
+        if (url.isEmpty() || seen.contains(url))
+            return;
+        seen.insert(url);
+        arr.append(QJsonObject{{"url", url}, {"host", QUrl(url).host()},
+                               {"online", online}, {"configured", configured}});
+    };
+    // Source déclarée d'abord (toujours proposée, même hors ligne : c'est un choix).
+    if (!m_sourceUrl.isEmpty())
+        add(m_sourceUrl, true, true);
+    // Puis les découvertes récentes (annoncées il y a moins du seuil d'oubli).
+    for (auto it = m_discovered.constBegin(); it != m_discovered.constEnd(); ++it)
+        if (now - it.value() <= kDiscoveryForgetAfterS)
+            add(it.key(), false, (now - it.value()) < 120);
+    return arr;
 }
 
 void PhotoAnalyticsModule::refresh() {
@@ -219,6 +302,44 @@ QVector<PhotoAnalyticsModule::FocalBucket> PhotoAnalyticsModule::defaultBuckets(
     };
 }
 
+QJsonObject PhotoAnalyticsModule::fetchDatasetSync(const QString& sourceUrl, bool* ok,
+                                                   QString* error) const {
+    if (ok) *ok = false;
+    if (sourceUrl.isEmpty()) {
+        if (error) *error = QStringLiteral("source vide");
+        return {};
+    }
+    QString base = sourceUrl;
+    while (base.endsWith(QLatin1Char('/')))
+        base.chop(1);
+    // Fetch synchrone borné : boucle d'événements imbriquée quittée par la fin de la
+    // requête OU un délai de garde. Acceptable pour une action ponctuelle (pas la voie
+    // chaude périodique) ; on ne bloque jamais indéfiniment sur une source muette.
+    QNetworkAccessManager nam;
+    QNetworkRequest req{QUrl(base + QStringLiteral("/api/v1/photos/dataset"))};
+    req.setTransferTimeout(8000);
+    QEventLoop loop;
+    QNetworkReply* reply = nam.get(req);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QTimer guard;
+    guard.setSingleShot(true);
+    QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+    guard.start(10000);
+    loop.exec();
+
+    if (reply->isRunning())
+        reply->abort();
+    if (reply->error() != QNetworkReply::NoError) {
+        if (error) *error = reply->errorString();
+        reply->deleteLater();
+        return {};
+    }
+    const QJsonObject ds = QJsonDocument::fromJson(reply->readAll()).object();
+    reply->deleteLater();
+    if (ok) *ok = true;
+    return ds;
+}
+
 QJsonObject PhotoAnalyticsModule::fetchNow(const QString& sourceUrl) const {
     // Interprétation identique quelle que soit la source (regroupement de focales,
     // périmètre de pratique) : la page les réutilise telles quelles.
@@ -234,40 +355,155 @@ QJsonObject PhotoAnalyticsModule::fetchNow(const QString& sourceUrl) const {
         {"fetched_at", QJsonValue(QJsonValue::Null)}, {"last_error", QJsonValue(QJsonValue::Null)},
         {"focal_buckets", buckets}, {"exclude_cameras", excl},
     };
-    if (sourceUrl.isEmpty()) {
-        snap["last_error"] = QStringLiteral("source vide");
+    bool ok = false;
+    QString err;
+    const QJsonObject ds = fetchDatasetSync(sourceUrl, &ok, &err);
+    if (!ok) {
+        snap["last_error"] = err;
         return snap;
     }
-
-    // Fetch synchrone borné : boucle d'événements imbriquée quittée par la fin de la
-    // requête OU un délai de garde. Acceptable pour une action ponctuelle (le handoff
-    // n'est pas la voie chaude périodique) ; la source périodique du module n'est pas
-    // touchée. On ne bloque jamais indéfiniment sur une source muette.
-    QNetworkAccessManager nam;
-    QNetworkRequest req{QUrl(sourceUrl + QStringLiteral("/api/v1/photos/dataset"))};
-    req.setTransferTimeout(8000);
-    QEventLoop loop;
-    QNetworkReply* reply = nam.get(req);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    QTimer guard;
-    guard.setSingleShot(true);
-    QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
-    guard.start(10000);
-    loop.exec();
-
-    if (reply->isRunning())
-        reply->abort();
-    if (reply->error() != QNetworkReply::NoError) {
-        snap["last_error"] = reply->errorString();
-        reply->deleteLater();
-        return snap;
-    }
-    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-    reply->deleteLater();
-    snap["dataset"]    = doc.object();
+    snap["dataset"]    = ds;
     snap["reachable"]  = true;
     snap["fetched_at"] = nowIso();
     return snap;
+}
+
+QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const {
+    // Règles d'interprétation (identiques toutes sources) : réutilisées par la page.
+    QJsonArray bucketsJson;
+    for (const FocalBucket& b : m_buckets)
+        bucketsJson.append(QJsonObject{{"min", b.min}, {"max", b.max}, {"label", b.label}});
+    QJsonArray exclJson;
+    for (const QString& c : m_excludeCameras)
+        exclJson.append(c);
+
+    // Dictionnaires GLOBAUX (chaînes uniques toutes sources confondues) : chaque source
+    // a ses propres index, on ré-interne pour un espace d'index commun.
+    QJsonArray gCam, gLens, gType;
+    QHash<QString, int> ciCam, ciLens, ciType;
+    auto intern = [](QJsonArray& dict, QHash<QString, int>& idx, const QString& s) -> int {
+        auto it = idx.constFind(s);
+        if (it != idx.constEnd())
+            return it.value();
+        const int n = dict.size();
+        dict.append(s);
+        idx.insert(s, n);
+        return n;
+    };
+    auto remap = [&intern](const QJsonValue& v, const QJsonArray& srcDict,
+                           QJsonArray& gDict, QHash<QString, int>& gIdx) -> QJsonValue {
+        if (!v.isDouble())
+            return QJsonValue::Null;
+        const int si = v.toInt();
+        if (si < 0 || si >= srcDict.size())
+            return QJsonValue::Null;
+        return intern(gDict, gIdx, srcDict.at(si).toString());
+    };
+
+    QJsonObject gFolders;
+    QJsonArray cTaken, cCam, cLens, cType, cFocal, cFocal35, cAper, cIso, cShut, cFolder;
+    QSet<QString> seenFp;
+    int dupRemoved = 0, total = 0;
+    QJsonArray sourceStates;
+    bool anyReachable = false;
+    // Espace d'identifiants de dossier PAR SOURCE : les folder_id d'un poste ne doivent
+    // pas écraser ceux d'un autre. On préfixe par le rang de la source.
+    constexpr qint64 kFolderNs = 1000000;
+
+    int srcIdx = 0;
+    for (const QString& src : sources) {
+        bool ok = false;
+        QString err;
+        const QJsonObject ds = fetchDatasetSync(src, &ok, &err);
+        const QString host = QUrl(src).host();
+        if (!ok) {
+            sourceStates.append(QJsonObject{{"url", src}, {"host", host},
+                {"reachable", false}, {"last_error", err}, {"count", 0}, {"kept", 0}});
+            ++srcIdx;
+            continue;
+        }
+        anyReachable = true;
+        const QJsonObject cols = ds.value(QStringLiteral("columns")).toObject();
+        const QJsonObject dict = ds.value(QStringLiteral("dictionaries")).toObject();
+        const QJsonObject folders = ds.value(QStringLiteral("folders")).toObject();
+        const QJsonArray dCam = dict.value(QStringLiteral("camera")).toArray();
+        const QJsonArray dLens = dict.value(QStringLiteral("lens")).toArray();
+        const QJsonArray dType = dict.value(QStringLiteral("file_type")).toArray();
+        const QJsonArray taken = cols.value(QStringLiteral("taken_at")).toArray();
+        const QJsonArray camera = cols.value(QStringLiteral("camera")).toArray();
+        const QJsonArray lens = cols.value(QStringLiteral("lens")).toArray();
+        const QJsonArray ftype = cols.value(QStringLiteral("file_type")).toArray();
+        const QJsonArray focal = cols.value(QStringLiteral("focal_length")).toArray();
+        const QJsonArray focal35 = cols.value(QStringLiteral("focal_length_35mm")).toArray();
+        const QJsonArray aper = cols.value(QStringLiteral("aperture")).toArray();
+        const QJsonArray iso = cols.value(QStringLiteral("iso")).toArray();
+        const QJsonArray shut = cols.value(QStringLiteral("shutter_speed_s")).toArray();
+        const QJsonArray fol = cols.value(QStringLiteral("folder_id")).toArray();
+        const QJsonArray fp = cols.value(QStringLiteral("fingerprint")).toArray();
+        const int n = taken.size();
+
+        // Libellés de dossiers préfixés du poste (« host · libellé »), id namespacés.
+        const qint64 nsBase = static_cast<qint64>(srcIdx + 1) * kFolderNs;
+        for (auto it = folders.constBegin(); it != folders.constEnd(); ++it)
+            gFolders.insert(QString::number(nsBase + it.key().toLongLong()),
+                            host + QStringLiteral(" · ") + it.value().toString());
+
+        auto at = [](const QJsonArray& a, int i) -> QJsonValue {
+            return i < a.size() ? a.at(i) : QJsonValue(QJsonValue::Null);
+        };
+        int kept = 0;
+        for (int i = 0; i < n; ++i) {
+            // Dédoublonnage : une photo déjà vue (même empreinte, donc même fichier sur
+            // un autre poste) n'est comptée qu'une fois.
+            const QString f = at(fp, i).toString();
+            if (!f.isEmpty()) {
+                if (seenFp.contains(f)) { ++dupRemoved; continue; }
+                seenFp.insert(f);
+            }
+            cTaken.append(at(taken, i));
+            cCam.append(remap(at(camera, i), dCam, gCam, ciCam));
+            cLens.append(remap(at(lens, i), dLens, gLens, ciLens));
+            cType.append(remap(at(ftype, i), dType, gType, ciType));
+            cFocal.append(at(focal, i));
+            cFocal35.append(at(focal35, i));
+            cAper.append(at(aper, i));
+            cIso.append(at(iso, i));
+            cShut.append(at(shut, i));
+            const QJsonValue fv = at(fol, i);
+            cFolder.append(fv.isDouble()
+                ? QJsonValue(static_cast<double>(nsBase + static_cast<qint64>(fv.toDouble())))
+                : QJsonValue(QJsonValue::Null));
+            ++kept;
+            ++total;
+        }
+        sourceStates.append(QJsonObject{{"url", src}, {"host", host}, {"reachable", true},
+                                        {"count", n}, {"kept", kept}});
+        ++srcIdx;
+    }
+
+    QJsonObject columns{
+        {"taken_at", cTaken}, {"camera", cCam}, {"lens", cLens}, {"file_type", cType},
+        {"focal_length", cFocal}, {"focal_length_35mm", cFocal35}, {"aperture", cAper},
+        {"iso", cIso}, {"shutter_speed_s", cShut}, {"folder_id", cFolder},
+    };
+    QJsonObject dictionaries{{"camera", gCam}, {"lens", gLens}, {"file_type", gType}};
+    QJsonObject dataset{
+        {"count", total}, {"dictionaries", dictionaries}, {"columns", columns},
+        {"folders", gFolders},
+    };
+
+    return QJsonObject{
+        {"source_url", sources.join(QStringLiteral(", "))},
+        {"sources", sourceStates},
+        {"reachable", anyReachable},
+        {"fetched_at", anyReachable ? QJsonValue(nowIso()) : QJsonValue(QJsonValue::Null)},
+        {"last_error", anyReachable ? QJsonValue(QJsonValue::Null)
+                                    : QJsonValue(QStringLiteral("aucune source joignable"))},
+        {"duplicates_removed", dupRemoved},
+        {"dataset", dataset},
+        {"focal_buckets", bucketsJson},
+        {"exclude_cameras", exclJson},
+    };
 }
 
 QJsonObject PhotoAnalyticsModule::statusJson() const {

@@ -375,28 +375,43 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             {"last_error", QStringLiteral("aucun module 'photo' configure")}};
         reply(sock, 200, "OK", pages::PhotoPage::render(snap), "text/html; charset=utf-8");
         return;
-    } else if (path == "/photo/data") {
-        // Donnees brutes de la page Photo (instantane du module = agregats + dataset
-        // compact rapatries de morfPhoto). La page /photo les recupere en JS et fait
-        // toute l'agregation/le filtrage cote navigateur. Separer donnees et rendu
-        // evite d'inliner un gros dataset dans le HTML et permet de recharger seul.
+    } else if (path == "/photo/sources") {
+        // Postes morfPhoto connus (déclarés + découverts par beacon), pour que la page
+        // /photo propose les cases à cocher des sources à inclure dans l'analyse.
         auto* module = m_registry
             ? qobject_cast<PhotoAnalyticsModule*>(m_registry->firstOfType(QStringLiteral("photo")))
             : nullptr;
-        // Handoff PhotoHub : ?source=<baseUrl morfPhoto> => analyser CETTE photothèque,
-        // rapatriée à la demande, plutôt que la source périodique configurée.
-        QString source;
+        out = toJson(QJsonObject{{"items", module ? module->availableSources() : QJsonArray{}}});
+    } else if (path == "/photo/data") {
+        // Donnees brutes de la page Photo (agregats + dataset compact rapatries de
+        // morfPhoto). La page les recupere en JS et fait tout l'agregation/le filtrage
+        // cote navigateur. Separer donnees et rendu evite d'inliner un gros dataset et
+        // permet de recharger seul.
+        auto* module = m_registry
+            ? qobject_cast<PhotoAnalyticsModule*>(m_registry->firstOfType(QStringLiteral("photo")))
+            : nullptr;
+        // Sélection MULTI-SOURCES : ?sources=url1,url2,... => fusionner et dédoublonner
+        // ces photothèques. Rétro-compat : ?source=<un> (handoff PhotoHub), sinon la
+        // source périodique configurée.
+        QString source, sourcesCsv;
         const int qm = rawPath.indexOf('?');
         if (qm >= 0) {
             const QUrlQuery q(QString::fromUtf8(rawPath.mid(qm + 1)));
             source = q.queryItemValue(QStringLiteral("source"), QUrl::FullyDecoded);
+            sourcesCsv = q.queryItemValue(QStringLiteral("sources"), QUrl::FullyDecoded);
         }
-        if (module && !source.isEmpty())
+        if (module && !sourcesCsv.isEmpty()) {
+            QStringList list = sourcesCsv.split(QLatin1Char(','), Qt::SkipEmptyParts);
+            for (QString& s : list) s = s.trimmed();
+            list.removeAll(QString());
+            out = toJson(module->fetchMerged(list));
+        } else if (module && !source.isEmpty()) {
             out = toJson(module->fetchNow(source));
-        else
+        } else {
             out = toJson(module ? module->snapshot()
                                 : QJsonObject{{"reachable", false},
                                               {"last_error", QStringLiteral("aucun module 'photo' configure")}});
+        }
     } else if (path == "/monitor") {
         // Domaine Monitor : historique des machines. Page autonome qui récupère
         // ses données via /monitor/data.

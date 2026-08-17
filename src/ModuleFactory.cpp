@@ -60,7 +60,14 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
         for (const QJsonValue& v : def.params.value("exclude_cameras").toArray())
             if (v.isString())
                 excludeCameras << v.toString();
-        return new PhotoAnalyticsModule(def.id, sourceUrl, refreshMs, buckets, excludeCameras, parent);
+        // Découverte beacon des morfPhoto du parc (capacité photo_index) : la page
+        // /photo laisse choisir plusieurs postes à analyser. Port du parc par défaut.
+        const QJsonObject discovery = def.params.value("discovery").toObject();
+        const bool discoveryEnabled = discovery.value("enabled").toBool(true);
+        const quint16 discoveryPort =
+            static_cast<quint16>(discovery.value("udp_port").toInt(45454));
+        return new PhotoAnalyticsModule(def.id, sourceUrl, refreshMs, buckets, excludeCameras,
+                                        discoveryPort, discoveryEnabled, parent);
     }
 
     // Domaine Monitor : historise les métriques d'un ou plusieurs morfMonitor.

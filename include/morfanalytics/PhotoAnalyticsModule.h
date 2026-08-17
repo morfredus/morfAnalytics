@@ -11,10 +11,12 @@
 #include <QVector>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QHash>
 
 class QTimer;
 class QNetworkAccessManager;
 class QNetworkReply;
+class QUdpSocket;
 
 namespace morfanalytics {
 
@@ -48,6 +50,7 @@ public:
 
     PhotoAnalyticsModule(const QString& id, QString sourceUrl, int refreshMs,
                          QVector<FocalBucket> buckets, QStringList excludeCameras = {},
+                         quint16 discoveryUdpPort = 45454, bool discoveryEnabled = true,
                          QObject* parent = nullptr);
     ~PhotoAnalyticsModule() override;
 
@@ -66,6 +69,18 @@ public:
     // elle analyse la photothèque désignée. Vide/injoignable => reachable=false.
     QJsonObject fetchNow(const QString& sourceUrl) const;
 
+    // Postes morfPhoto CONNUS : sources déclarées (config) + découvertes par beacon
+    // (capacité photo_index). [{ url, host, online, configured }]. La page /photo s'en
+    // sert pour proposer les cases à cocher des postes à inclure dans l'analyse.
+    QJsonArray availableSources() const;
+
+    // Analyse MULTI-SOURCES : rapatrie le dataset de chaque source, FUSIONNE en un seul
+    // (dictionnaires unifiés, dossiers préfixés par poste) et DÉDOUBLONNE par empreinte
+    // (une photo indexée sur deux postes -- même CD -- n'est comptée qu'une fois).
+    // Renvoie un instantané de la même forme que snapshot(), plus `sources` (état par
+    // poste) et `duplicates_removed`. Fetch synchrone borné, source par source.
+    QJsonObject fetchMerged(const QStringList& sources) const;
+
     // Regroupe des focales brutes ({focal_length,count}) selon les règles. Pur et
     // statique : testable sans réseau (cœur de l'interprétation).
     static QJsonArray groupFocals(const QJsonArray& rawFocals,
@@ -74,11 +89,17 @@ public:
     // Jeu de règles par défaut si la config n'en fournit pas.
     static QVector<FocalBucket> defaultBuckets();
 
+private slots:
+    void onBeaconDatagram();
+
 private:
     void refresh();
     void fetch(const QString& path, const QString& key);
     void onReply(const QString& key, QNetworkReply* reply);
     void finalize();
+    // Rapatrie le `dataset` d'UNE source (synchrone borné). *ok/false + *error sinon.
+    QJsonObject fetchDatasetSync(const QString& sourceUrl, bool* ok, QString* error) const;
+    void pruneDiscovered(qint64 nowSec);
 
     QString              m_sourceUrl;
     int                  m_refreshMs;
@@ -91,6 +112,14 @@ private:
     QJsonObject            m_partial;          // réponses accumulées du cycle
     QString                m_cycleError;
     QJsonObject            m_snapshot;         // dernier instantané publié
+
+    // Découverte beacon des morfPhoto (capacité photo_index), comme le domaine Monitor
+    // découvre les morfMonitor. Une base par machine ; la page choisit lesquelles inclure.
+    quint16                m_discoveryPort;
+    bool                   m_discoveryEnabled;
+    QUdpSocket*            m_beacon = nullptr;
+    QHash<QString, qint64> m_discovered;       // url morfPhoto -> dernier heartbeat (s Unix)
+    static constexpr qint64 kDiscoveryForgetAfterS = 86400;   // 24 h sans annonce -> oubli
 };
 
 } // namespace morfanalytics

@@ -37,8 +37,11 @@
       "type": "photo",
       "id": "photo-1",
 
-      "_comment_source": "Base de l'API morfPhoto. Par defaut http://127.0.0.1:8793 (morfPhoto sur la meme machine, cas courant du parc). Mettre http://IP:8793 si morfPhoto tourne ailleurs, ou VIDE pour desactiver la specialisation Photo (la page /photo indique alors la source manquante et rien n'est interroge).",
+      "_comment_source": "Base de l'API morfPhoto DECLAREE (filet, toujours proposee sur la page /photo). Par defaut http://127.0.0.1:8793 (morfPhoto sur la meme machine). En PLUS, les morfPhoto du parc sont DECOUVERTS seuls par beacon (voir 'discovery') : la page /photo laisse cocher un ou plusieurs postes et FUSIONNE leurs bases en dedoublonnant (une photo indexee sur deux postes, meme CD, compte une fois). Peut rester VIDE : la decouverte suffit.",
       "source_url": "http://127.0.0.1:8793",
+
+      "_comment_discovery": "Decouverte automatique des morfPhoto du parc par le beacon (capacite 'photo_index', jamais par nom). Chaque morfPhoto a sa base par machine ; la page /photo propose les postes decouverts en cases a cocher, en temps reel. 'enabled' a false revient a la seule source declaree. 'udp_port' : port du parc (45454).",
+      "discovery": { "enabled": true, "udp_port": 45454 },
 
       "_comment_refresh": "Periode de rafraichissement de l'instantane, en ms.",
       "refresh_ms": 60000,

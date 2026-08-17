@@ -3,6 +3,28 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.28.0] - 2026-08-17
+
+### Ajouté
+
+- **Analyse Photo MULTI-SOURCES.** La page `/photo` découvre les morfPhoto du parc par
+  beacon (capacité `photo_index`, jamais par nom) et propose leurs postes en **cases à
+  cocher** (pi4fred, pi4dev, macbooklinux, Windows…). On inclut **1, 2, 3+ postes** dans
+  l'analyse ; changer la sélection **recharge en temps réel**, tous les filtres
+  d'exploration restant présents. Les postes déclarés en config restent un filet ; le
+  poste passé par PhotoHub (`?source=`) est pré-coché. Nouveau bloc `photo.discovery`
+  (`enabled`, `udp_port`), endpoints `GET /photo/sources` et `GET /photo/data?sources=`.
+- **Dédoublonnage inter-postes.** À la fusion, une photo indexée sur plusieurs postes
+  (même CD gravé, dossier partagé) n'est **comptée qu'une fois**, via l'empreinte
+  `fingerprint` du dataset (morfPhoto ≥ 0.7.0). Le nombre de doublons écartés et les
+  postes injoignables sont affichés sous le sélecteur. Dictionnaires unifiés et dossiers
+  préfixés du poste (« hôte · dossier ») pour ne jamais mélanger deux postes.
+- **Vues de filtres enregistrées.** Mémoriser un jeu de filtres nommé et le réappliquer
+  d'un clic (ex. « ma pratique réelle » qui exclut smartphones et boîtiers jamais
+  possédés). Enregistrées **par valeur** (libellés, pas index) : une vue survit au
+  changement de postes analysés. Enregistrer / appliquer / supprimer, persistées dans le
+  navigateur.
+
 ## [0.27.0] - 2026-08-17
 
 ### Ajouté

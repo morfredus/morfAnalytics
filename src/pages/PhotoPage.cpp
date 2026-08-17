@@ -64,6 +64,11 @@ QByteArray PhotoPage::render(const QJsonObject& /*snapshot*/) {
 .denom{font-size:.78rem;color:var(--muted);margin:.1rem 0 .5rem}
 .mono{font-variant-numeric:tabular-nums}
 select,input[type=number]{background:#242830;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.25rem .4rem;font-size:.85rem}
+.sources{margin:.3rem 0 .9rem;line-height:1.9}
+.srcchip{display:inline-block;margin:.1rem .3rem;padding:.15rem .5rem;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-size:.85rem;user-select:none}
+.srcchip.on{border-color:#4a90d9;background:#1c2c3a}
+.srcchip.off{opacity:.55}
+.srcchip input{vertical-align:middle;margin-right:.35rem}
 input[type=number]{width:5.5rem}
 .tl{display:flex;gap:2px;flex:1;align-items:flex-end;height:1.6rem}
 .tl span{flex:1;background:var(--track);border-radius:2px}.tl span.u{background:var(--accent)}
@@ -79,6 +84,7 @@ th{color:var(--muted);font-weight:600}tr+tr td{border-top:1px solid var(--line)}
 <h1>Analyse de la phototh&egrave;que <span id="vb" class="vb"></span></h1>
 <p class="muted">Poser des questions au corpus&nbsp;: croiser boîtiers, focales, ISO, ouvertures,
 vitesses, périodes&hellip; La donnée reste souveraine dans morfPhoto ; ici on l'explore.</p>
+<div id="sources" class="sources"><span class="muted">Recherche des postes&hellip;</span></div>
 <div id="app"><p class="muted">Chargement des donn&eacute;es&hellip;</p></div>
 </div>
 <script>
@@ -86,6 +92,46 @@ vitesses, périodes&hellip; La donnée reste souveraine dans morfPhoto ; ici on 
 const LS_KEY="morfanalytics.photo.excludedCameras";
 function loadExcluded(){try{return JSON.parse(localStorage.getItem(LS_KEY)||"[]")}catch(e){return []}}
 function saveExcluded(s){try{localStorage.setItem(LS_KEY,JSON.stringify([...s]))}catch(e){}}
+
+// --- Vues enregistrées : un jeu de filtres nommé, réappliquable d'un clic --------
+// Cas type : « ma pratique réelle » qui exclut smartphones et boîtiers jamais possédés
+// (photos d'autres photographes récupérées). On sérialise par VALEUR (libellés, pas
+// index de dictionnaire) pour que la vue survive à un changement de postes analysés.
+const LS_VIEWS="morfanalytics.photo.views";
+function loadViews(){try{return JSON.parse(localStorage.getItem(LS_VIEWS)||"{}")||{}}catch(e){return {}}}
+function saveViews(v){try{localStorage.setItem(LS_VIEWS,JSON.stringify(v))}catch(e){}}
+function serializeFilters(){
+  const names=d=>[...S[d]].map(k=>DIMS[d].lab(k));   // index -> libellé (boîtier, objectif, type, dossier)
+  return {
+    camExcl:[...S.camExcl],
+    cam:names("cam"), lens:names("lens"), type:names("type"), folder:names("folder"),
+    year:[...S.year], month:[...S.month],
+    focal:S.focal.slice(), aperture:S.aperture.slice(), iso:S.iso.slice(), shutter:S.shutter.slice(),
+    period:{from:S.period.from,to:S.period.to}
+  };
+}
+// Libellé -> clé dans le dataset COURANT (les libellés absents sont simplement ignorés).
+function labelToKey(d,label){
+  if(d==="cam")  return D.dict.camera.indexOf(label);
+  if(d==="lens") return D.dict.lens.indexOf(label);
+  if(d==="type") return D.dict.file_type.indexOf(label);
+  if(d==="folder"){for(const k in D.folders)if(D.folders[k]===label)return isNaN(+k)?k:+k;return -1;}
+  return -1;
+}
+function applyView(v){
+  Object.assign(S,emptyFilters());
+  S.camExcl=new Set(v.camExcl||[]);
+  ["cam","lens","type","folder"].forEach(d=>(v[d]||[]).forEach(lab=>{
+    const k=labelToKey(d,lab); if(k!==-1&&k!==null&&k!==undefined)S[d].add(k);
+  }));
+  (v.year||[]).forEach(y=>S.year.add(y));
+  (v.month||[]).forEach(m=>S.month.add(m));
+  S.focal=(v.focal||[]).slice(); S.aperture=(v.aperture||[]).slice();
+  S.iso=(v.iso||[]).slice(); S.shutter=(v.shutter||[]).slice();
+  S.period={from:(v.period&&v.period.from!==undefined)?v.period.from:null,
+            to:(v.period&&v.period.to!==undefined)?v.period.to:null};
+  render();
+}
 const MONTHS=["","janv","févr","mars","avr","mai","juin","juil","août","sept","oct","nov","déc"];
 const ISO_RANGES=[[0,100,"≤100"],[101,200,"125-200"],[201,400,"250-400"],[401,800,"500-800"],
   [801,1600,"1000-1600"],[1601,3200,"2000-3200"],[3201,6400,"4000-6400"],[6401,1e9,"≥8000"]];
@@ -130,9 +176,82 @@ function buildDims(){
 const CAT_DIMS=["cam","lens","type","folder","year","month"];
 const RANGE_DIMS=["focal","aperture","iso","shutter"];
 
+// ---- Sélecteur de postes (multi-sources) -------------------------------------
+// Chaque morfPhoto a sa base par machine ; on choisit lesquelles inclure. La liste
+// vient de /photo/sources (déclarés + découverts par beacon). L'analyse combine les
+// postes cochés et DÉDOUBLONNE côté service (une photo indexée sur deux postes ne
+// compte qu'une fois). Changer la sélection recharge en temps réel.
+let SOURCES=[];        // [{url,host,online,configured}]
+let SEL=new Set();     // urls cochées
+
+function sourcesParam(){return [...SEL].map(encodeURIComponent).join(",");}
+
+function renderSources(){
+  const box=$("#sources"); if(!box) return;
+  if(!SOURCES.length){box.innerHTML='<span class="muted">Aucun poste morfPhoto découvert. '+
+    'Vérifiez qu’un morfPhoto tourne et s’annonce (capacité photo_index).</span>';return;}
+  const chips=SOURCES.map(s=>{
+    const on=SEL.has(s.url);
+    const lab=esc(s.host||s.url)+(s.online?"":" (hors ligne)");
+    return '<label class="srcchip'+(on?" on":"")+(s.online?"":" off")+'">'+
+      '<input type="checkbox" data-url="'+esc(s.url)+'"'+(on?" checked":"")+'>'+lab+'</label>';
+  }).join("");
+  box.innerHTML='<b>Postes analysés :</b> '+chips+'<span id="srcinfo" class="muted"></span>';
+  box.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener("change",()=>{
+      const u=cb.getAttribute("data-url");
+      if(cb.checked)SEL.add(u);else SEL.delete(u);
+      renderSources();          // reflète l'état coché tout de suite
+      resetCatFilters();        // les index de dictionnaire changent avec l'ensemble des sources
+      reload();                 // temps réel
+    });
+  });
+}
+
+// Les filtres CATÉGORIELS (boîtier, objectif, type, dossier) portent des index de
+// dictionnaire qui n'ont de sens que pour un ensemble de sources donné : on les remet
+// à zéro au changement de sélection. Les plages, l'année, le périmètre restent.
+function resetCatFilters(){
+  S.cam=new Set();S.lens=new Set();S.type=new Set();S.folder=new Set();
+}
+
+function updateSrcInfo(snap){
+  const el=$("#srcinfo"); if(!el) return;
+  const parts=[];
+  const dup=snap.duplicates_removed||0;
+  if(dup) parts.push(dup+" doublon"+(dup>1?"s":"")+" écarté"+(dup>1?"s":""));
+  (snap.sources||[]).forEach(s=>{ if(s.reachable===false) parts.push(esc(s.host||s.url)+" injoignable"); });
+  el.textContent = parts.length ? ("  —  "+parts.join(" · ")) : "";
+}
+
+function loadSources(){
+  fetch("/photo/sources").then(r=>r.json()).then(d=>{
+    SOURCES=(d.items||[]);
+    // Sélection initiale : handoff PhotoHub (?source=) si présent, sinon tous les
+    // postes EN LIGNE, sinon le premier connu.
+    const handoff=new URLSearchParams(location.search).get("source");
+    SEL=new Set();
+    if(handoff){
+      SEL.add(handoff);
+      if(!SOURCES.some(s=>s.url===handoff)){
+        let h=handoff; try{h=new URL(handoff).host;}catch(e){}
+        SOURCES.unshift({url:handoff,host:h,online:true,configured:false});
+      }
+    } else {
+      SOURCES.filter(s=>s.online).forEach(s=>SEL.add(s.url));
+      if(!SEL.size&&SOURCES.length) SEL.add(SOURCES[0].url);
+    }
+    renderSources();
+    reload();
+  }).catch(()=>{ reload(); });   // à défaut : comportement historique (source périodique)
+}
+
 // ---- Chargement --------------------------------------------------------------
 function reload(){
-  fetch("/photo/data"+location.search).then(r=>r.json()).then(init).catch(e=>{
+  // Requête pilotée par les postes cochés ; à défaut, on retombe sur ?source= (handoff)
+  // ou la source périodique configurée (location.search éventuellement vide).
+  const qs = SEL.size ? ("?sources="+sourcesParam()) : location.search;
+  fetch("/photo/data"+qs).then(r=>r.json()).then(init).catch(e=>{
     $("#app").innerHTML='<section class="card"><strong>Donn&eacute;es indisponibles.</strong>'+
       '<p class="muted">'+esc(e)+'</p></section>';
   });
@@ -143,11 +262,13 @@ function init(snap){
     const err=snap&&snap.last_error?esc(snap.last_error):"";
     $("#app").innerHTML='<section class="card"><strong>morfPhoto injoignable.</strong>'+
       '<p class="muted">Source&nbsp;: '+src+'<br>'+err+'</p></section>';
+    updateSrcInfo(snap||{});
     return;
   }
   D=decode(snap); buildDims();
   S.camExcl=new Set([...(D.configExcl||[]),...loadExcluded()]);
   render();
+  updateSrcInfo(snap);
 }
 function decode(snap){
   const ds=snap.dataset||{}, cols=ds.columns||{}, dict=ds.dictionaries||{};
@@ -258,8 +379,18 @@ function rangeCard(dim){
 // ---- Filtres actifs (périmètre séparé, groupés par dimension) -----------------
 function filtersPanel(){
   chip._h={};
+  // Vues enregistrées : mémoriser le jeu de filtres courant pour le réappliquer.
+  const views=loadViews(); const vnames=Object.keys(views).sort();
+  let vh='<div class="fg"><b>Vues enregistrées</b> '
+    +'<select id="viewsel"><option value="">— choisir —</option>'
+    +vnames.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join("")+'</select> '
+    +'<button class="btn" id="viewapply">Appliquer</button> '
+    +'<button class="btn" id="viewsave">Enregistrer la sélection actuelle…</button> '
+    +'<button class="btn" id="viewdel">Supprimer</button>'
+    +(vnames.length?'':' <span class="muted">aucune pour l’instant</span>')
+    +'</div>';
   // Périmètre de pratique (persistant, distinct des filtres).
-  let per='<div class="fg"><b>Périmètre</b> ';
+  let per=vh+'<div class="fg"><b>Périmètre</b> ';
   if(S.camExcl.size){
     per+='ma pratique &middot; exclus&nbsp;: '+[...S.camExcl].map(c=>chip(c,"excl",()=>{
       S.camExcl.delete(c);const l=new Set(loadExcluded());l.delete(c);saveExcluded(l);})).join("");
@@ -538,6 +669,15 @@ function wire(){
     el.addEventListener("click",()=>{const fn=chip._h[el.getAttribute("data-chip")];if(fn)fn();render();});});
   on("resetf","click",()=>{const ex=S.camExcl;const f=emptyFilters();f.camExcl=ex;Object.assign(S,f);render();});
   on("reload","click",reload);
+  // Vues enregistrées
+  on("viewsave","click",()=>{
+    const name=(prompt("Nom de la vue à enregistrer :","")||"").trim();
+    if(!name)return;
+    const v=loadViews(); v[name]=serializeFilters(); saveViews(v); render();});
+  on("viewapply","click",()=>{const n=$("#viewsel").value; if(!n)return;
+    const v=loadViews()[n]; if(v)applyView(v);});
+  on("viewdel","click",()=>{const n=$("#viewsel").value; if(!n)return;
+    const v=loadViews(); delete v[n]; saveViews(v); render();});
   // Période
   on("pset","click",()=>{const a=$("#pfrom").value,b=$("#pto").value;
     S.period={from:a===""?null:+a,to:b===""?null:+b};render();});
@@ -559,7 +699,7 @@ function wire(){
 // Badge de version : lit /status (comme la page MeteoHub) pour afficher la version
 // du service courant a cote du titre. Silencieux si /status est indisponible.
 fetch("/status").then(r=>r.json()).then(s=>{const b=document.getElementById("vb");if(b)b.textContent=s.version?"v"+s.version:"";}).catch(()=>{});
-reload();
+loadSources();
 </script>
 </body></html>)PAGE";
     return QByteArray(kPage);
