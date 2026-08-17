@@ -133,6 +133,30 @@ int MonitorStore::machineIdForKey(const QString& key) const {
     return -1;
 }
 
+qint64 MonitorStore::forgetMachine(const QString& key) {
+    const int mid = machineIdForKey(key);
+    if (mid < 0)
+        return -1;   // machine inconnue : rien à oublier
+
+    // Le hostname sert de clé aux activités (elles sont signalées par nom d'hôte,
+    // pas par id interne). Ici key == hostname (voir upsertMachine côté collecte).
+    qint64 removed = 0;
+    auto del = [&](const QString& sql, const QVariant& bind) {
+        QSqlQuery q(m_db);
+        q.prepare(sql);
+        q.addBindValue(bind);
+        if (q.exec()) {
+            const int n = q.numRowsAffected();
+            if (n > 0) removed += n;
+        }
+    };
+    del(QStringLiteral("DELETE FROM sample_machine WHERE machine_id = ?"), mid);
+    del(QStringLiteral("DELETE FROM sample_service WHERE machine_id = ?"), mid);
+    del(QStringLiteral("DELETE FROM activity WHERE machine = ?"), key);
+    del(QStringLiteral("DELETE FROM machine WHERE id = ?"), mid);
+    return removed;
+}
+
 int MonitorStore::upsertMachine(const QString& key, const QString& hostname,
                                 const QString& model, qint64 ts) {
     QSqlQuery q(m_db);

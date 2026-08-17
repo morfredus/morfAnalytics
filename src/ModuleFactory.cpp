@@ -85,7 +85,15 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
         // Rétention des relevés bruts, en jours (0 => illimité). Étape simple avant
         // la compaction par paliers à venir.
         const int retentionDays = def.params.value("retention_days").toInt(90);
-        return new MonitorModule(def.id, sources, intervalMs, dbPath, retentionDays, parent);
+        // Découverte beacon des morfMonitor du parc. Le port par défaut est celui du
+        // parc (45454) ; il n'est pas dans les params du module (c'est un réglage
+        // global), on le laisse donc surchargeable ici pour les cas particuliers.
+        const QJsonObject discovery = def.params.value("discovery").toObject();
+        const bool discoveryEnabled = discovery.value("enabled").toBool(true);
+        const quint16 discoveryPort =
+            static_cast<quint16>(discovery.value("udp_port").toInt(45454));
+        return new MonitorModule(def.id, sources, intervalMs, dbPath, retentionDays,
+                                 discoveryPort, discoveryEnabled, parent);
     }
 
     if (error)

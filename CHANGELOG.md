@@ -3,6 +3,26 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.27.0] - 2026-08-17
+
+### Ajouté
+
+- **Découverte automatique des morfMonitor par beacon.** Le domaine Monitor écoute
+  désormais le beacon du parc et intègre seul tout morfMonitor qui s'annonce (capacité
+  `system_monitor`, jamais par nom, morfMonitor ≥ 0.10.0). Une nouvelle machine est
+  historisée sans aucune déclaration manuelle, exactement comme morfMonitor apprend les
+  machines. Les sources déclarées en configuration restent un filet (machines sans
+  beacon, périmètre figé) : les deux ensembles fusionnent. Nouveau bloc de config
+  `monitor.discovery` (`enabled`, `udp_port`).
+- **Oubli d'une machine (« Oublier cette machine »).** Suppression **définitive** d'une
+  machine et de tout son historique (relevés machine et service, activités), par la page
+  `/monitor` ou `POST /api/monitor/forget`. Geste explicite, réservé à une machine
+  **déconnectée** (le bouton est inactif tant qu'elle est en ligne, sinon elle serait
+  réintégrée aussitôt). Les données sont sinon **conservées** indéfiniment, machine
+  connectée ou non.
+- **`/status` du module monitor** expose l'état de découverte (`discovery` : écoute
+  active, port, morfMonitor appris) en plus des sources déclarées.
+
 ## [0.26.3] - 2026-08-16
 
 ### Retiré

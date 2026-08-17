@@ -61,8 +61,11 @@
       "type": "monitor",
       "id": "monitor-1",
 
-      "_comment_sources": "morfMonitor a interroger (leur /api/all), une entree par machine du parc a historiser (ex. http://pi4fred:8790, http://pi4dev:8790). Un slash de fin est tolere. Une source injoignable est ignoree sans bloquer les autres. Sans source, la page /monitor reste vide.",
+      "_comment_sources": "morfMonitor a interroger EN PLUS de ceux decouverts seuls (voir 'discovery'). Filet stable : machines qui n'emettent pas de beacon, ou perimetre que l'on veut figer. Une entree par machine (ex. http://pi4fred:8790). Un slash de fin est tolere. Une source injoignable est ignoree sans bloquer les autres. Peut rester VIDE : la decouverte suffit alors.",
       "sources": [ "http://pi4fred:8790", "http://pi4dev:8790" ],
+
+      "_comment_discovery": "Decouverte automatique des morfMonitor du parc par le beacon (capacite 'system_monitor', jamais par nom). Une machine qui s'annonce est integree seule -- son /api/all rejoint les sources interrogees -- sans declaration manuelle, comme morfMonitor apprend les machines. Ses donnees restent conservees meme deconnectee ; seul un oubli explicite (bouton 'Oublier cette machine' de la page /monitor, ou POST /api/monitor/forget) les retire. 'enabled' a false revient aux seules sources declarees. 'udp_port' : port du parc (45454), a ne changer que dans un cas particulier.",
+      "discovery": { "enabled": true, "udp_port": 45454 },
 
       "_comment_interval": "Cadence d'echantillonnage, en ms. 15 s par defaut : assez fin pour CPU/RAM, assez doux pour ne pas peser. Une passe re-lit /api/all et ecrit un releve par machine.",
       "interval_ms": 15000,

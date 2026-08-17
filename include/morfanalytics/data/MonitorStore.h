@@ -120,6 +120,12 @@ public:
 
     int machineIdForKey(const QString& key) const;
 
+    // Oubli DÉFINITIF d'une machine : supprime sa ligne de registre ET tout son
+    // historique (relevés machine, relevés service, activités). Irréversible, à
+    // réserver à une machine réellement partie. Renvoie le nombre de lignes
+    // effacées (toutes tables), ou -1 si la machine était inconnue.
+    qint64 forgetMachine(const QString& key);
+
 private:
     QString      m_dbPath;
     QString      m_connectionName;

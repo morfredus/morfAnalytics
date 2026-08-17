@@ -11,9 +11,13 @@
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
+#include <QUdpSocket>
+#include <QNetworkDatagram>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QDateTime>
 #include <QUrl>
+#include <QHostAddress>
 
 #include <cmath>
 #include <utility>
@@ -27,12 +31,15 @@ double num(const QJsonValue& v) { return v.isDouble() ? v.toDouble() : qQNaN(); 
 } // namespace
 
 MonitorModule::MonitorModule(const QString& id, QStringList sources, int intervalMs,
-                             QString dbPath, int retentionDays, QObject* parent)
+                             QString dbPath, int retentionDays, quint16 discoveryUdpPort,
+                             bool discoveryEnabled, QObject* parent)
     : IModule(id, QStringLiteral("monitor"), parent),
       m_sources(std::move(sources)),
       m_intervalMs(intervalMs > 0 ? intervalMs : 15000),
       m_dbPath(std::move(dbPath)),
-      m_retentionDays(retentionDays) {}
+      m_retentionDays(retentionDays),
+      m_discoveryPort(discoveryUdpPort),
+      m_discoveryEnabled(discoveryEnabled) {}
 
 MonitorModule::~MonitorModule() { stop(); }
 
@@ -47,6 +54,26 @@ bool MonitorModule::start() {
     }
 
     m_net = new QNetworkAccessManager(this);
+
+    // Écoute du beacon : découverte automatique des morfMonitor du parc. On
+    // ÉCOUTE, on ne sonde pas — les morfMonitor annoncent leur présence en
+    // broadcast. ShareAddress car morfAnalytics ÉMET déjà son propre heartbeat
+    // sur ce port (et le Dashboard peut aussi écouter) : plusieurs programmes de
+    // la machine se partagent le port du parc. Un échec de bind (port pris sans
+    // partage) ne fait pas tomber la collecte : les sources déclarées suffisent.
+    if (m_discoveryEnabled) {
+        m_beacon = new QUdpSocket(this);
+        if (m_beacon->bind(QHostAddress::AnyIPv4, m_discoveryPort,
+                           QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) {
+            connect(m_beacon, &QUdpSocket::readyRead, this, &MonitorModule::onBeaconDatagram);
+        } else {
+            m_lastError = QStringLiteral("écoute beacon impossible (port %1) : %2")
+                              .arg(m_discoveryPort).arg(m_beacon->errorString());
+            m_beacon->deleteLater();
+            m_beacon = nullptr;
+        }
+    }
+
     m_timer = new QTimer(this);
     m_timer->setInterval(m_intervalMs);
     connect(m_timer, &QTimer::timeout, this, &MonitorModule::poll);
@@ -56,26 +83,119 @@ bool MonitorModule::start() {
 }
 
 void MonitorModule::stop() {
-    if (m_timer) { m_timer->stop(); m_timer->deleteLater(); m_timer = nullptr; }
-    if (m_net)   { m_net->deleteLater(); m_net = nullptr; }
+    if (m_timer)  { m_timer->stop(); m_timer->deleteLater(); m_timer = nullptr; }
+    if (m_beacon) { m_beacon->close(); m_beacon->deleteLater(); m_beacon = nullptr; }
+    if (m_net)    { m_net->deleteLater(); m_net = nullptr; }
     m_store.reset();
 }
 
 void MonitorModule::poll() {
-    if (!m_net || m_sources.isEmpty())
+    if (!m_net)
         return;
-    for (const QString& s : m_sources)
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    pruneDiscovered(now);
+    const QStringList sources = activeSources();
+    for (const QString& s : sources)
         fetch(s);
 
     // Rétention : au plus une fois par jour, supprimer les relevés bruts au-delà de
     // l'horizon configuré. Borne la base sur une machine modeste. 0 => illimité.
     if (m_store && m_retentionDays > 0) {
-        const qint64 now = QDateTime::currentSecsSinceEpoch();
         if (now - m_lastPurgeAt > 86400) {
             m_lastPurgeAt = now;
             m_store->purgeSamplesBefore(now - static_cast<qint64>(m_retentionDays) * 86400);
         }
     }
+}
+
+QStringList MonitorModule::activeSources() const {
+    // Union des sources déclarées (filet stable) et des morfMonitor découverts.
+    QStringList all = m_sources;
+    for (auto it = m_discovered.constBegin(); it != m_discovered.constEnd(); ++it)
+        if (!all.contains(it.key()))
+            all << it.key();
+    return all;
+}
+
+void MonitorModule::pruneDiscovered(qint64 nowSec) {
+    // Une source découverte muette depuis longtemps cesse d'être interrogée (elle
+    // sera réintégrée d'elle-même si elle se réannonce). Sa donnée historique
+    // reste en base : seule la SOURCE est oubliée, jamais la machine.
+    for (auto it = m_discovered.begin(); it != m_discovered.end(); ) {
+        if (nowSec - it.value() > kDiscoveryForgetAfterS) {
+            m_sourceState.remove(it.key());
+            it = m_discovered.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void MonitorModule::onBeaconDatagram() {
+    if (!m_beacon)
+        return;
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    while (m_beacon->hasPendingDatagrams()) {
+        const QNetworkDatagram dg = m_beacon->receiveDatagram();
+        const QJsonObject o = QJsonDocument::fromJson(dg.data()).object();
+        if (o.isEmpty())
+            continue;
+
+        // Découverte par CAPACITÉ, jamais par nom : on ne retient un émetteur que
+        // s'il annonce « system_monitor ». Renommer le service n'y change rien.
+        bool isMonitor = false;
+        for (const QJsonValue& c : o.value(QStringLiteral("capabilities")).toArray())
+            if (c.toString() == QLatin1String("system_monitor")) { isMonitor = true; break; }
+        if (!isMonitor)
+            continue;
+
+        // Le port du serveur /status EST celui qui sert /api/all (même serveur HTTP
+        // dans morfMonitor). Sans lui, on sait qu'un morfMonitor vit mais pas où le
+        // joindre : on ignore l'annonce plutôt que de deviner un port.
+        const int statusPort = o.value(QStringLiteral("status_port")).toInt();
+        if (statusPort <= 0)
+            continue;
+
+        // Adresse RÉELLE de l'émetteur (couche réseau), la seule dont on soit sûr
+        // qu'elle permette de le joindre. Qt préfixe l'IPv4 mappée en IPv6
+        // (« ::ffff:192.168.1.55 ») : un lien construit tel quel serait inutilisable.
+        QString ip = dg.senderAddress().toString();
+        if (ip.startsWith(QLatin1String("::ffff:")))
+            ip = ip.mid(ip.lastIndexOf(QLatin1Char(':')) + 1);
+        if (ip.isEmpty())
+            continue;
+
+        const QString url = QStringLiteral("http://%1:%2").arg(ip).arg(statusPort);
+        const bool isNew = !m_discovered.contains(url) && !m_sources.contains(url);
+        m_discovered.insert(url, now);
+        if (isNew) {
+            // Intégrer tout de suite plutôt que d'attendre le prochain cycle : une
+            // machine qui s'annonce apparaît sans délai perceptible.
+            fetch(url);
+        }
+    }
+}
+
+bool MonitorModule::forgetMachine(const QString& key) {
+    if (!m_store)
+        return false;
+    const qint64 removed = m_store->forgetMachine(key);
+    if (removed < 0)
+        return false;   // machine inconnue
+
+    // Retirer aussi la ou les sources découvertes qui pointaient vers cette machine,
+    // pour ne pas la réintégrer au prochain cycle. On les reconnaît via l'état de
+    // source (baseUrl -> machine). Une machine réellement partie ne se réannonce
+    // plus : elle ne reviendra donc pas. Si elle se rallume et réannonce, c'est un
+    // choix : elle sera redécouverte (l'oubli visait une machine déconnectée).
+    const QStringList urls = m_sourceState.keys();
+    for (const QString& url : urls) {
+        if (m_sourceState.value(url).value(QStringLiteral("machine")).toString() == key) {
+            m_discovered.remove(url);
+            m_sourceState.remove(url);
+        }
+    }
+    return true;
 }
 
 void MonitorModule::fetch(const QString& baseUrl) {
@@ -248,6 +368,20 @@ QJsonObject MonitorModule::statusJson() const {
     o["sources"]        = QJsonArray::fromStringList(m_sources);
     o["interval_ms"]    = m_intervalMs;
     o["retention_days"] = m_retentionDays;
+
+    // Découverte beacon : de quoi voir d'un coup d'œil si l'écoute est active et
+    // combien de morfMonitor ont été appris seuls (hors sources déclarées).
+    QJsonObject disc;
+    disc["enabled"]  = m_discoveryEnabled;
+    disc["listening"] = (m_beacon != nullptr);
+    disc["udp_port"] = m_discoveryPort;
+    QJsonArray found;
+    for (auto it = m_discovered.constBegin(); it != m_discovered.constEnd(); ++it)
+        found.append(QJsonObject{{"source", it.key()},
+                                 {"last_seen", static_cast<double>(it.value())}});
+    disc["found"] = found;
+    o["discovery"] = disc;
+
     o["machines_known"] = m_store ? m_store->machines().size() : 0;
     o["last_poll_at"]   = m_lastPollAt ? QJsonValue(static_cast<double>(m_lastPollAt))
                                        : QJsonValue(QJsonValue::Null);

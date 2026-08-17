@@ -319,6 +319,34 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             }
         }
     }
+    // ---- Oubli d'une machine (POST) : suppression definitive ----------------
+    // Geste explicite de l'utilisateur (« Oublier cette machine »), le seul moyen
+    // de retirer une machine reellement partie. Efface la machine ET tout son
+    // historique. Corps : {"machine":"<cle/hostname>"}.
+    else if (path == "/api/monitor/forget") {
+        if (method != "POST") {
+            code = 405; reason = "Method Not Allowed";
+            out = "{\"error\":\"use POST /api/monitor/forget\"}";
+        } else {
+            auto* module = m_registry
+                ? qobject_cast<MonitorModule*>(m_registry->firstOfType(QStringLiteral("monitor")))
+                : nullptr;
+            const QJsonObject in = QJsonDocument::fromJson(body).object();
+            const QString key = in.value(QStringLiteral("machine")).toString();
+            if (!module) {
+                code = 503; reason = "Service Unavailable";
+                out = "{\"error\":\"aucun module 'monitor' configure\"}";
+            } else if (key.isEmpty()) {
+                code = 400; reason = "Bad Request";
+                out = "{\"error\":\"champ 'machine' obligatoire\"}";
+            } else if (!module->forgetMachine(key)) {
+                code = 404; reason = "Not Found";
+                out = "{\"forgotten\":false,\"error\":\"machine inconnue\"}";
+            } else {
+                out = toJson(QJsonObject{{"forgotten", true}, {"machine", key}});
+            }
+        }
+    }
     // ---- Routes GET ------------------------------------------------------
     else if (method != "GET") {
         code = 405; reason = "Method Not Allowed";

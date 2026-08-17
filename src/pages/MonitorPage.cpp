@@ -70,6 +70,7 @@ morfMonitor dit &laquo;&nbsp;maintenant&nbsp;&raquo; ; ici on regarde comment la
   </label>
   <div class="periods" id="periods"></div>
   <span id="conn" class="pill"></span>
+  <button id="forget" class="pbtn" title="Retirer définitivement une machine déconnectée et tout son historique" disabled>Oublier cette machine…</button>
 </div>
 
 <div id="app"><p class="muted">Chargement&hellip;</p></div>
@@ -135,6 +136,12 @@ function render(data){
   const ov=data.overview||{}, sr=data.series||{};
   const online = (machs.find(m=>m.key===data.machine)||{}).online;
   $("#conn").innerHTML='<span class="dot" style="background:'+(online?"var(--ok)":"var(--bad)")+'"></span>'+(online?"en ligne":"hors ligne");
+  // On n'oublie qu'une machine DECONNECTEE : une machine en ligne se
+  // réintégrerait aussitôt par découverte. Le bouton n'est donc actif que hors ligne.
+  const fb=$("#forget");
+  if(fb){fb.disabled=!!online;
+    fb.title=online?"Une machine en ligne ne peut pas être oubliée (elle serait réintégrée aussitôt)."
+                   :"Retirer définitivement cette machine déconnectée et tout son historique";}
 
   // Vue d'ensemble
   let html='<h2>Vue d’ensemble</h2><div class="grid">'+
@@ -221,6 +228,19 @@ $("#periods").addEventListener("click",e=>{const b=e.target.closest(".pbtn");if(
   S.period=+b.dataset.s;localStorage.setItem(LS_P,S.period);
   document.querySelectorAll(".pbtn").forEach(x=>x.classList.toggle("on",+x.dataset.s===S.period));load();});
 $("#machine").addEventListener("change",e=>{S.machine=e.target.value;localStorage.setItem(LS_M,S.machine);load();});
+
+// Oublier une machine : suppression DEFINITIVE (machine + historique). Confirmation
+// ferme, puis on repart sur la premiere machine restante.
+$("#forget").addEventListener("click",()=>{
+  const key=S.machine; if(!key) return;
+  if(!confirm("Oublier définitivement la machine « "+key+" » ?\n\nToutes ses données historiques (relevés, services, activités) seront supprimées. Cette action est irréversible.")) return;
+  fetch("/api/monitor/forget",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({machine:key})})
+    .then(r=>r.json()).then(d=>{
+      if(d.forgotten){S.machine="";localStorage.removeItem(LS_M);load();}
+      else alert("Suppression impossible : "+(d.error||"erreur inconnue"));})
+    .catch(e=>alert("Suppression impossible : "+e));
+});
 
 // Badge de version (comme les autres pages)
 fetch("/status").then(r=>r.json()).then(s=>{const b=$("#vb");if(b)b.textContent=s.version?"v"+s.version:"";}).catch(()=>{});
