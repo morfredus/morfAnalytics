@@ -3,6 +3,60 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.29.1] - 2026-08-17
+
+### Modifié
+
+- **Exploration réorganisée en sections repliables**, pour une lecture progressive (la
+  page devenait longue et dense). L'essentiel est ouvert d'emblée - **Vue d'ensemble**,
+  **Quand** (années/mois), **Avec quoi** (matériel) - et l'avancé est replié :
+  **Réglages** (focales, ISO, ouvertures, vitesses, type), **Dossiers**, **Analyses
+  croisées** (matrice, comparaisons). Un non-initié voit d'abord l'essentiel et déplie le
+  reste à la demande.
+
+## [0.29.0] - 2026-08-17
+
+### Ajouté
+
+- **Onglets Exploration / Configuration** sur `/photo`. Le réglage rarement touché du
+  matériel quitte la page d'analyse : l'exploration reste lisible, la configuration a sa
+  place à part.
+- **Filtre « Boîtiers possédés » (liste blanche).** Changement d'approche : au lieu
+  d'exclure les boîtiers qu'on n'a pas, on **choisit explicitement son matériel** dans
+  l'onglet Configuration, depuis la liste proposée par l'indexation. Aucune coche = tous
+  les boîtiers ; sinon seules ces photos comptent (smartphone, boîtier emprunté, photos
+  d'autres photographes… écartés ; les photos sans boîtier identifié passent toujours).
+  Mémorisé et **enregistré dans les vues**.
+- La liste des boîtiers est une **vraie liste de cases à cocher défilable** (deux
+  colonnes), plus le `<select multiple>` qui « remontait » à chaque clic : cocher une case
+  ne re-rend plus le panneau, le défilement reste en place.
+
+### Modifié
+
+- Le résumé de périmètre (onglet Exploration) affiche « N boîtiers possédés sur M » avec
+  un lien direct vers Configuration. Le ∅ d'exclusion par barre est retiré (remplacé par
+  le choix explicite du matériel).
+
+## [0.28.2] - 2026-08-17
+
+### Corrigé
+
+- **Dédoublonnage qui amputait par excès.** Le dédup s'appliquait AUSSI à l'intérieur
+  d'une même source, alors que morfPhoto garantit déjà des chemins uniques par poste :
+  sur une base sans EXIF (dates nulles), des fichiers **distincts** partageant nom+taille
+  se voyaient supprimés. Symptôme : « 15720 doublons écartés » sur une seule source.
+  Le dédup est désormais **strictement inter-postes** (une empreinte revue depuis un
+  AUTRE poste seulement est un doublon). Vérifié en réel : pi4fred seul → 15720 photos,
+  **0 doublon**.
+- **Postes en double dans la liste.** Le morfPhoto local apparaissait deux fois
+  (`127.0.0.1` en config ET son nom via le beacon sur l'IP du LAN), et une machine
+  multi-domiciliée autant de fois que d'interfaces. La liste est **dédoublonnée par
+  machine** (une entrée, une URL — loopback préféré pour la locale). Le poste local est
+  étiqueté **« <nom> (local) »** (ou « base locale ») au lieu de `127.0.0.1`.
+- **Rafraîchissement aléatoire au changement de postes.** Cocher/décocher vite lançait
+  des requêtes dont les réponses revenaient dans le désordre. Un garde de séquence ne rend
+  plus que la réponse de la **dernière** requête émise.
+
 ## [0.28.1] - 2026-08-17
 
 ### Ajouté

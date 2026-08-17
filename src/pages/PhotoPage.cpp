@@ -69,6 +69,21 @@ select,input[type=number]{background:#242830;border:1px solid var(--line);color:
 .srcchip.on{border-color:#4a90d9;background:#1c2c3a}
 .srcchip.off{opacity:.55}
 .srcchip input{vertical-align:middle;margin-right:.35rem}
+.tabs{display:flex;gap:.4rem;margin:.2rem 0 1rem;border-bottom:1px solid var(--line)}
+.tab{padding:.45rem .9rem;border:1px solid var(--line);border-bottom:none;border-radius:8px 8px 0 0;background:transparent;color:var(--muted);cursor:pointer;font-size:.95rem}
+.tab.on{background:#1c2c3a;color:var(--ink);border-color:#4a90d9;font-weight:600}
+.ownlist{max-height:min(60vh,26rem);overflow:auto;border:1px solid var(--line);border-radius:8px;padding:.4rem .6rem;margin:.5rem 0;columns:2;column-gap:1.4rem}
+.ownlist label{display:block;break-inside:avoid;padding:.12rem 0;cursor:pointer;font-size:.9rem}
+.ownlist input{vertical-align:middle;margin-right:.45rem}
+@media(max-width:640px){.ownlist{columns:1}}
+.sec{border:1px solid var(--line);border-radius:10px;margin:.7rem 0}
+.sec>summary{cursor:pointer;padding:.6rem .9rem;font-size:1.15rem;font-weight:600;list-style:none}
+.sec>summary::-webkit-details-marker{display:none}
+.sec>summary::before{content:"\25B8";display:inline-block;margin-right:.5rem;color:var(--muted)}
+.sec[open]>summary::before{content:"\25BE"}
+.sec>summary:hover{color:#4a90d9}
+.secbody{padding:0 .9rem .8rem}
+.secbody h3{margin:.9rem 0 .3rem;font-size:1rem}
 input[type=number]{width:5.5rem}
 .tl{display:flex;gap:2px;flex:1;align-items:flex-end;height:1.6rem}
 .tl span{flex:1;background:var(--track);border-radius:2px}.tl span.u{background:var(--accent)}
@@ -85,6 +100,10 @@ th{color:var(--muted);font-weight:600}tr+tr td{border-top:1px solid var(--line)}
 <p class="muted">Poser des questions au corpus&nbsp;: croiser boîtiers, focales, ISO, ouvertures,
 vitesses, périodes&hellip; La donnée reste souveraine dans morfPhoto ; ici on l'explore.</p>
 <div id="sources" class="sources"><span class="muted">Recherche des postes&hellip;</span></div>
+<div class="tabs" id="tabs">
+  <button class="tab on" data-tab="explore">Exploration</button>
+  <button class="tab" data-tab="config">Configuration</button>
+</div>
 <div id="app"><p class="muted">Chargement des donn&eacute;es&hellip;</p></div>
 </div>
 <script>
@@ -92,6 +111,15 @@ vitesses, périodes&hellip; La donnée reste souveraine dans morfPhoto ; ici on 
 const LS_KEY="morfanalytics.photo.excludedCameras";
 function loadExcluded(){try{return JSON.parse(localStorage.getItem(LS_KEY)||"[]")}catch(e){return []}}
 function saveExcluded(s){try{localStorage.setItem(LS_KEY,JSON.stringify([...s]))}catch(e){}}
+
+// Boîtiers POSSÉDÉS (liste blanche) : on choisit explicitement son matériel dans l'onglet
+// Configuration, plutôt que d'exclure ceux qu'on n'a pas. Vide = aucun filtre (tous les
+// boîtiers). Non vide = seules ces photos comptent (les autres boîtiers -- smartphone,
+// boîtier emprunté à un mariage... -- sont écartés). Persisté, et enregistré dans les vues.
+const LS_OWNED="morfanalytics.photo.ownedCameras";
+function loadOwned(){try{return JSON.parse(localStorage.getItem(LS_OWNED)||"[]")}catch(e){return []}}
+function saveOwned(s){try{localStorage.setItem(LS_OWNED,JSON.stringify([...s]))}catch(e){}}
+let TAB="explore";   // onglet courant : "explore" | "config"
 
 // --- Vues enregistrées : un jeu de filtres nommé, réappliquable d'un clic --------
 // Cas type : « ma pratique réelle » qui exclut smartphones et boîtiers jamais possédés
@@ -103,7 +131,7 @@ function saveViews(v){try{localStorage.setItem(LS_VIEWS,JSON.stringify(v))}catch
 function serializeFilters(){
   const names=d=>[...S[d]].map(k=>DIMS[d].lab(k));   // index -> libellé (boîtier, objectif, type, dossier)
   return {
-    camExcl:[...S.camExcl],
+    camExcl:[...S.camExcl], camOwned:[...S.camOwned],
     cam:names("cam"), lens:names("lens"), type:names("type"), folder:names("folder"),
     year:[...S.year], month:[...S.month],
     focal:S.focal.slice(), aperture:S.aperture.slice(), iso:S.iso.slice(), shutter:S.shutter.slice(),
@@ -127,6 +155,8 @@ function persistExcl(){
 function applyView(v){
   Object.assign(S,emptyFilters());
   S.camExcl=new Set(v.camExcl||[]);
+  S.camOwned=new Set(v.camOwned||[]);
+  saveOwned(S.camOwned);
   persistExcl();
   ["cam","lens","type","folder"].forEach(d=>(v[d]||[]).forEach(lab=>{
     const k=labelToKey(d,lab); if(k!==-1&&k!==null&&k!==undefined)S[d].add(k);
@@ -158,7 +188,7 @@ function fmtF(v,d){return (v===null||v===undefined)?"—":v.toFixed(d===undefine
 // period = fenêtre continue d'années (from..to) sur taken_at. camExcl = périmètre.
 function emptyFilters(){return {cam:new Set(),lens:new Set(),type:new Set(),folder:new Set(),
   year:new Set(),month:new Set(),focal:[],aperture:[],iso:[],shutter:[],
-  period:{from:null,to:null},camExcl:new Set()};}
+  period:{from:null,to:null},camExcl:new Set(),camOwned:new Set()};}
 const S=emptyFilters();
 const MX={row:"cam",col:"focal",measure:"count"};   // matrice analytique
 const GRP={a:null,b:null};                           // comparaison par groupes
@@ -254,11 +284,18 @@ function loadSources(){
 }
 
 // ---- Chargement --------------------------------------------------------------
+// Garde de séquence : cocher/décocher vite lance plusieurs requêtes ; la fusion est
+// synchrone côté service, donc les réponses peuvent revenir dans le désordre. On ne rend
+// QUE la réponse de la dernière requête émise (les périmées sont ignorées).
+let reqSeq=0;
 function reload(){
   // Requête pilotée par les postes cochés ; à défaut, on retombe sur ?source= (handoff)
   // ou la source périodique configurée (location.search éventuellement vide).
   const qs = SEL.size ? ("?sources="+sourcesParam()) : location.search;
-  fetch("/photo/data"+qs).then(r=>r.json()).then(init).catch(e=>{
+  const my=++reqSeq;
+  $("#app").innerHTML='<p class="muted">Chargement des donn&eacute;es&hellip;</p>';
+  fetch("/photo/data"+qs).then(r=>r.json()).then(snap=>{ if(my===reqSeq)init(snap); }).catch(e=>{
+    if(my!==reqSeq)return;
     $("#app").innerHTML='<section class="card"><strong>Donn&eacute;es indisponibles.</strong>'+
       '<p class="muted">'+esc(e)+'</p></section>';
   });
@@ -274,6 +311,7 @@ function init(snap){
   }
   D=decode(snap); buildDims();
   S.camExcl=new Set([...(D.configExcl||[]),...loadExcluded()]);
+  S.camOwned=new Set(loadOwned());
   render();
   updateSrcInfo(snap);
 }
@@ -303,6 +341,9 @@ function matchesWith(i,F){
     if(F[d].size){const k=DIMS[d].key(i); if(k===null||k===undefined||!F[d].has(k))return false;}
   }
   if(F.camExcl.size){const k=D.cols.camera[i]; if(k!==null&&F.camExcl.has(D.dict.camera[k]))return false;}
+  // Boîtiers possédés (liste blanche) : si définie, un boîtier CONNU hors liste est écarté.
+  // Les photos sans boîtier identifié (EXIF absent) passent toujours (souvent les vôtres).
+  if(F.camOwned&&F.camOwned.size){const k=D.cols.camera[i]; if(k!==null&&!F.camOwned.has(D.dict.camera[k]))return false;}
   for(const d of RANGE_DIMS){
     if(F[d].length){const v=D.cols[DIMS[d].col][i]; if(!inAnyRange(v,F[d]))return false;}
   }
@@ -371,11 +412,8 @@ function chip(label,cls,onClear){const id="c"+(chip._n=(chip._n||0)+1);chip._h=c
 // Sections génériques (même moteur, mêmes interactions partout).
 function catCard(dim,extra){
   const idx=filtered(), a=countCat(idx,dim);
-  const isCam=dim==="cam";
   return '<div class="card">'+denom(a.known,idx.length)+
-    (isCam?'<p class="note">Clic&nbsp;: filtrer &middot; &empty;&nbsp;: exclure de ma pratique (mémorisé).</p>':'')+
-    bars(a.rows,{filterKey:dim,isOn:r=>S[dim].has(r.key),
-      excludable:isCam,isExcluded:r=>S.camExcl.has(r.label)})+(extra||'')+'</div>';
+    bars(a.rows,{filterKey:dim,isOn:r=>S[dim].has(r.key)})+(extra||'')+'</div>';
 }
 function rangeCard(dim){
   const idx=filtered(), a=histoRows(idx,dim);
@@ -396,23 +434,17 @@ function filtersPanel(){
     +'<button class="btn" id="viewdel">Supprimer</button>'
     +(vnames.length?'':' <span class="muted">aucune pour l’instant</span>')
     +'</div>';
-  // Périmètre de pratique (persistant, distinct des filtres).
+  // Périmètre de pratique : boîtiers possédés (réglés dans l'onglet Configuration).
+  const total=(D.dict.camera||[]).length;
   let per=vh+'<div class="fg"><b>Périmètre</b> ';
-  if(S.camExcl.size){
-    per+='ma pratique &middot; exclus&nbsp;: '+[...S.camExcl].map(c=>chip(c,"excl",()=>{
-      S.camExcl.delete(c);const l=new Set(loadExcluded());l.delete(c);saveExcluded(l);})).join("");
-  } else per+='<span class="muted">corpus complet</span>';
+  if(S.camOwned.size)
+    per+='mon matériel &middot; <b>'+fr(S.camOwned.size)+'</b> boîtier(s) possédé(s) sur '+fr(total)
+        +' &middot; <a href="#" id="gotoconf">Configuration</a>';
+  else
+    per+='<span class="muted">tous les boîtiers (aucun matériel déclaré) &middot; </span><a href="#" id="gotoconf">choisir mes boîtiers</a>';
+  // Rappel des exclusions héritées (config serveur / anciennes vues), s'il y en a.
+  if(S.camExcl.size) per+=' &middot; <span class="muted">exclus&nbsp;: '+fr(S.camExcl.size)+'</span>';
   per+='</div>';
-  // Éditeur d'exclusion : liste tous les boîtiers présents, cochés = exclus des stats.
-  // Plus rapide que le ∅ des barres pour retirer d'un coup smartphones et boîtiers jamais
-  // possédés. Enregistré dans les vues (camExcl) et persistant comme périmètre courant.
-  const cams=(D.dict.camera||[]).slice().sort((a,b)=>String(a).localeCompare(String(b)));
-  if(cams.length){
-    per+='<div class="fg" style="margin-top:.3rem"><b>Exclure des boîtiers</b> '
-      +'<select id="excsel" multiple size="'+Math.min(6,cams.length)+'" style="min-width:16rem;max-width:100%">'
-      +cams.map(c=>'<option value="'+esc(c)+'"'+(S.camExcl.has(c)?" selected":"")+'>'+esc(c)+'</option>').join("")
-      +'</select> <span class="muted">Ctrl/Maj &middot; sélectionnés = exclus</span></div>';
-  }
 
   // Filtres analytiques, groupés par dimension.
   const lines=[];
@@ -548,7 +580,7 @@ function matrixBlock(){
 // ---- Comparaison par groupes de filtres --------------------------------------
 function snapFilters(){return {cam:new Set(S.cam),lens:new Set(S.lens),type:new Set(S.type),folder:new Set(S.folder),
   year:new Set(S.year),month:new Set(S.month),focal:S.focal.map(r=>r.slice()),aperture:S.aperture.map(r=>r.slice()),
-  iso:S.iso.map(r=>r.slice()),shutter:S.shutter.map(r=>r.slice()),period:{...S.period},camExcl:new Set(S.camExcl)};}
+  iso:S.iso.map(r=>r.slice()),shutter:S.shutter.map(r=>r.slice()),period:{...S.period},camExcl:new Set(S.camExcl),camOwned:new Set(S.camOwned)};}
 function describeFilters(F){
   const parts=[];
   for(const d of CAT_DIMS)if(F[d].size)parts.push(DIMS[d].label+": "+[...F[d]].map(k=>DIMS[d].lab(k)).join("/"));
@@ -611,54 +643,103 @@ function quickCompare(idx){
 }
 const QC={dim:null,a:null,b:null};
 
+// ---- Onglet Configuration ----------------------------------------------------
+// Boîtiers POSSÉDÉS : choix explicite de son matériel. Paramètre rarement touché, donc
+// hors de la page d'exploration. La liste est une vraie liste de cases (pas un <select
+// multiple> qui « remonte » au clic) dans un conteneur défilable : cocher une case ne
+// re-rend PAS le panneau (le défilement reste en place), on met juste à jour l'état, la
+// persistance et le compteur.
+function configPanel(){
+  const cams=(D.dict.camera||[]).slice().sort((a,b)=>String(a).localeCompare(String(b)));
+  let h='<section class="card"><h2>Boîtiers possédés</h2>'
+    +'<p class="muted">Cochez le matériel que vous possédez réellement. Les analyses ne '
+    +'compteront alors que vos boîtiers ; les autres (smartphone, boîtier emprunté à un '
+    +'mariage, photos d\'autres photographes…) sont écartés. <b>Aucune coche = tous les '
+    +'boîtiers</b> (pas de filtre). Réglage mémorisé et enregistré dans les vues.</p>';
+  if(!cams.length){
+    h+='<p class="muted">Aucun boîtier dans le corpus courant.</p></section>';
+    return h;
+  }
+  h+='<div class="controls"><button class="btn" id="ownall">Tout cocher</button>'
+    +'<button class="btn" id="ownnone">Tout décocher</button>'
+    +'<span class="muted" id="owncount"></span></div>';
+  h+='<div class="ownlist" id="ownlist">'
+    +cams.map(c=>'<label><input type="checkbox" data-cam="'+esc(c)+'"'
+      +(S.camOwned.has(c)?" checked":"")+'>'+esc(c)+'</label>').join("")
+    +'</div>';
+  h+='<p class="muted">Astuce&nbsp;: une fois vos boîtiers cochés, enregistrez une <b>vue</b> '
+    +'(onglet Exploration) pour la retrouver d\'un clic.</p>';
+  h+='</section>';
+  return h;
+}
+function ownCountText(){
+  const total=(D.dict.camera||[]).length;
+  return S.camOwned.size? (fr(S.camOwned.size)+' / '+fr(total)+' boîtier(s) possédé(s)')
+                        : ('0 coché — tous les boîtiers comptent ('+fr(total)+')');
+}
+function wireConfig(){
+  const el=$("#owncount"); if(el)el.textContent=ownCountText();
+  const list=$("#ownlist");
+  if(list) list.addEventListener("change",e=>{
+    const cb=e.target.closest("input[type=checkbox]"); if(!cb)return;
+    const name=cb.getAttribute("data-cam");
+    if(cb.checked)S.camOwned.add(name); else S.camOwned.delete(name);
+    saveOwned(S.camOwned);
+    const c=$("#owncount"); if(c)c.textContent=ownCountText();   // pas de re-render : défilement conservé
+  });
+  const cams=(D.dict.camera||[]);
+  on("ownall","click",()=>{S.camOwned=new Set(cams);saveOwned(S.camOwned);render();});
+  on("ownnone","click",()=>{S.camOwned=new Set();saveOwned(S.camOwned);render();});
+}
+
 // ---- Rendu principal ---------------------------------------------------------
+// Section repliable : titre cliquable + corps. `open` = dépliée d'emblée.
+function sec(title,inner,open){
+  return '<details class="sec"'+(open?' open':'')+'><summary>'+title+'</summary>'+
+    '<div class="secbody">'+inner+'</div></details>';
+}
 function render(){
+  if(TAB==="config"){ $("#app").innerHTML=configPanel(); wireConfig(); return; }
   const idx=filtered();
   let h="";
   h+=filtersPanel();
-  h+=tiles(idx);
-  h+='<h2>Tendances (médianes)</h2>'+statTiles(idx);
 
-  h+='<div class="cols">';
-  h+='<div><h2>Par année</h2>'+catCard("year",
-      '<div class="controls" style="margin-top:.5rem"><label class="muted">Période</label>'+
-      '<input type="number" id="pfrom" placeholder="de" value="'+(S.period.from??"")+'">'+
-      '<input type="number" id="pto" placeholder="à" value="'+(S.period.to??"")+'">'+
-      '<button class="btn" id="pset">appliquer</button><button class="btn" id="pclr">effacer</button></div>')+'</div>';
-  h+='<div><h2>Par mois</h2>'+catCard("month")+'</div>';
-  h+='</div>';
+  // Lecture progressive : l'essentiel est ouvert, l'avancé replié. Un non-initié voit
+  // d'abord la vue d'ensemble, le temporel et le matériel ; les réglages fins et les
+  // analyses croisées ne se déplient que si on les demande.
+  h+=sec("Vue d'ensemble",
+      tiles(idx)+'<h3>Tendances (médianes)</h3>'+statTiles(idx), true);
 
-  h+='<div class="cols">';
-  h+='<div><h2>Boîtiers</h2>'+catCard("cam")+'</div>';
-  h+='<div><h2>Objectifs</h2>'+catCard("lens",
-      (S.lens.size?'<p class="note">Boîtiers associés&nbsp;: '+esc(countCat(idx,"cam").rows.map(r=>r.label+" ("+r.count+")").join(", ")||"—")+'</p>':''))+'</div>';
-  h+='</div>';
+  h+=sec("Quand — années et mois",
+      '<div class="cols"><div><h3>Par année</h3>'+catCard("year",
+        '<div class="controls" style="margin-top:.5rem"><label class="muted">Période</label>'+
+        '<input type="number" id="pfrom" placeholder="de" value="'+(S.period.from??"")+'">'+
+        '<input type="number" id="pto" placeholder="à" value="'+(S.period.to??"")+'">'+
+        '<button class="btn" id="pset">appliquer</button><button class="btn" id="pclr">effacer</button></div>')+'</div>'+
+      '<div><h3>Par mois</h3>'+catCard("month")+'</div></div>', true);
 
-  h+='<div class="cols">';
-  h+='<div><h2>Focales usuelles</h2>'+rangeCard("focal")+'</div>';
-  h+='<div><h2>Focales — détail (top)</h2><div class="card">'+
-     bars(topFocals(idx,12),{filterKey:"focal",isOn:r=>rangeOn(S.focal,r.k)})+
-     '<p class="note">Focales exactes (au mm) les plus fréquentes.</p></div></div>';
-  h+='</div>';
+  h+=sec("Avec quoi — matériel",
+      '<div class="cols"><div><h3>Boîtiers</h3>'+catCard("cam")+'</div>'+
+      '<div><h3>Objectifs</h3>'+catCard("lens",
+        (S.lens.size?'<p class="note">Boîtiers associés&nbsp;: '+esc(countCat(idx,"cam").rows.map(r=>r.label+" ("+r.count+")").join(", ")||"—")+'</p>':''))+'</div></div>'+
+      '<h3>Boîtiers — chronologie</h3><div class="card">'+cameraTimeline(idx)+'</div>', true);
 
-  h+='<div class="cols">';
-  h+='<div><h2>Sensibilité ISO</h2>'+rangeCard("iso")+'</div>';
-  h+='<div><h2>Ouvertures</h2>'+rangeCard("aperture")+'</div>';
-  h+='</div>';
+  h+=sec("Réglages — focales, ISO, ouvertures, vitesses",
+      '<div class="cols"><div><h3>Focales usuelles</h3>'+rangeCard("focal")+'</div>'+
+      '<div><h3>Focales — détail (top)</h3><div class="card">'+
+        bars(topFocals(idx,12),{filterKey:"focal",isOn:r=>rangeOn(S.focal,r.k)})+
+        '<p class="note">Focales exactes (au mm) les plus fréquentes.</p></div></div></div>'+
+      '<div class="cols"><div><h3>Sensibilité ISO</h3>'+rangeCard("iso")+'</div>'+
+      '<div><h3>Ouvertures</h3>'+rangeCard("aperture")+'</div></div>'+
+      '<div class="cols"><div><h3>Vitesses d\'obturation</h3>'+rangeCard("shutter")+'</div>'+
+      '<div><h3>Type de fichier</h3>'+catCard("type")+'</div></div>', false);
 
-  h+='<div class="cols">';
-  h+='<div><h2>Vitesses d\'obturation</h2>'+rangeCard("shutter")+'</div>';
-  h+='<div><h2>Type de fichier</h2>'+catCard("type")+'</div>';
-  h+='</div>';
+  h+=sec("Dossiers", catCard("folder"), false);
 
-  h+='<div class="cols">';
-  h+='<div><h2>Dossiers</h2>'+catCard("folder")+'</div>';
-  h+='<div><h2>Boîtiers — chronologie</h2><div class="card">'+cameraTimeline(idx)+'</div></div>';
-  h+='</div>';
-
-  h+='<h2>Matrice analytique</h2><div class="card">'+matrixBlock()+'</div>';
-  h+='<h2>Comparaison rapide (une dimension)</h2><div class="card cmp">'+quickCompare(idx)+'</div>';
-  h+='<h2>Comparaison de groupes de filtres</h2><div class="card cmp">'+groupsBlock()+'</div>';
+  h+=sec("Analyses croisées",
+      '<h3>Matrice analytique</h3><div class="card">'+matrixBlock()+'</div>'+
+      '<h3>Comparaison rapide (une dimension)</h3><div class="card cmp">'+quickCompare(idx)+'</div>'+
+      '<h3>Comparaison de groupes de filtres</h3><div class="card cmp">'+groupsBlock()+'</div>', false);
 
   h+='<div class="card"><button class="btn" id="reload">recharger les données</button>'+
      '<div class="denom">'+(D.fetched?('actualisé '+esc(D.fetched)):'')+'<br>source&nbsp;: '+esc(D.source||"")+'</div></div>';
@@ -677,11 +758,6 @@ function wire(){
   document.querySelectorAll("[data-f]").forEach(el=>{
     el.addEventListener("click",e=>{if(e.target.classList.contains("ex"))return;
       toggleFilter(el.getAttribute("data-f"),JSON.parse(el.getAttribute("data-k")));render();});});
-  document.querySelectorAll(".ex").forEach(el=>{
-    el.addEventListener("click",e=>{e.stopPropagation();const name=el.getAttribute("data-ex");
-      const local=new Set(loadExcluded());
-      if(S.camExcl.has(name)){S.camExcl.delete(name);local.delete(name);}else{S.camExcl.add(name);local.add(name);}
-      saveExcluded(local);render();});});
   document.querySelectorAll("[data-chip]").forEach(el=>{
     el.addEventListener("click",()=>{const fn=chip._h[el.getAttribute("data-chip")];if(fn)fn();render();});});
   on("resetf","click",()=>{const ex=S.camExcl;const f=emptyFilters();f.camExcl=ex;Object.assign(S,f);render();});
@@ -695,10 +771,8 @@ function wire(){
     const v=loadViews()[n]; if(v)applyView(v);});
   on("viewdel","click",()=>{const n=$("#viewsel").value; if(!n)return;
     const v=loadViews(); delete v[n]; saveViews(v); render();});
-  // Éditeur d'exclusion de boîtiers (multi-sélection)
-  on("excsel","change",e=>{
-    S.camExcl=new Set([...e.target.selectedOptions].map(o=>o.value));
-    persistExcl(); render();});
+  // Lien « Configuration » depuis le résumé de périmètre.
+  on("gotoconf","click",e=>{e.preventDefault();setTab("config");});
   // Période
   on("pset","click",()=>{const a=$("#pfrom").value,b=$("#pto").value;
     S.period={from:a===""?null:+a,to:b===""?null:+b};render();});
@@ -719,6 +793,18 @@ function wire(){
 
 // Badge de version : lit /status (comme la page MeteoHub) pour afficher la version
 // du service courant a cote du titre. Silencieux si /status est indisponible.
+// Onglets Exploration / Configuration : bascule sans recharger les données (le dataset
+// est déjà en mémoire). Câblés une seule fois, hors de #app qui est reconstruit à chaque
+// rendu. setTab est aussi appelé par le lien « Configuration » du résumé de périmètre.
+function setTab(t){
+  TAB=t;
+  document.querySelectorAll("#tabs .tab").forEach(b=>b.classList.toggle("on",b.getAttribute("data-tab")===t));
+  if(D)render();   // rien à rendre tant que les données ne sont pas chargées
+}
+document.querySelectorAll("#tabs .tab").forEach(b=>{
+  b.addEventListener("click",()=>setTab(b.getAttribute("data-tab")));
+});
+
 fetch("/status").then(r=>r.json()).then(s=>{const b=document.getElementById("vb");if(b)b.textContent=s.version?"v"+s.version:"";}).catch(()=>{});
 loadSources();
 </script>

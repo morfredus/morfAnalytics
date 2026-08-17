@@ -14,6 +14,7 @@
 #include <QUdpSocket>
 #include <QNetworkDatagram>
 #include <QHostAddress>
+#include <QHostInfo>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QDateTime>
@@ -143,30 +144,76 @@ void PhotoAnalyticsModule::pruneDiscovered(qint64 nowSec) {
 }
 
 QString PhotoAnalyticsModule::hostForUrl(const QString& url) const {
+    const QString h = QUrl(url).host();
+    // Loopback = CETTE machine : donner son nom plutôt que « 127.0.0.1 ».
+    if (h == QLatin1String("localhost") || h == QLatin1String("::1")
+        || h.startsWith(QLatin1String("127."))) {
+        const QString local = QHostInfo::localHostName();
+        return local.isEmpty() ? h : local;
+    }
     const auto it = m_discovered.constFind(url);
     if (it != m_discovered.constEnd() && !it.value().host.isEmpty())
         return it.value().host;         // nom annoncé par le beacon (lisible)
-    return QUrl(url).host();            // repli : hôte de l'URL (souvent une IP)
+    return h;                           // repli : hôte de l'URL (souvent une IP)
 }
 
 QJsonArray PhotoAnalyticsModule::availableSources() const {
     const qint64 now = QDateTime::currentSecsSinceEpoch();
-    QJsonArray arr;
-    QSet<QString> seen;
-    auto add = [&](const QString& url, bool configured, bool online) {
-        if (url.isEmpty() || seen.contains(url))
-            return;
-        seen.insert(url);
-        arr.append(QJsonObject{{"url", url}, {"host", hostForUrl(url)},
-                               {"online", online}, {"configured", configured}});
+    const QString localHost = QHostInfo::localHostName();
+    auto isLoop = [](const QString& h) {
+        return h == QLatin1String("localhost") || h == QLatin1String("::1")
+            || h.startsWith(QLatin1String("127."));
     };
-    // Source déclarée d'abord (toujours proposée, même hors ligne : c'est un choix).
-    if (!m_sourceUrl.isEmpty())
-        add(m_sourceUrl, true, true);
-    // Puis les découvertes récentes (annoncées il y a moins du seuil d'oubli).
+
+    // On rassemble tous les candidats (source déclarée + découvertes), puis on
+    // DÉDOUBLONNE par MACHINE : le morfPhoto local apparaît sinon deux fois (127.0.0.1
+    // en config ET son propre nom via le beacon sur l'IP du LAN), et une machine
+    // multi-domiciliée autant de fois qu'elle a d'interfaces. Une seule entrée par
+    // machine, une seule URL à interroger (loopback pour la locale, plus fiable).
+    struct Cand { QString url; QString host; bool configured; bool loopback; bool online; };
+    QVector<Cand> cands;
+    if (!m_sourceUrl.isEmpty()) {
+        const QString h = QUrl(m_sourceUrl).host();
+        cands.push_back({m_sourceUrl, h, true, isLoop(h), true});
+    }
     for (auto it = m_discovered.constBegin(); it != m_discovered.constEnd(); ++it)
-        if (now - it.value().lastSeen <= kDiscoveryForgetAfterS)
-            add(it.key(), false, (now - it.value().lastSeen) < 120);
+        if (now - it.value().lastSeen <= kDiscoveryForgetAfterS) {
+            const QString h = hostForUrl(it.key());
+            cands.push_back({it.key(), h, false, isLoop(h), (now - it.value().lastSeen) < 120});
+        }
+
+    // Identité de machine : le nom d'hôte local pour une adresse de loopback (c'est CETTE
+    // machine), sinon le hostname annoncé (ou l'hôte de l'URL à défaut). Un morfPhoto
+    // local vu à la fois en 127.0.0.1 et sous son nom via le beacon tombe ainsi dans le
+    // même groupe.
+    auto machineId = [&](const Cand& c) -> QString {
+        if (c.loopback)
+            return localHost.isEmpty() ? QStringLiteral("__local__") : localHost;
+        return c.host.isEmpty() ? QUrl(c.url).host() : c.host;
+    };
+
+    QHash<QString, int> pos;   // machineId -> index dans arr
+    QJsonArray arr;
+    for (const Cand& c : cands) {
+        const QString mid = machineId(c);
+        const bool local = c.loopback || (!localHost.isEmpty() && mid == localHost);
+        QString label = local ? (localHost.isEmpty() ? QStringLiteral("base locale")
+                                                     : localHost + QStringLiteral(" (local)"))
+                              : (c.host.isEmpty() ? QUrl(c.url).host() : c.host);
+        const auto it = pos.constFind(mid);
+        if (it == pos.constEnd()) {
+            pos.insert(mid, arr.size());
+            arr.append(QJsonObject{{"url", c.url}, {"host", label}, {"online", c.online},
+                                   {"configured", c.configured}, {"local", local}});
+        } else {
+            QJsonObject e = arr.at(it.value()).toObject();
+            // Pour la machine locale, préférer l'URL loopback (toujours joignable).
+            if (local && c.loopback) e["url"] = c.url;
+            if (c.online) e["online"] = true;
+            if (c.configured) e["configured"] = true;
+            arr.replace(it.value(), e);
+        }
+    }
     return arr;
 }
 
@@ -413,7 +460,13 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
 
     QJsonObject gFolders;
     QJsonArray cTaken, cCam, cLens, cType, cFocal, cFocal35, cAper, cIso, cShut, cFolder;
-    QSet<QString> seenFp;
+    // Empreinte -> rang de la PREMIÈRE source où on l'a vue. Le dédoublonnage est
+    // strictement INTER-POSTES : une même empreinte revue depuis un AUTRE poste est un
+    // doublon (même fichier indexé sur deux machines) et on l'écarte ; revue dans le
+    // MÊME poste, c'est un fichier distinct (morfPhoto garantit des chemins uniques par
+    // poste ; deux fichiers peuvent partager nom+taille+date, surtout date EXIF absente)
+    // et on le GARDE. Sans cette distinction, une source sans EXIF s'auto-amputait.
+    QHash<QString, int> seenFp;
     int dupRemoved = 0, total = 0;
     QJsonArray sourceStates;
     bool anyReachable = false;
@@ -464,12 +517,16 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
         };
         int kept = 0;
         for (int i = 0; i < n; ++i) {
-            // Dédoublonnage : une photo déjà vue (même empreinte, donc même fichier sur
-            // un autre poste) n'est comptée qu'une fois.
+            // Dédoublonnage INTER-POSTES uniquement (voir seenFp).
             const QString f = at(fp, i).toString();
             if (!f.isEmpty()) {
-                if (seenFp.contains(f)) { ++dupRemoved; continue; }
-                seenFp.insert(f);
+                const auto it = seenFp.constFind(f);
+                if (it != seenFp.constEnd()) {
+                    if (it.value() != srcIdx) { ++dupRemoved; continue; }  // même fichier, autre poste
+                    // même poste : fichier distinct à empreinte identique -> gardé.
+                } else {
+                    seenFp.insert(f, srcIdx);
+                }
             }
             cTaken.append(at(taken, i));
             cCam.append(remap(at(camera, i), dCam, gCam, ciCam));
