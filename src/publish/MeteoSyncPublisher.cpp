@@ -28,7 +28,17 @@ QString nowIso8601Utc() {
     return QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 }
 QString tsToIso(qint64 ts) {
+    // UTC sans avertissement ET sans casser les Qt plus anciens : la constante
+    // QTimeZone::UTC (et la surcharge fromSecsSinceEpoch prenant un QTimeZone)
+    // n'existe qu'a partir de Qt 6.5. Sous Qt 6.4 (Linux Mint), il faut la
+    // surcharge historique Qt::UTC, qui n'y est pas encore depreciee. Un garde de
+    // version choisit la bonne selon le Qt qui compile -- aucun avertissement
+    // d'un cote, aucune erreur de l'autre.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     return QDateTime::fromSecsSinceEpoch(ts, QTimeZone::UTC).toString(Qt::ISODate);
+#else
+    return QDateTime::fromSecsSinceEpoch(ts, Qt::UTC).toString(Qt::ISODate);
+#endif
 }
 
 // Synthese d'un canal sur une journee : min/max/moyenne + premiere/derniere

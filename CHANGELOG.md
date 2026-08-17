@@ -3,6 +3,17 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.29.4] - 2026-08-18
+
+### Corrigé
+
+- **Compilation cassée sous un Qt 6 plus ancien** (Linux Mint) : le correctif
+  d'avertissement de `0.29.3` employait `QTimeZone::UTC`, qui n'existe qu'à partir
+  de **Qt 6.5** (`'UTC' is not a member of 'QTimeZone'`). `MeteoSyncPublisher`
+  choisit désormais l'API selon la version via un garde `QT_VERSION` :
+  `QTimeZone::UTC` sur Qt ≥ 6.5 (sans avertissement), `Qt::UTC` sur Qt < 6.5 (où
+  cette surcharge n'est pas encore dépréciée). Compile proprement des deux côtés.
+
 ## [0.29.3] - 2026-08-17
 
 ### Corrigé
