@@ -3,6 +3,19 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.29.5] - 2026-08-18
+
+### Ajouté
+
+- **Déclaration de purge** dans `service.json` : catégorie `sitewatch-history`
+  (les synthèses SiteWatch, `sitewatch-history.sqlite`), via `from_config`
+  (`sitewatch_cache_dir`, type `dir`, repli `app/cache`) de morfDeploy 0.6.0.
+  Effaçable par `morf purge morfAnalytics sitewatch-history` (dry-run, garde
+  service actif, confirmation). Les historiques `monitor` et `meteo` NE sont PAS
+  déclarés : leurs chemins viennent de params par-module imbriqués → ils
+  relèveront d'un purge `command` (binaire), sous-chantier C++ à faire et vérifier
+  sur le Pi. Aucun changement de code du service.
+
 ## [0.29.4] - 2026-08-18
 
 ### Corrigé

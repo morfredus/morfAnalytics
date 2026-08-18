@@ -30,5 +30,19 @@
   "state_dir": {
     "linux": "/var/lib/morfsystem/morfanalytics",
     "windows": "%ProgramData%/morfsystem/morfanalytics/state"
-  }
+  },
+  "_comment_purge": "Donnees effacables (voir morfTemplateService pour le contrat). SEUL l'historique SiteWatch est declare ici : son emplacement vient d'une cle de config TOP-LEVEL ('sitewatch_cache_dir', defaut /opt/morfanalytics/cache), donc un 'path' + 'from_config' de type 'dir' le resout proprement (repli app/cache). Les historiques monitor et meteo NE SONT PAS declares ici a dessein : leurs chemins viennent de params PAR-MODULE imbriques (cache_dir/db_path dans modules[]), non adressables par une cle top-level, et avec des defauts variables. Ils relevent d'un purge de type 'command' (le binaire connaitra ses vrais chemins) : sous-chantier C++ a faire et VERIFIER sur le Pi. A verifier en dry-run sur le Pi avant tout purge reel.",
+  "purge": [
+    {
+      "id": "sitewatch-history",
+      "label": "Historique SiteWatch (syntheses ; irreversible)",
+      "destructive": true,
+      "type": "path",
+      "from_config": "sitewatch_cache_dir",
+      "from_config_kind": "dir",
+      "base": "app",
+      "default_dir": "cache",
+      "paths": ["sitewatch-history.sqlite"]
+    }
+  ]
 }
