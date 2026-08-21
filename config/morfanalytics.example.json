@@ -56,8 +56,11 @@
         [295, 305, "300 mm"]
       ],
 
-      "_comment_exclude_cameras": "Perimetre de pratique (corpus != pratique) : la presence d'un fichier n'implique ni appartenance ni usage personnel. Boitiers exclus PAR DEFAUT des analyses (noms exacts du modele, tels qu'exposes par morfPhoto), par exemple du materiel emprunte ou des fichiers importes d'autrui. Exclure est une INTERPRETATION : elle vit ici, jamais dans morfPhoto (souverain). La page /photo fusionne ces exclusions avec celles choisies dans le navigateur (memorisees localement), et chacune reste levable a la main.",
-      "exclude_cameras": []
+      "_comment_exclude_cameras": "Perimetre de pratique (corpus != pratique) : boitiers exclus PAR DEFAUT (noms exacts). Filet admin /etc. La page /photo peut aussi EXCLURE localement.",
+      "exclude_cameras": [],
+
+      "_comment_owned_cameras": "Liste blanche optionnelle (filet /etc). La selection reelle est enregistree depuis l'onglet Configuration de /photo dans l'etat du service (photo-practice.json sous /var/lib), pour pouvoir la rappeler et la modifier sans editer /etc.",
+      "owned_cameras": []
     },
     {
       "_comment": "Domaine Monitor : historise les metriques d'un ou plusieurs morfMonitor (leur /api/all) et sert la page /monitor. morfMonitor reste la sonde (maintenant) ; ce module donne la memoire dans le temps. Aucune sonde systeme ici.",
@@ -76,7 +79,19 @@
       "_comment_retention": "Retention des releves BRUTS, en jours. 0 => illimite. Etape simple avant la compaction par paliers (rollups + memoire remarquable) a venir.",
       "retention_days": 90,
 
-      "_comment_db": "Cache historique (SQLite). Vide => <cache_dir>/monitor.sqlite, defaut /opt/morfanalytics/cache/monitor.sqlite.",
+      "_comment_db": "Emplacement du cache historique (SQLite). Vide => <cache_dir>/monitor.sqlite, defaut /opt/morfanalytics/cache/monitor.sqlite.",
+      "db_path": ""
+    },
+    {
+      "_comment": "Domaine GitHub : recoit POST /github/ingest depuis SiteWatch (verite consolidee). Ne lit ni GitHub ni morfCollector.",
+      "type": "github",
+      "id": "github-1",
+      "_comment_collectors": "URL de morfCollector en plus de la decouverte beacon. Peut rester vide.",
+      "collectors": [],
+      "discovery": { "enabled": true, "udp_port": 45454 },
+      "_comment_interval": "Cadence d'import, en ms. 5 min par defaut : la collecte GitHub est quotidienne.",
+      "interval_ms": 300000,
+      "cache_dir": "/opt/morfanalytics/cache",
       "db_path": ""
     }
   ]

@@ -50,6 +50,7 @@ private:
     QByteArray handleAnalyzePost(const QByteArray& body, int& code, QByteArray& reason) const;
     QByteArray handleCleanupPost(const QByteArray& body, int& code, QByteArray& reason) const;
     QByteArray handleSiteWatchPost(const QByteArray& body, int& code, QByteArray& reason);
+    QByteArray handleGitHubIngest(const QByteArray& body, int& code, QByteArray& reason);
     bool openSiteWatchStore();
     void loadSiteWatchReports();
     bool saveSiteWatchReport(const QJsonObject& report);

@@ -36,6 +36,21 @@ Service::Service(ServiceConfig config, QObject* parent)
         }
         m_registry->add(m);
     }
+    // /etc n'est pas ecrase a l'upgrade : une config d'avant le domaine GitHub
+    // n'a pas le module. On l'ajoute pour que POST /github/ingest et /github/data
+    // ne repondent plus « aucun module github configure ».
+    if (!m_registry->firstOfType(QStringLiteral("github"))) {
+        ModuleDef def;
+        def.type = QStringLiteral("github");
+        def.id = QStringLiteral("github-1");
+        def.params.insert(QStringLiteral("cache_dir"), m_config.siteWatchCacheDir);
+        QString error;
+        IModule* github = ModuleFactory::create(def, &error);
+        if (github)
+            m_registry->add(github);
+        else if (!error.isEmpty())
+            m_warnings << error;
+    }
 
     m_http = new HttpServer(m_config, m_registry, this);
 }

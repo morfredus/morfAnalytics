@@ -16,6 +16,8 @@
 #include "morfanalytics/pages/MonitorPage.h"
 #include "morfanalytics/PhotoAnalyticsModule.h"
 #include "morfanalytics/MonitorModule.h"
+#include "morfanalytics/GitHubAnalyticsModule.h"
+#include "morfanalytics/pages/GitHubPage.h"
 
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -63,6 +65,22 @@ int contentLength(const QByteArray& headerBlock) {
             return l.mid(l.indexOf(':') + 1).trimmed().toInt();
     }
     return 0;
+}
+
+// Qt peut envoyer la forme absolue (http://host/path) ; un slash final casse
+// la comparaison exacte des routes POST.
+QByteArray canonicalPath(QByteArray rawPath) {
+    const int q = rawPath.indexOf('?');
+    if (q >= 0)
+        rawPath = rawPath.left(q);
+    if (rawPath.startsWith("http://") || rawPath.startsWith("https://")) {
+        const int scheme = rawPath.indexOf("://");
+        const int slash = rawPath.indexOf('/', scheme + 3);
+        rawPath = slash >= 0 ? rawPath.mid(slash) : QByteArray("/");
+    }
+    while (rawPath.size() > 1 && rawPath.endsWith('/'))
+        rawPath.chop(1);
+    return rawPath;
 }
 } // namespace
 
@@ -261,8 +279,7 @@ void HttpServer::onSocketReadyRead(QTcpSocket* sock) {
 
 void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
                                const QByteArray& rawPath, const QByteArray& body) {
-    const QByteArray path = rawPath.left(rawPath.indexOf('?') < 0 ? rawPath.size()
-                                                                  : rawPath.indexOf('?'));
+    const QByteArray path = canonicalPath(rawPath);
     int        code   = 200;
     QByteArray reason = "OK";
     QByteArray out;
@@ -271,6 +288,9 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
     if (path == "/sitewatch/ingest") {
         if (method != "POST") { code = 405; reason = "Method Not Allowed"; out = "{\"error\":\"use POST /sitewatch/ingest\"}"; }
         else out = handleSiteWatchPost(body, code, reason);
+    } else if (path == "/github/ingest") {
+        if (method != "POST") { code = 405; reason = "Method Not Allowed"; out = "{\"error\":\"use POST /github/ingest\"}"; }
+        else out = handleGitHubIngest(body, code, reason);
     } else if (path == "/analyze") {
         if (method != "POST") {
             code = 405; reason = "Method Not Allowed";
@@ -345,6 +365,45 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             } else {
                 out = toJson(QJsonObject{{"forgotten", true}, {"machine", key}});
             }
+        }
+    }
+    else if (path == "/photo/practice") {
+        // Périmètre « boîtiers possédés » : GET pour le relire, POST pour l'enregistrer
+        // dans l'état du service (modifiable depuis l'onglet Configuration).
+        auto* module = m_registry
+            ? qobject_cast<PhotoAnalyticsModule*>(m_registry->firstOfType(QStringLiteral("photo")))
+            : nullptr;
+        if (!module) {
+            code = 503; reason = "Service Unavailable";
+            out = "{\"error\":\"aucun module 'photo' configure\"}";
+        } else if (method == "GET") {
+            QJsonArray owned;
+            for (const QString& c : module->ownedCameras())
+                owned.append(c);
+            out = toJson(QJsonObject{{"owned_cameras", owned}});
+        } else if (method == "POST") {
+            const QJsonObject in = QJsonDocument::fromJson(body).object();
+            if (!in.contains(QStringLiteral("owned_cameras")) || !in.value(QStringLiteral("owned_cameras")).isArray()) {
+                code = 400; reason = "Bad Request";
+                out = "{\"error\":\"champ 'owned_cameras' (tableau) obligatoire\"}";
+            } else {
+                QStringList names;
+                for (const QJsonValue& v : in.value(QStringLiteral("owned_cameras")).toArray())
+                    if (v.isString())
+                        names << v.toString();
+                const bool saved = module->setOwnedCameras(names);
+                QJsonArray owned;
+                for (const QString& c : module->ownedCameras())
+                    owned.append(c);
+                out = toJson(QJsonObject{
+                    {"ok", true},
+                    {"saved", saved},
+                    {"owned_cameras", owned},
+                });
+            }
+        } else {
+            code = 405; reason = "Method Not Allowed";
+            out = "{\"error\":\"use GET or POST /photo/practice\"}";
         }
     }
     // ---- Routes GET ------------------------------------------------------
@@ -442,6 +501,31 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             // ~300 points : assez pour un tracé net, sans jamais déverser le brut.
             out = toJson(module->data(machine, from, to, 300));
         }
+    } else if (path == "/github") {
+        reply(sock, 200, "OK", pages::GitHubPage::render(), "text/html; charset=utf-8");
+        return;
+    } else if (path == "/github/data") {
+        auto* module = m_registry
+            ? qobject_cast<GitHubAnalyticsModule*>(m_registry->firstOfType(QStringLiteral("github")))
+            : nullptr;
+        QString repo;
+        QString fromDay;
+        QString toDay;
+        const int qm = rawPath.indexOf('?');
+        if (qm >= 0) {
+            const QUrlQuery q(QString::fromUtf8(rawPath.mid(qm + 1)));
+            repo = q.queryItemValue(QStringLiteral("repo"), QUrl::FullyDecoded);
+            fromDay = q.queryItemValue(QStringLiteral("from"));
+            toDay = q.queryItemValue(QStringLiteral("to"));
+        }
+        if (!module) {
+            out = toJson(QJsonObject{{QStringLiteral("error"),
+                                      QStringLiteral("aucun module github configure")}});
+        } else if (!repo.isEmpty() && fromDay.isEmpty() && toDay.isEmpty()) {
+            out = toJson(module->repository(repo));
+        } else {
+            out = toJson(module->overview(repo, fromDay, toDay));
+        }
     } else if (path == "/sitewatch/reports") {
         out = toJson(QJsonObject{{"reports", siteWatchReports()}, {"storage", "sqlite"}});
     } else if (path == "/analyses") {
@@ -535,6 +619,28 @@ QByteArray HttpServer::handleSiteWatchPost(const QByteArray& body, int& code, QB
     }
     m_siteWatchReports.insert(siteId, report);
     return toJson(QJsonObject{{"ok", true}, {"site_id", siteId}});
+}
+
+QByteArray HttpServer::handleGitHubIngest(const QByteArray& body, int& code, QByteArray& reason) {
+    auto* module = m_registry
+        ? qobject_cast<GitHubAnalyticsModule*>(m_registry->firstOfType(QStringLiteral("github")))
+        : nullptr;
+    if (!module) {
+        code = 503; reason = "Service Unavailable";
+        return "{\"error\":\"aucun module github configure\"}";
+    }
+    QJsonParseError pe{};
+    const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+    if (pe.error != QJsonParseError::NoError || !doc.isObject()) {
+        code = 400; reason = "Bad Request";
+        return "{\"error\":\"corps JSON invalide\"}";
+    }
+    if (!module->ingestAuthority(doc.object())) {
+        code = 400; reason = "Bad Request";
+        return toJson(QJsonObject{{"error", "ingestion refusee"},
+                                  {"detail", module->statusJson().value(QStringLiteral("last_error")).toString()}});
+    }
+    return toJson(QJsonObject{{"ok", true}});
 }
 
 QByteArray HttpServer::siteWatchPage() const {

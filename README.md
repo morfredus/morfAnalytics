@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.30.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.34.3-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -20,6 +20,9 @@ can be deleted and rebuilt in full from the device without any loss. Its presenc
 always **optional**: if no server is available, the devices keep measuring, storing,
 charting and exporting exactly as before; only the advanced analyses become
 unavailable.
+
+It also historises GitHub traffic **consolidated by SiteWatch** (views, clones,
+release downloads). It does not query GitHub or morfCollector for these metrics.
 
 See the ecosystem vision in `../morfSystem/docs/ARCHITECTURE.md`.
 
@@ -98,7 +101,10 @@ the source access logs.
 The `/photo` space reads the photo library indexed by **morfPhoto** (the source
 of truth): camera bodies, lenses, focal lengths (bucketed into usual values) and
 years. morfAnalytics only polls morfPhoto's aggregate endpoints at a regular
-interval (never the file list) and keeps a snapshot. Configure the source through
+interval (never the file list) and keeps a snapshot. Owned camera bodies are
+saved from the Configuration tab (`POST /photo/practice`) so the selection can
+be recalled and edited later. Each analysed station is listed once, by hostname
+when known (IP only as a fallback). Configure the source through
 the `photo` module of the configuration (`source_url`, e.g.
 `http://127.0.0.1:8793`); if morfPhoto is unreachable or the module is missing,
 the page says so explicitly.
@@ -115,10 +121,11 @@ Samples are stored in `/opt/morfanalytics/cache/monitor.sqlite`, with a
 configurable raw-sample retention (`retention_days`, 90 by default; `0` = keep
 forever) as a first step before tiered compaction. **Activities** are historised
 too: any component that knows what it is doing posts one to
-`POST /api/monitor/activity`. **Compilations** are the first case — morfDeploy emits
-one per build (set `MORFANALYTICS_ACTIVITY_URL` on the build machine), and the page
-shows per-project build stats (count, success rate, total/average/min/max duration)
-plus the system cost measured over each build's exact window. Baseline and anomalies
+`POST /api/monitor/activity`. **Compilations** are the first case: morfDeploy emits
+one per build (set `MORFANALYTICS_ACTIVITY_URL` on the build machine). JSON integer
+timestamps (`start` / `end` from Python) are accepted. The page shows per-project
+build stats (count, success rate, total/average/min/max duration, including seconds)
+plus the system cost measured around each build. Baseline and anomalies
 come next. Configure it through the `monitor` module (`sources`, one entry per
 morfMonitor to poll, plus `interval_ms` and `retention_days`).
 

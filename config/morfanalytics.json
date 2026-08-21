@@ -63,7 +63,16 @@
       "_comment_retention": "Retention des releves BRUTS, en jours. 0 => illimite. Etape simple avant la compaction par paliers (rollups + memoire remarquable) a venir.",
       "retention_days": 90,
 
-      "_comment_db": "Emplacement du cache historique (SQLite). Vide => <cache_dir>/monitor.sqlite, defaut /opt/morfanalytics/cache/monitor.sqlite.",
+      "_comment_db": "Emplacement du cache historique (SQLite). Vide => <cache_dir>/monitor.sqlite.",
+      "db_path": ""
+    },
+    {
+      "type": "github",
+      "id": "github-1",
+      "collectors": [],
+      "discovery": { "enabled": true, "udp_port": 45454 },
+      "interval_ms": 300000,
+      "cache_dir": "/opt/morfanalytics/cache",
       "db_path": ""
     }
   ]

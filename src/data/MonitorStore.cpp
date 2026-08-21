@@ -16,6 +16,7 @@
 #include <QJsonDocument>
 
 #include <cmath>
+#include <utility>
 
 namespace morfanalytics {
 
@@ -386,6 +387,16 @@ qint64 MonitorStore::insertActivity(const QString& type, const QString& project,
 }
 
 QJsonObject MonitorStore::windowStats(int machineId, qint64 from, qint64 to) const {
+    if (to < from)
+        std::swap(from, to);
+    // Les relevés n'arrivent qu'à chaque poll (souvent 15-30 s). On n'élargit
+    // que d'un relevé : 90 s attribuait le CPU d'autre chose à un no-op d'1 s.
+    constexpr qint64 kMinWindowS = 20;
+    if ((to - from) < kMinWindowS) {
+        const qint64 mid = from + (to - from) / 2;
+        from = mid - kMinWindowS / 2;
+        to   = mid + kMinWindowS / 2;
+    }
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral(
         "SELECT AVG(cpu_percent), MAX(cpu_percent), AVG(temp_cpu), MAX(temp_cpu), "
@@ -491,7 +502,16 @@ QJsonArray MonitorStore::recentActivities(const QString& machine, qint64 from, q
         if (!meta.isEmpty())
             a["metadata"] = QJsonDocument::fromJson(meta.toUtf8()).object();
         // Coût système réel de l'activité : stats sur sa fenêtre exacte.
-        const int mid = machineIdForKey(mkey);
+        int mid = machineIdForKey(mkey);
+        // Les activités portent un hostname (socket.gethostname) ; les relevés
+        // aussi. Une casse différente ne doit pas laisser CPU/temp vides.
+        if (mid < 0 && !mkey.isEmpty()) {
+            QSqlQuery qh(m_db);
+            qh.prepare(QStringLiteral("SELECT id FROM machine WHERE lower(key)=lower(?)"));
+            qh.addBindValue(mkey);
+            if (qh.exec() && qh.next())
+                mid = qh.value(0).toInt();
+        }
         if (mid >= 0)
             a["window"] = windowStats(mid, st, en);
         arr.append(a);

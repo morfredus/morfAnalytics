@@ -32,7 +32,7 @@ inline void fillAnnouncedDetail(morfbeacon::PresenceConfig& pc) {
     pc.webUiLabel       = QStringLiteral("Analyses");
     pc.webUiDescription = QStringLiteral(
         "Portail d'analyses avancees : statistiques longue periode et correlations "
-        "par domaine (meteo, journaux Web, photo...).");
+        "par domaine (meteo, journaux Web, GitHub, photo...).");
 
     // API metier (les routes de cadre -- /status, /healthz, /modules -- ne sont
     // pas listees : un observateur les connait deja par le protocole). Chemins
@@ -44,6 +44,20 @@ inline void fillAnnouncedDetail(morfbeacon::PresenceConfig& pc) {
          QStringLiteral("executer une analyse sur l'historique")},
         {QStringLiteral("POST"), QStringLiteral("/data/cleanup"),
          QStringLiteral("purger la copie de travail locale")},
+        {QStringLiteral("GET"),  QStringLiteral("/github"),
+         QStringLiteral("analyses GitHub (vues, clones, telechargements)")},
+        {QStringLiteral("GET"),  QStringLiteral("/github/data"),
+         QStringLiteral("JSON des analyses GitHub (filtres repo, from, to)")},
+        {QStringLiteral("POST"), QStringLiteral("/github/ingest"),
+         QStringLiteral("recevoir la verite GitHub consolidee par SiteWatch")},
+        {QStringLiteral("GET"),  QStringLiteral("/photo"),
+         QStringLiteral("analyses de la phototheque (morfPhoto)")},
+        {QStringLiteral("GET"),  QStringLiteral("/photo/data"),
+         QStringLiteral("JSON phototheque fusionnee (sources)")},
+        {QStringLiteral("GET"),  QStringLiteral("/photo/practice"),
+         QStringLiteral("boitiers possedes (perimetre de pratique)")},
+        {QStringLiteral("POST"), QStringLiteral("/photo/practice"),
+         QStringLiteral("enregistrer les boitiers possedes")},
     };
 }
 

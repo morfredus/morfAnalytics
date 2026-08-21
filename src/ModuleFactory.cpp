@@ -9,6 +9,7 @@
 #include "morfanalytics/AnalyticsModule.h"
 #include "morfanalytics/PhotoAnalyticsModule.h"
 #include "morfanalytics/MonitorModule.h"
+#include "morfanalytics/GitHubAnalyticsModule.h"
 
 #include <QJsonArray>
 #include <QStringList>
@@ -60,14 +61,18 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
         for (const QJsonValue& v : def.params.value("exclude_cameras").toArray())
             if (v.isString())
                 excludeCameras << v.toString();
-        // Découverte beacon des morfPhoto du parc (capacité photo_index) : la page
-        // /photo laisse choisir plusieurs postes à analyser. Port du parc par défaut.
+        // Liste blanche de pratique : filet /etc, souvent vide ; la page Configuration
+        // l'enregistre ensuite dans l'état du service (modifiable sans toucher /etc).
+        QStringList ownedCameras;
+        for (const QJsonValue& v : def.params.value("owned_cameras").toArray())
+            if (v.isString())
+                ownedCameras << v.toString();
         const QJsonObject discovery = def.params.value("discovery").toObject();
         const bool discoveryEnabled = discovery.value("enabled").toBool(true);
         const quint16 discoveryPort =
             static_cast<quint16>(discovery.value("udp_port").toInt(45454));
         return new PhotoAnalyticsModule(def.id, sourceUrl, refreshMs, buckets, excludeCameras,
-                                        discoveryPort, discoveryEnabled, parent);
+                                        ownedCameras, discoveryPort, discoveryEnabled, parent);
     }
 
     // Domaine Monitor : historise les métriques d'un ou plusieurs morfMonitor.
@@ -103,13 +108,37 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
                                  discoveryPort, discoveryEnabled, parent);
     }
 
+    if (type == QLatin1String("github")) {
+        QStringList collectors;
+        for (const QJsonValue& v : def.params.value("collectors").toArray())
+            if (v.isString())
+                collectors << v.toString();
+        const QString single = def.params.value("source_url").toString();
+        if (!single.isEmpty() && !collectors.contains(single))
+            collectors << single;
+        QString dbPath = def.params.value("db_path").toString();
+        if (dbPath.isEmpty()) {
+            const QString cacheDir = def.params.value("cache_dir")
+                .toString(QStringLiteral("/opt/morfanalytics/cache"));
+            dbPath = cacheDir + QStringLiteral("/github.sqlite");
+        }
+        const int intervalMs = def.params.value("interval_ms").toInt(300000);
+        const QJsonObject discovery = def.params.value("discovery").toObject();
+        const bool discoveryEnabled = discovery.value("enabled").toBool(true);
+        const quint16 discoveryPort =
+            static_cast<quint16>(discovery.value("udp_port").toInt(45454));
+        return new GitHubAnalyticsModule(def.id, collectors, dbPath, intervalMs,
+                                         discoveryPort, discoveryEnabled, parent);
+    }
+
     if (error)
         *error = QStringLiteral("type de module inconnu : '%1'").arg(def.type);
     return nullptr;
 }
 
 QStringList knownTypes() {
-    return { QStringLiteral("analytics"), QStringLiteral("photo"), QStringLiteral("monitor") };
+    return { QStringLiteral("analytics"), QStringLiteral("photo"),
+             QStringLiteral("monitor"), QStringLiteral("github") };
 }
 
 } // namespace ModuleFactory

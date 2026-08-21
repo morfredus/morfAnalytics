@@ -28,6 +28,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # --- Qt : generation automatique du moc (classes QObject) -----------------
 set(CMAKE_AUTOMOC ON)
 
+# Duree de compile pour /monitor : premier g++, pas un ninja deja a jour.
+include("${CMAKE_CURRENT_SOURCE_DIR}/third_party/morf/morfdeploy/record_compile.cmake")
+morf_enable_compile_recording()
+
 # Core + Network : serveur HTTP entrant, client HTTP sortant, JSON.
 # Sql : cache de travail local en SQLite (pilote QSQLITE, fourni avec Qt — aucune
 # dependance supplementaire a installer sur le Raspberry Pi).
@@ -52,13 +56,16 @@ add_library(morfAnalytics STATIC
     src/pages/SiteWatchPage.cpp
     src/pages/PhotoPage.cpp               # page de la specialisation Photo
     src/pages/MonitorPage.cpp             # page du domaine Monitor (historique machines)
+    src/pages/GitHubPage.cpp              # page du domaine GitHub
     src/Service.cpp
     src/ModuleFactory.cpp
     src/AnalyticsModule.cpp               # logique metier : moteur d'analyse
     src/PhotoAnalyticsModule.cpp          # specialisation Photo : lit morfPhoto, interprete
     src/MonitorModule.cpp                 # domaine Monitor : historise les metriques morfMonitor
+    src/GitHubAnalyticsModule.cpp         # domaine GitHub : importe github-traffic depuis morfCollector
     src/data/SampleStore.cpp              # cache de travail local (SQLite)
     src/data/MonitorStore.cpp             # historique des metriques machines (SQLite)
+    src/data/GitHubStore.cpp              # historique des metriques GitHub
     src/collect/MeteoHubCollector.cpp     # collecte incrementale depuis MeteoHub
     src/publish/MeteoSyncPublisher.cpp    # publication des syntheses journalieres vers morfSync
     # Header liste explicitement pour qu'AUTOMOC traite son Q_OBJECT de facon
@@ -83,11 +90,14 @@ add_library(morfAnalytics STATIC
     include/morfanalytics/pages/SiteWatchPage.h
     include/morfanalytics/pages/PhotoPage.h
     include/morfanalytics/pages/MonitorPage.h
+    include/morfanalytics/pages/GitHubPage.h
     include/morfanalytics/PhotoAnalyticsModule.h
     # Header liste explicitement : son Q_OBJECT doit etre traite par AUTOMOC
     # (il vit sous include/, hors du dossier de son .cpp).
     include/morfanalytics/MonitorModule.h
+    include/morfanalytics/GitHubAnalyticsModule.h
     include/morfanalytics/data/MonitorStore.h
+    include/morfanalytics/data/GitHubStore.h
     include/morfanalytics/Service.h
     include/morfanalytics/AnalyticsModule.h # logique metier : moteur d'analyse
     include/morfanalytics/Version.h
@@ -112,6 +122,7 @@ endif()
 
 # --- Cible service (le demon autonome) ------------------------------------
 add_subdirectory(service)
+morf_record_target_build(morfanalytics "morfAnalytics")
 
 # --- Exemple (compile seulement en build autonome, pas via add_subdirectory) -
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -138,4 +149,8 @@ if(MA_BUILD_TESTS)
     add_executable(analyses_test test/analyses_test.cpp)
     target_link_libraries(analyses_test PRIVATE morfAnalytics)
     add_test(NAME analyses COMMAND analyses_test)
+
+    add_executable(github_import_test test/github_import_test.cpp)
+    target_link_libraries(github_import_test PRIVATE morfAnalytics)
+    add_test(NAME github_import COMMAND github_import_test)
 endif()

@@ -18,6 +18,7 @@
 #include <QDateTime>
 #include <QUrl>
 #include <QHostAddress>
+#include <QVariant>
 
 #include <cmath>
 #include <utility>
@@ -28,6 +29,46 @@ namespace {
 // Un nombre JSON, ou NaN si la clé manque : NaN => NULL en base, l'absence de
 // mesure ne devient jamais un 0.
 double num(const QJsonValue& v) { return v.isDouble() ? v.toDouble() : qQNaN(); }
+
+// Epoch (secondes). Python envoie `int(time.time())` : entier JSON.
+// Sur certaines versions de Qt, `isDouble()` est alors faux (type Integer),
+// et les horodatages tombaient sur « maintenant » : durée 0, pas de CPU/temp.
+qint64 jsonEpochS(const QJsonValue& v, bool* ok) {
+    if (ok)
+        *ok = false;
+    if (v.isUndefined() || v.isNull() || v.isBool() || v.isArray() || v.isObject())
+        return 0;
+    qint64 n = 0;
+    bool parsed = false;
+    if (v.isString()) {
+        n = v.toString().trimmed().toLongLong(&parsed);
+    } else {
+        const QVariant var = v.toVariant();
+        n = var.toLongLong(&parsed);
+        if (!parsed && v.isDouble()) {
+            n = static_cast<qint64>(v.toDouble());
+            parsed = true;
+        }
+    }
+    if (!parsed)
+        return 0;
+    // Millisecondes (13 chiffres) parfois envoyées par erreur : on ramène en secondes.
+    if (n > 100000000000LL)
+        n /= 1000;
+    if (ok)
+        *ok = true;
+    return n;
+}
+
+qint64 jsonEpochField(const QJsonObject& a, const char* k1, const char* k2, bool* ok) {
+    bool parsed = false;
+    qint64 n = jsonEpochS(a.value(QLatin1String(k1)), &parsed);
+    if (!parsed)
+        n = jsonEpochS(a.value(QLatin1String(k2)), &parsed);
+    if (ok)
+        *ok = parsed;
+    return n;
+}
 } // namespace
 
 MonitorModule::MonitorModule(const QString& id, QStringList sources, int intervalMs,
@@ -343,17 +384,23 @@ qint64 MonitorModule::ingestActivity(const QJsonObject& a) {
     if (type.isEmpty())
         return -1;
     const qint64 now = QDateTime::currentSecsSinceEpoch();
-    // Accepte `start`/`end` ou `start_ts`/`end_ts` ; à défaut, l'instant courant
-    // (une activité ponctuelle est un événement daté à maintenant).
-    auto tsOf = [&a, now](const char* k1, const char* k2) -> qint64 {
-        const QJsonValue v1 = a.value(QLatin1String(k1));
-        if (v1.isDouble()) return static_cast<qint64>(v1.toDouble());
-        const QJsonValue v2 = a.value(QLatin1String(k2));
-        if (v2.isDouble()) return static_cast<qint64>(v2.toDouble());
-        return now;
-    };
-    const qint64 start = tsOf("start", "start_ts");
-    const qint64 end   = tsOf("end", "end_ts");
+    bool hasStart = false, hasEnd = false, hasDur = false;
+    qint64 start = jsonEpochField(a, "start", "start_ts", &hasStart);
+    qint64 end   = jsonEpochField(a, "end", "end_ts", &hasEnd);
+    qint64 dur   = jsonEpochField(a, "duration_s", "duration", &hasDur);
+    if (hasDur && dur < 0)
+        hasDur = false;
+    if (!hasStart && !hasEnd) {
+        start = end = now;
+    } else if (!hasStart) {
+        start = hasDur ? end - dur : end;
+    } else if (!hasEnd) {
+        end = hasDur ? start + dur : now;
+    }
+    if (end < start)
+        std::swap(start, end);
+    if (hasDur && (end - start) < dur)
+        end = start + dur;
     return m_store->insertActivity(
         type,
         a.value(QStringLiteral("project")).toString(),

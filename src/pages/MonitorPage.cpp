@@ -84,7 +84,9 @@ let S={machine:localStorage.getItem(LS_M)||"", period:+(localStorage.getItem(LS_
 const $=s=>document.querySelector(s);
 function fmtNum(v,d){return (v===null||v===undefined)?"—":(+v).toFixed(d===undefined?0:d);}
 function fmtBytes(b){if(b===null||b===undefined)return "—";const u=["o","Ko","Mo","Go","To"];let i=0;b=+b;while(b>=1024&&i<u.length-1){b/=1024;i++;}return b.toFixed(b<10&&i>0?1:0)+" "+u[i];}
-function fmtDur(s){if(s===null||s===undefined)return "—";s=+s;const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);if(d>0)return d+" j "+h+" h";if(h>0)return h+" h "+m+" min";return m+" min";}
+function fmtDur(s){if(s===null||s===undefined||s==="")return "—";s=Math.round(+s);if(!isFinite(s)||s<0)return "—";
+  const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),sec=s%60;
+  if(d>0)return d+" j "+h+" h";if(h>0)return h+" h "+m+" min";if(m>0)return sec?m+" min "+sec+" s":m+" min";return sec+" s";}
 function fmtClock(ts){const d=new Date(ts*1000);return d.toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});}
 function statusPill(s){const c=s==="success"?"var(--ok)":s==="failed"?"var(--bad)":"var(--muted)";
   const t=s==="success"?"succès":s==="failed"?"échec":s==="cancelled"?"interrompu":(s||"—");

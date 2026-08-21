@@ -118,7 +118,27 @@ function saveExcluded(s){try{localStorage.setItem(LS_KEY,JSON.stringify([...s]))
 // boîtier emprunté à un mariage... -- sont écartés). Persisté, et enregistré dans les vues.
 const LS_OWNED="morfanalytics.photo.ownedCameras";
 function loadOwned(){try{return JSON.parse(localStorage.getItem(LS_OWNED)||"[]")}catch(e){return []}}
-function saveOwned(s){try{localStorage.setItem(LS_OWNED,JSON.stringify([...s]))}catch(e){}}
+function saveOwned(s,persist){try{localStorage.setItem(LS_OWNED,JSON.stringify([...s]))}catch(e){}
+  if(persist!==false) postPractice([...s]);}
+function postPractice(list){
+  fetch("/photo/practice",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({owned_cameras:list})})
+    .then(r=>r.json()).then(d=>{
+      const el=$("#ownsave"); if(!el) return;
+      if(d&&d.ok) el.textContent="Enregistré : "+fr((d.owned_cameras||list).length)+" boîtier(s) dans la configuration du service.";
+      else el.textContent="Échec d'enregistrement : "+(d&&d.error?d.error:"réponse inattendue");
+    }).catch(e=>{const el=$("#ownsave"); if(el) el.textContent="Échec d'enregistrement : "+e;});
+}
+function reloadPractice(){
+  fetch("/photo/practice").then(r=>r.json()).then(d=>{
+    S.camOwned=new Set(d.owned_cameras||[]);
+    saveOwned(S.camOwned,false);
+    render();
+    const el=$("#ownsave"); if(el) el.textContent=S.camOwned.size
+      ? ("Rechargé : "+fr(S.camOwned.size)+" boîtier(s).")
+      : "Rechargé : aucun boîtier enregistré (tous comptent).";
+  }).catch(e=>{const el=$("#ownsave"); if(el) el.textContent="Relecture impossible : "+e;});
+}
 let TAB="explore";   // onglet courant : "explore" | "config"
 
 // --- Vues enregistrées : un jeu de filtres nommé, réappliquable d'un clic --------
@@ -156,7 +176,7 @@ function applyView(v){
   Object.assign(S,emptyFilters());
   S.camExcl=new Set(v.camExcl||[]);
   S.camOwned=new Set(v.camOwned||[]);
-  saveOwned(S.camOwned);
+  saveOwned(S.camOwned,false);
   persistExcl();
   ["cam","lens","type","folder"].forEach(d=>(v[d]||[]).forEach(lab=>{
     const k=labelToKey(d,lab); if(k!==-1&&k!==null&&k!==undefined)S[d].add(k);
@@ -218,8 +238,37 @@ const RANGE_DIMS=["focal","aperture","iso","shutter"];
 // vient de /photo/sources (déclarés + découverts par beacon). L'analyse combine les
 // postes cochés et DÉDOUBLONNE côté service (une photo indexée sur deux postes ne
 // compte qu'une fois). Changer la sélection recharge en temps réel.
-let SOURCES=[];        // [{url,host,online,configured}]
+let SOURCES=[];        // [{url,host,online,configured,local,aliases}]
 let SEL=new Set();     // urls cochées
+
+function hostnameOf(u){
+  try{return new URL(u).hostname.toLowerCase();}catch(e){return "";}
+}
+function isLoopHost(h){
+  return !h||h==="localhost"||h==="::1"||h.startsWith("127.");
+}
+function isIpv4(h){return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(h);}
+function prettyHost(s){
+  const raw=String(s.host||"");
+  const name=raw.replace(/\s*\(local\)\s*$/i,"").replace(/\.local$/i,"");
+  if(name && !isIpv4(name) && name!=="localhost")
+    return s.local ? (name+" (local)") : name;
+  const h=hostnameOf(s.url);
+  if(h && !isIpv4(h) && !isLoopHost(h)) return h;
+  return h||s.url;
+}
+function sameMachine(a,bUrl){
+  const ua=a.url, ub=bUrl;
+  if(ua===ub) return true;
+  const ha=hostnameOf(ua), hb=hostnameOf(ub);
+  if(ha && ha===hb) return true;
+  const aliases=a.aliases||[];
+  if(aliases.some(x=>x===ub||hostnameOf(x)===hb)) return true;
+  // Handoff PhotoHub = IP LAN de CETTE machine, déjà listée en « local ».
+  if(a.local && (isLoopHost(hb)||isIpv4(hb))) return true;
+  if((isLoopHost(ha)||a.local) && isLoopHost(hb)) return true;
+  return false;
+}
 
 function sourcesParam(){return [...SEL].map(encodeURIComponent).join(",");}
 
@@ -229,7 +278,7 @@ function renderSources(){
     'Vérifiez qu’un morfPhoto tourne et s’annonce (capacité photo_index).</span>';return;}
   const chips=SOURCES.map(s=>{
     const on=SEL.has(s.url);
-    const lab=esc(s.host||s.url)+(s.online?"":" (hors ligne)");
+    const lab=esc(prettyHost(s))+(s.online?"":" (hors ligne)");
     return '<label class="srcchip'+(on?" on":"")+(s.online?"":" off")+'">'+
       '<input type="checkbox" data-url="'+esc(s.url)+'"'+(on?" checked":"")+'>'+lab+'</label>';
   }).join("");
@@ -264,15 +313,15 @@ function updateSrcInfo(snap){
 function loadSources(){
   fetch("/photo/sources").then(r=>r.json()).then(d=>{
     SOURCES=(d.items||[]);
-    // Sélection initiale : handoff PhotoHub (?source=) si présent, sinon tous les
-    // postes EN LIGNE, sinon le premier connu.
     const handoff=new URLSearchParams(location.search).get("source");
     SEL=new Set();
     if(handoff){
-      SEL.add(handoff);
-      if(!SOURCES.some(s=>s.url===handoff)){
-        let h=handoff; try{h=new URL(handoff).host;}catch(e){}
-        SOURCES.unshift({url:handoff,host:h,online:true,configured:false});
+      const hit=SOURCES.find(s=>sameMachine(s,handoff));
+      if(hit) SEL.add(hit.url);
+      else {
+        let h=handoff; try{h=new URL(handoff).hostname;}catch(e){}
+        SOURCES.unshift({url:handoff,host:h,online:true,configured:false,local:false,aliases:[handoff]});
+        SEL.add(handoff);
       }
     } else {
       SOURCES.filter(s=>s.online).forEach(s=>SEL.add(s.url));
@@ -280,7 +329,7 @@ function loadSources(){
     }
     renderSources();
     reload();
-  }).catch(()=>{ reload(); });   // à défaut : comportement historique (source périodique)
+  }).catch(()=>{ reload(); });
 }
 
 // ---- Chargement --------------------------------------------------------------
@@ -310,14 +359,17 @@ function init(snap){
     return;
   }
   D=decode(snap); buildDims();
+  const fromService=(D.ownedCameras||[]);
+  S.camOwned=new Set(fromService.length?fromService:loadOwned());
+  if(fromService.length) saveOwned(S.camOwned,false);
   S.camExcl=new Set([...(D.configExcl||[]),...loadExcluded()]);
-  S.camOwned=new Set(loadOwned());
   render();
   updateSrcInfo(snap);
 }
 function decode(snap){
   const ds=snap.dataset||{}, cols=ds.columns||{}, dict=ds.dictionaries||{};
-  const n=ds.count||0;
+  const nCols=(cols.taken_at||[]).length;
+  const n=Math.max(ds.count||0,nCols);
   const years=new Array(n), months=new Array(n);
   const ta=cols.taken_at||[];
   for(let i=0;i<n;i++){
@@ -328,6 +380,9 @@ function decode(snap){
   return {n,cols,dict,years,months,
           buckets:snap.focal_buckets||[], folders:ds.folders||{},
           configExcl:snap.exclude_cameras||[],
+          ownedCameras:snap.owned_cameras||[],
+          sources:snap.sources||[],
+          duplicates:snap.duplicates_removed||0,
           source:snap.source_url||"", fetched:snap.fetched_at||null};
 }
 
@@ -657,21 +712,57 @@ function configPanel(){
     +'mariage, photos d\'autres photographes…) sont écartés. <b>Aucune coche = tous les '
     +'boîtiers</b> (pas de filtre). Réglage mémorisé et enregistré dans les vues.</p>';
   if(!cams.length){
-    h+='<p class="muted">Aucun boîtier dans le corpus courant.</p></section>';
+    h+='<p class="muted">Aucun boîtier dans le corpus courant.</p>';
+    h+=coherencePanel();
+    h+='</section>';
     return h;
   }
   h+='<div class="controls"><button class="btn" id="ownall">Tout cocher</button>'
     +'<button class="btn" id="ownnone">Tout décocher</button>'
+    +'<button class="btn" id="ownsavebtn">Enregistrer</button>'
+    +'<button class="btn" id="ownreload">Recharger</button>'
     +'<span class="muted" id="owncount"></span></div>';
+  h+='<p class="muted" id="ownsave">Cochez, puis Enregistrer : la sélection est rappelée au prochain chargement, sur n\'importe quel navigateur.</p>';
   h+='<div class="ownlist" id="ownlist">'
     +cams.map(c=>'<label><input type="checkbox" data-cam="'+esc(c)+'"'
       +(S.camOwned.has(c)?" checked":"")+'>'+esc(c)+'</label>').join("")
     +'</div>';
-  h+='<p class="muted">Astuce&nbsp;: une fois vos boîtiers cochés, enregistrez une <b>vue</b> '
-    +'(onglet Exploration) pour la retrouver d\'un clic.</p>';
+  h+='<p class="muted">Astuce&nbsp;: une fois vos boîtiers cochés et enregistrés, vous pouvez encore les modifier ici, puis ré-enregistrer.</p>';
+  h+=coherencePanel();
   h+='</section>';
   return h;
 }
+function coherencePanel(){
+  const srcs=D.sources||[];
+  const rows=[];
+  srcs.forEach(s=>{
+    const key=prettyHost({host:s.host,url:s.url,local:!!s.local});
+    const i=rows.findIndex(x=>x.key===key);
+    if(i<0) rows.push({key,s});
+  });
+  let h='<h2>Cohérence PhotoHub / analyse</h2>'
+    +'<p class="muted">PhotoHub (morfPhoto) expose plusieurs compteurs. L\'analyse lit l\'export compact <code>dataset</code>. '
+    +'Un écart entre « liste » et « dataset » vient de morfPhoto ; un dataset plus petit que PhotoHub signalait souvent un timeout trop court côté analyse.</p>';
+  if(!rows.length){
+    h+='<p class="muted">Ouvrez cette page avec au moins un poste coché pour comparer les compteurs.</p>';
+    return h;
+  }
+  h+='<table><tr><th>Poste</th><th>Liste PhotoHub</th><th>Résumé (présents)</th><th>Export dataset</th><th>Gardées ici</th></tr>';
+  rows.forEach(r=>{
+    const s=r.s;
+    const warn=(a,b)=> (a>=0&&b>=0&&a!==b)?' class="A"':'';
+    h+='<tr><td>'+esc(r.key)+'</td>'
+      +'<td'+warn(s.list_total,s.count)+'>'+fmtCount(s.list_total)+'</td>'
+      +'<td'+warn(s.files_present,s.count)+'>'+fmtCount(s.files_present)+'</td>'
+      +'<td>'+fmtCount(s.count)+'</td>'
+      +'<td>'+fmtCount(s.kept)+'</td></tr>';
+  });
+  h+='</table>';
+  if(D.duplicates) h+='<p class="muted">'+fr(D.duplicates)+' doublon(s) écarté(s) entre postes.</p>';
+  h+='<p class="muted">Photos dans l\'analyse courante&nbsp;: <b>'+fr(D.n)+'</b>.</p>';
+  return h;
+}
+function fmtCount(v){return (v===undefined||v===null||v<0)?"-":fr(v);}
 function ownCountText(){
   const total=(D.dict.camera||[]).length;
   return S.camOwned.size? (fr(S.camOwned.size)+' / '+fr(total)+' boîtier(s) possédé(s)')
@@ -684,12 +775,14 @@ function wireConfig(){
     const cb=e.target.closest("input[type=checkbox]"); if(!cb)return;
     const name=cb.getAttribute("data-cam");
     if(cb.checked)S.camOwned.add(name); else S.camOwned.delete(name);
-    saveOwned(S.camOwned);
+    saveOwned(S.camOwned,false);
     const c=$("#owncount"); if(c)c.textContent=ownCountText();   // pas de re-render : défilement conservé
   });
   const cams=(D.dict.camera||[]);
-  on("ownall","click",()=>{S.camOwned=new Set(cams);saveOwned(S.camOwned);render();});
-  on("ownnone","click",()=>{S.camOwned=new Set();saveOwned(S.camOwned);render();});
+  on("ownall","click",()=>{S.camOwned=new Set(cams);saveOwned(S.camOwned,false);render();});
+  on("ownnone","click",()=>{S.camOwned=new Set();saveOwned(S.camOwned,false);render();});
+  on("ownsavebtn","click",()=>saveOwned(S.camOwned,true));
+  on("ownreload","click",()=>reloadPractice());
 }
 
 // ---- Rendu principal ---------------------------------------------------------

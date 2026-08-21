@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.30.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.34.3-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -22,6 +22,9 @@ reconstructible intégralement depuis l'équipement, sans aucune perte. Sa prés
 est toujours **optionnelle** : sans serveur, les équipements continuent de mesurer,
 stocker, tracer et exporter comme avant ; seules les analyses avancées deviennent
 indisponibles.
+
+Il historise le trafic GitHub **consolidé par SiteWatch** (vues, clones,
+téléchargements). Il n'interroge ni GitHub ni morfCollector pour ces métriques.
 
 Voir la vision d'ensemble de l'écosystème dans `../morfSystem/docs/ARCHITECTURE.md`.
 
@@ -121,7 +124,11 @@ source de vérité reste MeteoHub.
 - `/photo` lit la photothèque indexée par **morfPhoto** (source de vérité) :
   boîtiers, objectifs, focales (regroupées en focales usuelles) et années.
   morfAnalytics n'interroge que les agrégats de morfPhoto à intervalle régulier
-  (jamais la liste des fichiers) et en garde un instantané. La source se règle
+  (jamais la liste des fichiers) et en garde un instantané. Les boîtiers possédés
+  s'enregistrent depuis l'onglet Configuration (`POST /photo/practice`) pour
+  pouvoir les rappeler et les modifier plus tard. Chaque poste analysé n'apparaît
+  qu'une fois, sous son nom d'hôte s'il est connu (l'IP n'est qu'un repli).
+  La source se règle
   via le module `photo` de la configuration (`source_url`, p. ex.
   `http://127.0.0.1:8793`) ; si morfPhoto est injoignable ou le module absent, la
   page l'indique explicitement.
@@ -136,10 +143,12 @@ source de vérité reste MeteoHub.
   relevés bruts (`retention_days`, 90 j par défaut ; `0` = illimité), première étape
   avant la compaction par paliers. Les **activités** sont aussi historisées : tout
   composant qui sait ce qu'il fait en signale une à `POST /api/monitor/activity`. Les
-  **compilations** sont le premier cas — morfDeploy en émet une par build (définir
-  `MORFANALYTICS_ACTIVITY_URL` sur la machine de build), et la page montre les stats
-  de build par projet (nombre, taux de réussite, durée totale/moyenne/min/max) plus le
-  coût système mesuré sur la fenêtre exacte de chaque build. La baseline et les
+  **compilations** sont le premier cas - morfDeploy en émet une par build (définir
+  `MORFANALYTICS_ACTIVITY_URL` sur la machine de build). Les horodatages `start` /
+  `end` sont lus même quand JSON les envoie comme entiers (cas Python). La page
+  montre les stats de build par projet (nombre, taux de réussite, durée
+  totale/moyenne/min/max, y compris les secondes) plus le coût système mesuré
+  autour de chaque build. La baseline et les
   anomalies viendront ensuite. Réglé via le module `monitor` (`sources`,
   `interval_ms`, `retention_days`).
 

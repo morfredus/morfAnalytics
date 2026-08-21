@@ -15,11 +15,15 @@
 #include <QNetworkDatagram>
 #include <QHostAddress>
 #include <QHostInfo>
+#include <QNetworkInterface>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QDateTime>
 #include <QUrl>
 #include <QSet>
+#include <QFile>
+#include <QDir>
+#include <QJsonDocument>
 
 #include <algorithm>
 #include <utility>
@@ -47,7 +51,8 @@ QString nowIso() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 
 PhotoAnalyticsModule::PhotoAnalyticsModule(const QString& id, QString sourceUrl,
                                            int refreshMs, QVector<FocalBucket> buckets,
-                                           QStringList excludeCameras, quint16 discoveryUdpPort,
+                                           QStringList excludeCameras, QStringList ownedCameras,
+                                           quint16 discoveryUdpPort,
                                            bool discoveryEnabled, QObject* parent)
     : IModule(id, QStringLiteral("photo"), parent),
       m_sourceUrl(std::move(sourceUrl)),
@@ -58,13 +63,14 @@ PhotoAnalyticsModule::PhotoAnalyticsModule(const QString& id, QString sourceUrl,
       m_discoveryEnabled(discoveryEnabled) {
     if (m_buckets.isEmpty())
         m_buckets = defaultBuckets();
-    // Instantané initial sûr : la page fonctionne avant tout pull.
+    loadPractice(ownedCameras);
     m_snapshot = QJsonObject{
         {"source_url", m_sourceUrl},
         {"reachable", false},
         {"fetched_at", QJsonValue(QJsonValue::Null)},
         {"last_error", QJsonValue(QJsonValue::Null)},
     };
+    attachPractice(m_snapshot);
 }
 
 PhotoAnalyticsModule::~PhotoAnalyticsModule() { stop(); }
@@ -145,72 +151,113 @@ void PhotoAnalyticsModule::pruneDiscovered(qint64 nowSec) {
 
 QString PhotoAnalyticsModule::hostForUrl(const QString& url) const {
     const QString h = QUrl(url).host();
+    auto stripLocal = [](QString n) {
+        if (n.endsWith(QLatin1String(".local"), Qt::CaseInsensitive))
+            n.chop(6);
+        return n;
+    };
     // Loopback = CETTE machine : donner son nom plutôt que « 127.0.0.1 ».
     if (h == QLatin1String("localhost") || h == QLatin1String("::1")
         || h.startsWith(QLatin1String("127."))) {
-        const QString local = QHostInfo::localHostName();
+        const QString local = stripLocal(QHostInfo::localHostName());
         return local.isEmpty() ? h : local;
     }
     const auto it = m_discovered.constFind(url);
     if (it != m_discovered.constEnd() && !it.value().host.isEmpty())
-        return it.value().host;         // nom annoncé par le beacon (lisible)
+        return stripLocal(it.value().host);         // nom annoncé par le beacon (lisible)
     return h;                           // repli : hôte de l'URL (souvent une IP)
 }
 
 QJsonArray PhotoAnalyticsModule::availableSources() const {
     const qint64 now = QDateTime::currentSecsSinceEpoch();
-    const QString localHost = QHostInfo::localHostName();
+    auto stripLocal = [](QString n) {
+        if (n.endsWith(QLatin1String(".local"), Qt::CaseInsensitive))
+            n.chop(6);
+        return n.toLower();
+    };
+    const QString localHost = stripLocal(QHostInfo::localHostName());
     auto isLoop = [](const QString& h) {
         return h == QLatin1String("localhost") || h == QLatin1String("::1")
             || h.startsWith(QLatin1String("127."));
     };
+    auto isIpv4 = [](const QString& h) {
+        QHostAddress addr(h);
+        return addr.protocol() == QAbstractSocket::IPv4Protocol && !addr.isLoopback();
+    };
+    QSet<QString> localIps;
+    for (const QNetworkInterface& iface : QNetworkInterface::allInterfaces()) {
+        if (!(iface.flags() & QNetworkInterface::IsUp))
+            continue;
+        for (const QNetworkAddressEntry& e : iface.addressEntries()) {
+            const QHostAddress ip = e.ip();
+            if (ip.protocol() == QAbstractSocket::IPv4Protocol)
+                localIps.insert(ip.toString());
+        }
+    }
 
-    // On rassemble tous les candidats (source déclarée + découvertes), puis on
-    // DÉDOUBLONNE par MACHINE : le morfPhoto local apparaît sinon deux fois (127.0.0.1
-    // en config ET son propre nom via le beacon sur l'IP du LAN), et une machine
-    // multi-domiciliée autant de fois qu'elle a d'interfaces. Une seule entrée par
-    // machine, une seule URL à interroger (loopback pour la locale, plus fiable).
     struct Cand { QString url; QString host; bool configured; bool loopback; bool online; };
     QVector<Cand> cands;
     if (!m_sourceUrl.isEmpty()) {
         const QString h = QUrl(m_sourceUrl).host();
-        cands.push_back({m_sourceUrl, h, true, isLoop(h), true});
+        cands.push_back({m_sourceUrl, hostForUrl(m_sourceUrl), true, isLoop(h), true});
     }
     for (auto it = m_discovered.constBegin(); it != m_discovered.constEnd(); ++it)
         if (now - it.value().lastSeen <= kDiscoveryForgetAfterS) {
-            const QString h = hostForUrl(it.key());
-            cands.push_back({it.key(), h, false, isLoop(h), (now - it.value().lastSeen) < 120});
+            const QString rawHost = QUrl(it.key()).host();
+            cands.push_back({it.key(), hostForUrl(it.key()), false, isLoop(rawHost),
+                             (now - it.value().lastSeen) < 120});
         }
 
-    // Identité de machine : le nom d'hôte local pour une adresse de loopback (c'est CETTE
-    // machine), sinon le hostname annoncé (ou l'hôte de l'URL à défaut). Un morfPhoto
-    // local vu à la fois en 127.0.0.1 et sous son nom via le beacon tombe ainsi dans le
-    // même groupe.
+    // Une machine = un nom (mDNS / hostname), pas une URL. Loopback, IP LAN et
+    // nom annoncé (pi4dev vs pi4dev.local) sont le même poste.
     auto machineId = [&](const Cand& c) -> QString {
-        if (c.loopback)
+        const QString urlHost = QUrl(c.url).host();
+        if (c.loopback || localIps.contains(urlHost))
             return localHost.isEmpty() ? QStringLiteral("__local__") : localHost;
-        return c.host.isEmpty() ? QUrl(c.url).host() : c.host;
+        const QString named = stripLocal(c.host);
+        if (!named.isEmpty() && !isIpv4(named) && named != QLatin1String("localhost"))
+            return named;
+        return urlHost.toLower();
     };
 
-    QHash<QString, int> pos;   // machineId -> index dans arr
+    QHash<QString, int> pos;
     QJsonArray arr;
     for (const Cand& c : cands) {
         const QString mid = machineId(c);
-        const bool local = c.loopback || (!localHost.isEmpty() && mid == localHost);
-        QString label = local ? (localHost.isEmpty() ? QStringLiteral("base locale")
-                                                     : localHost + QStringLiteral(" (local)"))
-                              : (c.host.isEmpty() ? QUrl(c.url).host() : c.host);
+        const bool local = c.loopback || localIps.contains(QUrl(c.url).host())
+            || (!localHost.isEmpty() && mid == localHost);
+        const QString named = stripLocal(c.host);
+        const bool namedOk = !named.isEmpty() && !isIpv4(named)
+            && named != QLatin1String("localhost");
+        QString label = namedOk ? (local ? (c.host + QStringLiteral(" (local)")) : c.host)
+                                : (local ? (localHost.isEmpty() ? QStringLiteral("base locale")
+                                                                : localHost + QStringLiteral(" (local)"))
+                                         : QUrl(c.url).host());
         const auto it = pos.constFind(mid);
         if (it == pos.constEnd()) {
             pos.insert(mid, arr.size());
+            QJsonArray aliases;
+            aliases.append(c.url);
             arr.append(QJsonObject{{"url", c.url}, {"host", label}, {"online", c.online},
-                                   {"configured", c.configured}, {"local", local}});
+                                   {"configured", c.configured}, {"local", local},
+                                   {"aliases", aliases}});
         } else {
             QJsonObject e = arr.at(it.value()).toObject();
-            // Pour la machine locale, préférer l'URL loopback (toujours joignable).
-            if (local && c.loopback) e["url"] = c.url;
-            if (c.online) e["online"] = true;
-            if (c.configured) e["configured"] = true;
+            QJsonArray aliases = e.value(QStringLiteral("aliases")).toArray();
+            bool have = false;
+            for (const QJsonValue& v : aliases)
+                if (v.toString() == c.url) { have = true; break; }
+            if (!have)
+                aliases.append(c.url);
+            e["aliases"] = aliases;
+            if (local && c.loopback)
+                e["url"] = c.url;
+            if (c.online)
+                e["online"] = true;
+            if (c.configured)
+                e["configured"] = true;
+            if (namedOk)
+                e["host"] = label;
             arr.replace(it.value(), e);
         }
     }
@@ -240,7 +287,7 @@ void PhotoAnalyticsModule::refresh() {
 
 void PhotoAnalyticsModule::fetch(const QString& path, const QString& key) {
     QNetworkRequest req{QUrl(m_sourceUrl + path)};
-    req.setTransferTimeout(8000);
+    req.setTransferTimeout(key == QLatin1String("dataset") ? 60000 : 8000);
     QNetworkReply* reply = m_net->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, key, reply]() {
         onReply(key, reply);
@@ -309,6 +356,7 @@ void PhotoAnalyticsModule::finalize() {
     for (const QString& c : m_excludeCameras)
         excl.append(c);
     snap["exclude_cameras"] = excl;
+    attachPractice(snap);
 
     m_snapshot = snap;
     emit updated(id());
@@ -360,8 +408,8 @@ QVector<PhotoAnalyticsModule::FocalBucket> PhotoAnalyticsModule::defaultBuckets(
     };
 }
 
-QJsonObject PhotoAnalyticsModule::fetchDatasetSync(const QString& sourceUrl, bool* ok,
-                                                   QString* error) const {
+QJsonObject PhotoAnalyticsModule::fetchJsonSync(const QString& sourceUrl, const QString& path,
+                                                int timeoutMs, bool* ok, QString* error) const {
     if (ok) *ok = false;
     if (sourceUrl.isEmpty()) {
         if (error) *error = QStringLiteral("source vide");
@@ -370,19 +418,17 @@ QJsonObject PhotoAnalyticsModule::fetchDatasetSync(const QString& sourceUrl, boo
     QString base = sourceUrl;
     while (base.endsWith(QLatin1Char('/')))
         base.chop(1);
-    // Fetch synchrone borné : boucle d'événements imbriquée quittée par la fin de la
-    // requête OU un délai de garde. Acceptable pour une action ponctuelle (pas la voie
-    // chaude périodique) ; on ne bloque jamais indéfiniment sur une source muette.
     QNetworkAccessManager nam;
-    QNetworkRequest req{QUrl(base + QStringLiteral("/api/v1/photos/dataset"))};
-    req.setTransferTimeout(8000);
+    QNetworkRequest req{QUrl(base + path)};
+    const int ms = timeoutMs > 0 ? timeoutMs : 8000;
+    req.setTransferTimeout(ms);
     QEventLoop loop;
     QNetworkReply* reply = nam.get(req);
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
     QTimer guard;
     guard.setSingleShot(true);
     QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
-    guard.start(10000);
+    guard.start(ms + 2000);
     loop.exec();
 
     if (reply->isRunning())
@@ -392,10 +438,99 @@ QJsonObject PhotoAnalyticsModule::fetchDatasetSync(const QString& sourceUrl, boo
         reply->deleteLater();
         return {};
     }
-    const QJsonObject ds = QJsonDocument::fromJson(reply->readAll()).object();
+    const QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
     reply->deleteLater();
     if (ok) *ok = true;
-    return ds;
+    return obj;
+}
+
+QJsonObject PhotoAnalyticsModule::fetchDatasetSync(const QString& sourceUrl, bool* ok,
+                                                   QString* error) const {
+    // Le dataset d'une vraie photothèque dépasse largement 8 s : un timeout trop
+    // court tronquait l'export et l'analyse comptait moins de photos que PhotoHub.
+    return fetchJsonSync(sourceUrl, QStringLiteral("/api/v1/photos/dataset"), 60000, ok, error);
+}
+
+QString PhotoAnalyticsModule::stateDir() {
+    const QByteArray env = qgetenv("STATE_DIRECTORY");
+    if (!env.isEmpty()) {
+        const QString first = QString::fromLocal8Bit(env).split(QLatin1Char(':')).first();
+        if (!first.isEmpty()) { QDir().mkpath(first); return first; }
+    }
+#if defined(Q_OS_WIN)
+    const QString base = qEnvironmentVariable("ProgramData", QStringLiteral("C:/ProgramData"));
+    const QString dir  = QDir(base).filePath(QStringLiteral("morfsystem/morfanalytics/state"));
+#else
+    const QString dir  = QStringLiteral("/var/lib/morfsystem/morfanalytics");
+#endif
+    QDir().mkpath(dir);
+    return dir;
+}
+
+QString PhotoAnalyticsModule::practicePath() const {
+    return QDir(stateDir()).filePath(QStringLiteral("photo-practice.json"));
+}
+
+void PhotoAnalyticsModule::loadPractice(const QStringList& configOwned) {
+    QFile f(practicePath());
+    if (f.open(QIODevice::ReadOnly)) {
+        const QJsonObject o = QJsonDocument::fromJson(f.readAll()).object();
+        QStringList owned;
+        for (const QJsonValue& v : o.value(QStringLiteral("owned_cameras")).toArray()) {
+            const QString s = v.toString().trimmed();
+            if (!s.isEmpty())
+                owned << s;
+        }
+        if (!owned.isEmpty()) {
+            owned.removeDuplicates();
+            std::sort(owned.begin(), owned.end());
+            m_ownedCameras = owned;
+            return;
+        }
+    }
+    m_ownedCameras = configOwned;
+    m_ownedCameras.removeAll(QString());
+    m_ownedCameras.removeDuplicates();
+    std::sort(m_ownedCameras.begin(), m_ownedCameras.end());
+}
+
+bool PhotoAnalyticsModule::savePractice() const {
+    QDir().mkpath(stateDir());
+    QJsonArray arr;
+    for (const QString& c : m_ownedCameras)
+        arr.append(c);
+    const QJsonObject o{
+        {"owned_cameras", arr},
+        {"updated_at", nowIso()},
+    };
+    QFile f(practicePath());
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
+    return true;
+}
+
+bool PhotoAnalyticsModule::setOwnedCameras(QStringList names) {
+    names.removeAll(QString());
+    for (QString& s : names)
+        s = s.trimmed();
+    names.removeAll(QString());
+    names.removeDuplicates();
+    std::sort(names.begin(), names.end());
+    m_ownedCameras = names;
+    attachPractice(m_snapshot);
+    return savePractice();
+}
+
+void PhotoAnalyticsModule::attachPractice(QJsonObject& snap) const {
+    QJsonArray owned;
+    for (const QString& c : m_ownedCameras)
+        owned.append(c);
+    snap[QStringLiteral("owned_cameras")] = owned;
+    QJsonArray excl;
+    for (const QString& c : m_excludeCameras)
+        excl.append(c);
+    snap[QStringLiteral("exclude_cameras")] = excl;
 }
 
 QJsonObject PhotoAnalyticsModule::fetchNow(const QString& sourceUrl) const {
@@ -418,11 +553,13 @@ QJsonObject PhotoAnalyticsModule::fetchNow(const QString& sourceUrl) const {
     const QJsonObject ds = fetchDatasetSync(sourceUrl, &ok, &err);
     if (!ok) {
         snap["last_error"] = err;
+        attachPractice(snap);
         return snap;
     }
     snap["dataset"]    = ds;
     snap["reachable"]  = true;
     snap["fetched_at"] = nowIso();
+    attachPractice(snap);
     return snap;
 }
 
@@ -487,6 +624,15 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
             continue;
         }
         anyReachable = true;
+        bool sumOk = false;
+        const QJsonObject summary = fetchJsonSync(src, QStringLiteral("/api/v1/photos/summary"),
+                                                  8000, &sumOk, nullptr);
+        bool listOk = false;
+        const QJsonObject listed = fetchJsonSync(src, QStringLiteral("/api/v1/photos?limit=1"),
+                                                 8000, &listOk, nullptr);
+        const int filesPresent = sumOk ? summary.value(QStringLiteral("files_present")).toInt(-1) : -1;
+        const int filesTotal = sumOk ? summary.value(QStringLiteral("files_total")).toInt(-1) : -1;
+        const int listTotal = listOk ? listed.value(QStringLiteral("total")).toInt(-1) : -1;
         const QJsonObject cols = ds.value(QStringLiteral("columns")).toObject();
         const QJsonObject dict = ds.value(QStringLiteral("dictionaries")).toObject();
         const QJsonObject folders = ds.value(QStringLiteral("folders")).toObject();
@@ -544,8 +690,12 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
             ++kept;
             ++total;
         }
-        sourceStates.append(QJsonObject{{"url", src}, {"host", host}, {"reachable", true},
-                                        {"count", n}, {"kept", kept}});
+        sourceStates.append(QJsonObject{
+            {"url", src}, {"host", host}, {"reachable", true},
+            {"count", n}, {"kept", kept},
+            {"files_present", filesPresent}, {"files_total", filesTotal},
+            {"list_total", listTotal},
+        });
         ++srcIdx;
     }
 
@@ -560,7 +710,7 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
         {"folders", gFolders},
     };
 
-    return QJsonObject{
+    QJsonObject out{
         {"source_url", sources.join(QStringLiteral(", "))},
         {"sources", sourceStates},
         {"reachable", anyReachable},
@@ -572,6 +722,8 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
         {"focal_buckets", bucketsJson},
         {"exclude_cameras", exclJson},
     };
+    attachPractice(out);
+    return out;
 }
 
 QJsonObject PhotoAnalyticsModule::statusJson() const {

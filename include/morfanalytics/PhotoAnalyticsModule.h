@@ -50,6 +50,7 @@ public:
 
     PhotoAnalyticsModule(const QString& id, QString sourceUrl, int refreshMs,
                          QVector<FocalBucket> buckets, QStringList excludeCameras = {},
+                         QStringList ownedCameras = {},
                          quint16 discoveryUdpPort = 45454, bool discoveryEnabled = true,
                          QObject* parent = nullptr);
     ~PhotoAnalyticsModule() override;
@@ -58,9 +59,12 @@ public:
     void stop() override;
     QJsonObject statusJson() const override;
 
-    // Instantané interprété, lu par la page /photo. Toujours sûr, même avant le
-    // premier pull (reachable=false).
     QJsonObject snapshot() const { return m_snapshot; }
+
+    // Périmètre « boîtiers possédés » (liste blanche). Vit dans l'état du service
+    // (/var/lib), pas dans /etc : la page Configuration doit pouvoir le modifier.
+    QStringList ownedCameras() const { return m_ownedCameras; }
+    bool setOwnedCameras(QStringList names);
 
     // Handoff (PhotoHub → /photo?source=) : rapatrie À LA DEMANDE le dataset d'une
     // AUTRE instance morfPhoto que celle configurée, et renvoie un instantané de la
@@ -99,6 +103,13 @@ private:
     void finalize();
     // Rapatrie le `dataset` d'UNE source (synchrone borné). *ok/false + *error sinon.
     QJsonObject fetchDatasetSync(const QString& sourceUrl, bool* ok, QString* error) const;
+    QJsonObject fetchJsonSync(const QString& sourceUrl, const QString& path,
+                              int timeoutMs, bool* ok, QString* error) const;
+    void attachPractice(QJsonObject& snap) const;
+    static QString stateDir();
+    QString practicePath() const;
+    void loadPractice(const QStringList& configOwned);
+    bool savePractice() const;
     void pruneDiscovered(qint64 nowSec);
     // Nom LISIBLE d'un poste depuis son URL : le hostname annoncé par le beacon si
     // connu (pi4fred, macbooklinux…), sinon l'hôte de l'URL (souvent une IP, moins
@@ -108,7 +119,8 @@ private:
     QString              m_sourceUrl;
     int                  m_refreshMs;
     QVector<FocalBucket> m_buckets;
-    QStringList          m_excludeCameras;   // boîtiers hors pratique (politique service)
+    QStringList          m_excludeCameras;   // boîtiers hors pratique (politique /etc)
+    QStringList          m_ownedCameras;     // boîtiers possédés (état, modifiable)
 
     QTimer*                m_timer = nullptr;
     QNetworkAccessManager* m_net = nullptr;

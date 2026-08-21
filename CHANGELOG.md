@@ -3,6 +3,95 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.34.3] - 2026-08-21
+
+### Corrigé
+
+- La durée d'une compilation sur `/monitor` suit le vrai ninja (premier
+  compilateur jusqu'au lien), via morfDeploy 0.17.2. Un `cmake --build` déjà à
+  jour n'invente plus 1 s. La fenêtre CPU/temp autour d'une activité courte
+  n'est plus élargie à 90 s.
+
+## [0.34.2] - 2026-08-21
+
+### Corrigé
+
+- Les compilations du domaine Monitor affichaient une durée nulle et pas de
+  CPU/température max. `POST /api/monitor/activity` relit les horodatages même
+  quand JSON les envoie comme entiers (Python `int(time.time())`) ; une fenêtre
+  trop courte s'élargit pour croiser les relevés ; l'affichage montre aussi les
+  secondes.
+
+## [0.34.1] - 2026-08-21
+
+### Corrigé
+
+- Un même poste Photo n'apparaît plus deux fois (IP LAN + nom). L'affichage
+  privilégie le nom d'hôte, l'IP n'est qu'un repli. Le lien PhotoHub
+  (`?source=` en IP) se fusionne avec la source locale.
+
+## [0.34.0] - 2026-08-21
+
+### Ajouté
+
+- Les boîtiers possédés (onglet Configuration de `/photo`) s'enregistrent dans
+  l'état du service (`GET`/`POST /photo/practice`) : on les rappelle et on les
+  modifie plus tard, sans dépendre du navigateur.
+- L'onglet Configuration compare, par poste, les compteurs PhotoHub (liste,
+  résumé) et l'export `dataset` lu par l'analyse.
+
+### Corrigé
+
+- Le timeout d'export photothèque passait à 8 s : l'instantané périodique
+  comptait moins de photos que PhotoHub. L'export attend désormais 60 s.
+
+## [0.33.1] - 2026-08-21
+
+### Corrigé
+
+- Si `/etc` n'a pas encore le module `github` (config non écrasée à l'upgrade),
+  le service en crée un tout seul. POST `/github/ingest` n'est plus perdu en
+  HTTP 405 à cause d'un chemin mal normalisé.
+
+## [0.33.0] - 2026-08-21
+
+### Corrigé
+
+- La page GitHub affiche l'erreur d'ingestion au lieu d'un tableau de zéros.
+  L'ingest SiteWatch recopie aussi la fenêtre 14 j, les pages, les référents et
+  les assets. `QJsonValue::toDouble` reste le seul accès numérique JSON (Qt Pi).
+
+### Ajouté
+
+- Filtres `from` / `to` / dépôt / métrique, tris sur les tableaux, tuiles
+  (jours connus, moyenne, jour le plus actif).
+
+## [0.32.1] - 2026-08-21
+
+### Corrigé
+
+- Compilation Linux ARM64 : `QJsonValue` n'a pas `toLongLong` sur le Qt du Pi.
+  L'ingestion SiteWatch relit count/uniques via `toDouble`, comme le reste du
+  magasin GitHub.
+
+## [0.32.0] - 2026-08-21
+
+### Modifié
+
+- Le domaine GitHub reçoit la vérité consolidée de SiteWatch
+  (`POST /github/ingest`, contrat `sitewatch-github/1`). Il ne tire plus les
+  objets bruts depuis morfCollector.
+
+## [0.31.0] - 2026-08-20
+
+### Ajouté
+
+- **Domaine GitHub.** Module `github` : import idempotent des objets
+  `github-traffic/1` depuis morfCollector (capacité `collection`), tables
+  dédiées, upsert quotidien des vues/clones, snapshots glissants des pages et
+  référents, deltas de téléchargements jamais négatifs. Page `/github` (vue
+  globale et par dépôt). morfAnalytics n'interroge jamais GitHub.
+
 ## [0.30.0] - 2026-08-20
 
 ### Ajouté
