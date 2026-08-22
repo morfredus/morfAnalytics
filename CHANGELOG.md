@@ -3,6 +3,12 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.34.4] - 2026-08-21
+
+### Modifié
+
+- Resynchroniser la copie vendorée de morfdeploy vers 0.17.3.
+
 ## [0.34.3] - 2026-08-21
 
 ### Corrigé
