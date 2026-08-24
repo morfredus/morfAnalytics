@@ -3,6 +3,14 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.34.6] - 2026-08-24
+
+### Ajouté
+
+- `docs/fr/INTERFACE-WEB.md` : aperçu illustré des pages web (portail, analyse des
+  machines, GitHub, photothèque), rendues depuis le vrai HTML/CSS des pages avec
+  des données d'exemple anonymisées. Ajouté à l'index de la documentation.
+
 ## [0.34.5] - 2026-08-24
 
 ### Corrigé
