@@ -350,10 +350,18 @@ QJsonObject MonitorModule::data(const QString& machineKey, qint64 fromTs, qint64
     o["machines"] = machs;
 
     // Machine par défaut : la première connue, pour que la page affiche quelque
-    // chose dès l'ouverture sans choix explicite.
+    // chose dès l'ouverture sans choix explicite. On y retombe AUSSI quand la clé
+    // demandée est inconnue (navigateur qui a mémorisé une machine d'avant une
+    // réinstallation, ou machine oubliée) : sans ce repli, la page resterait vide
+    // et figée « hors ligne » sur une machine absente, alors que d'autres sont là.
     QString key = machineKey;
-    if (key.isEmpty() && !machs.isEmpty())
-        key = machs.first().toObject().value(QStringLiteral("key")).toString();
+    if (!machs.isEmpty()) {
+        bool known = false;
+        for (const QJsonValue& m : machs)
+            if (m.toObject().value(QStringLiteral("key")).toString() == key) { known = true; break; }
+        if (key.isEmpty() || !known)
+            key = machs.first().toObject().value(QStringLiteral("key")).toString();
+    }
     o["machine"] = key;
     o["from"] = static_cast<double>(fromTs);
     o["to"]   = static_cast<double>(toTs);

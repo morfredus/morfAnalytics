@@ -220,7 +220,13 @@ function render(data){
 
 function load(){
   fetch("/monitor/data?machine="+encodeURIComponent(S.machine)+"&period="+S.period)
-    .then(r=>r.json()).then(d=>{ if(!S.machine && d.machine)S.machine=d.machine; render(d); })
+    .then(r=>r.json()).then(d=>{
+      // Adopter la machine REELLEMENT servie : le serveur retombe sur une machine
+      // connue si la cle demandee (localStorage d'avant une reinstallation, machine
+      // oubliee) n'existe plus. On persiste la correction, sinon la page resterait
+      // figee « hors ligne » sur une machine absente a chaque rafraichissement.
+      if(d.machine && d.machine!==S.machine){S.machine=d.machine;localStorage.setItem(LS_M,S.machine);}
+      render(d); })
     .catch(e=>{$("#app").innerHTML='<div class="chart"><p class="muted">Données indisponibles : '+e+'</p></div>';});
 }
 

@@ -3,6 +3,17 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.34.5] - 2026-08-24
+
+### Corrigé
+
+- La page `/monitor` ne reste plus vide et figée « hors ligne » quand le
+  navigateur a mémorisé une machine qui n'existe plus (clé de `localStorage`
+  d'avant une réinstallation, ou machine oubliée). Le serveur retombe désormais
+  sur une machine connue lorsque la clé demandée est inconnue, et la page adopte
+  puis mémorise la machine réellement servie. La collecte, elle, n'était pas en
+  cause : seule la sélection de machine bloquait l'affichage.
+
 ## [0.34.4] - 2026-08-21
 
 ### Modifié
