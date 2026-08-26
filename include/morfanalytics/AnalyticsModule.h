@@ -7,6 +7,7 @@
 #pragma once
 #include "morfanalytics/IModule.h"
 #include "morfanalytics/analysis/AnalysisRegistry.h"
+#include "morfanalytics/data/AnnotationStore.h"
 #include <QString>
 #include <QJsonArray>
 #include <memory>
@@ -84,6 +85,25 @@ public:
     // l'appareil au cycle de collecte suivant.
     QJsonObject cleanupData(const QJsonObject& request);
 
+    // -------------------------------------------------------------------------
+    // Observations METEO humaines (annotations). Distinctes des mesures : ce sont
+    // des evenements observes par l'utilisateur, rattaches a une periode, stockes
+    // dans l'etat du service et non dans le cache reconstructible (voir
+    // AnnotationStore). Le module meteo en est le proprietaire naturel.
+    // -------------------------------------------------------------------------
+
+    // Liste des observations + vocabulaire propose, pour que l'interface se
+    // construise sans coder les types en dur : { "annotations":[...],
+    // "known_types":[...] }.
+    QJsonObject annotationsJson() const;
+
+    // Cree ou met a jour une observation. Delegue la validation au store ; *code
+    // porte le statut HTTP a renvoyer (200/400/404/500), *error le message humain.
+    QJsonObject saveAnnotation(const QJsonObject& in, int* code, QString* error);
+
+    // Supprime une observation par id. Meme convention *code/*error.
+    QJsonObject deleteAnnotation(const QString& id, int* code, QString* error);
+
 private:
     void maintainCache();
 
@@ -101,6 +121,10 @@ private:
     MeteoHubCollector*           m_collector = nullptr; // possédé via l'arbre QObject
     MeteoSyncPublisher*          m_publisher = nullptr; // possédé via l'arbre QObject
     AnalysisRegistry             m_analyses;
+
+    // Observations humaines. Etat persistant, distinct du cache : cree des la
+    // construction pour etre disponible meme avant start() (routes HTTP).
+    std::unique_ptr<AnnotationStore> m_annotations;
 };
 
 } // namespace morfanalytics

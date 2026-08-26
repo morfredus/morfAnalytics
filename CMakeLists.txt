@@ -64,6 +64,7 @@ add_library(morfAnalytics STATIC
     src/MonitorModule.cpp                 # domaine Monitor : historise les metriques morfMonitor
     src/GitHubAnalyticsModule.cpp         # domaine GitHub : importe github-traffic depuis morfCollector
     src/data/SampleStore.cpp              # cache de travail local (SQLite)
+    src/data/AnnotationStore.cpp          # observations meteo humaines (etat JSON, hors cache)
     src/data/MonitorStore.cpp             # historique des metriques machines (SQLite)
     src/data/GitHubStore.cpp              # historique des metriques GitHub
     src/collect/MeteoHubCollector.cpp     # collecte incrementale depuis MeteoHub
@@ -153,4 +154,8 @@ if(MA_BUILD_TESTS)
     add_executable(github_import_test test/github_import_test.cpp)
     target_link_libraries(github_import_test PRIVATE morfAnalytics)
     add_test(NAME github_import COMMAND github_import_test)
+
+    add_executable(annotations_test test/annotations_test.cpp)
+    target_link_libraries(annotations_test PRIVATE morfAnalytics)
+    add_test(NAME annotations COMMAND annotations_test)
 endif()

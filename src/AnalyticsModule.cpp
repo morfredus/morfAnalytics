@@ -6,6 +6,7 @@
 
 #include "morfanalytics/AnalyticsModule.h"
 #include "morfanalytics/data/SampleStore.h"
+#include "morfanalytics/data/AnnotationStore.h"
 #include "morfanalytics/collect/MeteoHubCollector.h"
 #include "morfanalytics/publish/MeteoSyncPublisher.h"
 
@@ -67,6 +68,23 @@ AnalyticsModule::AnalyticsModule(const QString& id, int maintenanceMs,
     // Le moteur est générique ; c'est cet appel, et lui seul, qui le spécialise
     // en moteur météo. Un autre projet enregistre ici son propre jeu d'analyses.
     registerMeteoAnalyses(m_analyses);
+
+    // Observations humaines : fichier d'ETAT (jamais le cache reconstructible),
+    // toujours dans defaultStateDir() meme si 'cache_dir' pointe ailleurs, pour
+    // qu'une purge ou un deplacement du cache ne les emporte pas. Cree et charge
+    // des maintenant : les routes HTTP peuvent survenir avant tout cycle de
+    // collecte, l'observation ne depend pas des mesures.
+    const QString annPath = QDir(defaultStateDir())
+                                .filePath(QStringLiteral("meteo-annotations.json"));
+    m_annotations = std::make_unique<AnnotationStore>(annPath);
+    if (!m_annotations->load()) {
+        // Un fichier present mais illisible ne doit pas passer inapercu : c'est de
+        // la donnee utilisateur potentiellement perdue. On le DIT, sans empecher
+        // le service de tourner (les mesures, elles, restent exploitables).
+        qWarning().noquote()
+            << QStringLiteral("module analytics : annotations illisibles dans %1 — "
+                              "observations non chargees").arg(annPath);
+    }
 }
 
 AnalyticsModule::~AnalyticsModule() = default;
@@ -222,6 +240,34 @@ QJsonObject AnalyticsModule::cleanupData(const QJsonObject& request) {
     o["affected"] = static_cast<double>(n);
     o["cached_points"] = static_cast<double>(m_store->count());
     return o;
+}
+
+QJsonObject AnalyticsModule::annotationsJson() const {
+    QJsonArray known;
+    for (const QString& t : AnnotationStore::knownTypes())
+        known.append(t);
+    return QJsonObject{
+        {QStringLiteral("annotations"), m_annotations ? m_annotations->all() : QJsonArray{}},
+        {QStringLiteral("known_types"), known},
+    };
+}
+
+QJsonObject AnalyticsModule::saveAnnotation(const QJsonObject& in, int* code, QString* error) {
+    if (!m_annotations) {
+        if (code) *code = 503;
+        if (error) *error = QStringLiteral("stockage des observations indisponible");
+        return QJsonObject{};
+    }
+    return m_annotations->upsert(in, code, error);
+}
+
+QJsonObject AnalyticsModule::deleteAnnotation(const QString& id, int* code, QString* error) {
+    if (!m_annotations) {
+        if (code) *code = 503;
+        if (error) *error = QStringLiteral("stockage des observations indisponible");
+        return QJsonObject{};
+    }
+    return m_annotations->removeById(id, code, error);
 }
 
 void AnalyticsModule::maintainCache() {

@@ -29,6 +29,13 @@ Deux principes cadrent tout ce qui suit :
   segmentation d'épisodes canicule/coup de froid (`episodes`) et décomposition
   tendance/saison avec forces à la STL (`decomposition`). Toutes couvertes par
   `test/analyses_test.cpp`.
+- ~~**Observations météo, phase 1**~~ FAITE (v0.35.0) : annotations humaines
+  rattachées à une période (orage, vent, grêle…), stockées à part du cache et
+  survivant à sa purge, avec API et interface. C'est la première brique d'une
+  analyse événementielle plus large (détection d'épisodes remarquables). Voir
+  `docs/fr/OBSERVATIONS.md` et la note de conception dans
+  `.morfredus_travail/Evolution/`. Reste à écrire : la détection automatique et
+  le rapprochement mesures/observation.
 
 ## Envisagé
 

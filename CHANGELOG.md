@@ -3,6 +3,31 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.35.0] - 2026-08-26
+
+### Added
+
+- Weather observations (human annotations), phase 1. Users can record what they
+  actually saw - a thunderstorm, strong wind, hail, a clearing sky - tied to a
+  time span, alongside the measurements the station records. The station only
+  measures temperature, humidity and pressure; observations capture the rest.
+  - Storage: a single JSON file in the service's persistent state
+    (`$STATE_DIRECTORY/meteo-annotations.json`), kept separate from the
+    reconstructible measurement cache and written atomically, so an observation
+    survives a cache purge and is never left half-written.
+  - HTTP API on the Meteo domain: `GET /meteohub/annotations` (list plus the
+    suggested type vocabulary), `POST /meteohub/annotations` (create or update),
+    `POST /meteohub/annotations/delete` (remove by id).
+  - Web page `/meteohub`: an "Observations météo" section to create, edit and
+    delete observations (start, end, one or more types, free-text description).
+  - Time bounds are stored in Unix seconds, matching the measurement time axis,
+    so a future observation-to-measurement lookup is a plain range query.
+  - Covered by `test/annotations_test.cpp` (CRUD, validation, ordering,
+    persistence across restart).
+  - Documented in `docs/fr/OBSERVATIONS.md` (storage format, API, interface).
+
+  Automatic episode detection is intentionally out of scope for this phase.
+
 ## [0.34.6] - 2026-08-24
 
 ### Ajouté

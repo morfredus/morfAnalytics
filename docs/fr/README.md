@@ -13,6 +13,7 @@ copie.
 | Document | Contenu |
 |---|---|
 | [Interface web](INTERFACE-WEB.md) | Aperçu des pages d'analyse (portail, machines, GitHub, photothèque) - captures d'exemple. |
+| [Observations météo](OBSERVATIONS.md) | Annotations humaines rattachées à une période : format de stockage, API HTTP, interface. |
 | [Architecture](ARCHITECTURE.md) | Les classes (`IModule`, `ModuleRegistry`, `HttpServer`, `Service`) et le fil d'exécution. |
 | [Choix de conception](DECISIONS.md) | Les décisions structurantes et **pourquoi** elles ont été prises. |
 

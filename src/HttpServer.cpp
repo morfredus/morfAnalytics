@@ -406,6 +406,46 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             out = "{\"error\":\"use GET or POST /photo/practice\"}";
         }
     }
+    else if (path == "/meteohub/annotations" || path == "/meteohub/annotations/delete") {
+        // Observations meteo humaines (Phase 1). CRUD minimal sur l'etat persistant
+        // du module meteo, jamais sur le cache des mesures :
+        //   GET  /meteohub/annotations         -> liste + vocabulaire propose
+        //   POST /meteohub/annotations         -> creation (sans id) ou mise a jour
+        //   POST /meteohub/annotations/delete  -> suppression { "id": ... }
+        auto* module = m_registry
+            ? qobject_cast<AnalyticsModule*>(m_registry->firstOfType(QStringLiteral("analytics")))
+            : nullptr;
+        if (!module) {
+            code = 503; reason = "Service Unavailable";
+            out = "{\"error\":\"aucun module d'analyse actif\"}";
+        } else if (method == "GET" && path == "/meteohub/annotations") {
+            out = toJson(module->annotationsJson());
+        } else if (method == "POST") {
+            QJsonParseError pe{};
+            const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+            if (pe.error != QJsonParseError::NoError || !doc.isObject()) {
+                code = 400; reason = "Bad Request";
+                out = "{\"error\":\"corps JSON invalide\"}";
+            } else {
+                int st = 200;
+                QString err;
+                const QJsonObject result = (path == "/meteohub/annotations/delete")
+                    ? module->deleteAnnotation(doc.object().value(QStringLiteral("id")).toString(), &st, &err)
+                    : module->saveAnnotation(doc.object(), &st, &err);
+                if (st != 200) {
+                    code = st;
+                    reason = (st == 404) ? "Not Found"
+                           : (st == 400) ? "Bad Request" : "Internal Server Error";
+                    out = toJson(QJsonObject{{"error", err}});
+                } else {
+                    out = toJson(result);
+                }
+            }
+        } else {
+            code = 405; reason = "Method Not Allowed";
+            out = "{\"error\":\"use GET or POST\"}";
+        }
+    }
     // ---- Routes GET ------------------------------------------------------
     else if (method != "GET") {
         code = 405; reason = "Method Not Allowed";
@@ -918,6 +958,18 @@ QByteArray HttpServer::landingPage() {
   .spark-point { fill: var(--accent); stroke: var(--card); stroke-width: .8; }
   code { background: color-mix(in srgb, var(--muted) 15%, transparent);
          padding: .1rem .35rem; border-radius: .25rem; font-size: .85em; }
+  textarea { font: inherit; font-size: .88rem; color: var(--fg); background: var(--bg);
+             border: 1px solid var(--line); border-radius: .45rem; padding: .4rem .55rem;
+             resize: vertical; min-height: 3.2rem; }
+  .obs-fields { display: flex; flex-wrap: wrap; gap: 1rem; }
+  .obs-types { display: flex; flex-wrap: wrap; gap: .35rem .9rem; margin-top: .35rem; }
+  .obs-types label { display: inline-flex; align-items: center; gap: .35rem; color: var(--fg);
+                     font-size: .9rem; }
+  .obs-item { border: 1px solid var(--line); border-radius: .6rem; padding: .9rem 1.1rem;
+              margin-top: .8rem; }
+  .obs-item .obs-when { font-weight: 600; }
+  .obs-item .obs-meta { color: var(--muted); font-size: .85rem; margin: .15rem 0 .5rem; }
+  .obs-item .obs-text { margin: .3rem 0 .7rem; white-space: pre-wrap; }
   footer { margin-top: 3rem; font-size: .82rem; color: var(--muted); }
   @media (max-width: 42rem) {
     body { padding: 1.5rem 1rem 3rem; }
@@ -942,6 +994,41 @@ QByteArray HttpServer::landingPage() {
   <section id="summary" class="card summary" hidden aria-live="polite"></section>
 
   <div id="groups"></div>
+
+  <section id="observations">
+    <h2 class="section">Observations météo</h2>
+    <div class="card wide">
+      <p class="note" style="margin-top:0">Vos observations directes - orage, vent
+        fort, grêle, éclaircie… - rattachées à une période. Elles complètent les
+        mesures : la station enregistre température, humidité et pression ; le reste,
+        c'est vous qui l'avez vu. Elles sont conservées à part des mesures et
+        survivent à une purge du cache.</p>
+
+      <form id="obs-form" autocomplete="off">
+        <input type="hidden" id="obs-id">
+        <div class="obs-fields">
+          <label class="field">Début
+            <input type="datetime-local" id="obs-start" required></label>
+          <label class="field">Fin
+            <input type="datetime-local" id="obs-end" required></label>
+        </div>
+        <div class="field" style="margin-top:.9rem">Types observés
+          <div id="obs-types" class="obs-types"></div>
+        </div>
+        <label class="field" style="margin-top:.9rem">Observation
+          <textarea id="obs-desc" rows="3"
+            placeholder="Ce que vous avez vu : enchaînement des phases, direction, accalmie…"></textarea></label>
+        <div class="actions">
+          <button type="submit" id="obs-save">Enregistrer l'observation</button>
+          <button type="button" id="obs-cancel" hidden>Annuler la modification</button>
+          <span id="obs-msg" class="cleanup-result"></span>
+        </div>
+      </form>
+
+      <h4>Observations enregistrées</h4>
+      <div id="obs-list"><p class="unavailable">…</p></div>
+    </div>
+  </section>
 
   <details class="service-details">
     <summary>Service et collecte</summary>
@@ -1680,6 +1767,173 @@ document.getElementById('refresh-btn').addEventListener('click', () => {
   loadAnalyses();
 });
 
+// --- Observations météo (annotations humaines) ------------------------------
+// Données ORIGINALES de l'utilisateur, distinctes des mesures. La station relève
+// temp/hum/pres ; le vent, la grêle, les éclairs, l'accalmie sont observés, pas
+// mesurés. On les saisit ici et le service les conserve à part du cache.
+const TYPE_LABELS = {
+  orage: 'Orage', pluie: 'Pluie', vent_fort: 'Vent fort', grele: 'Grêle',
+  neige: 'Neige', brouillard: 'Brouillard', gel: 'Gel', autre: 'Autre'
+};
+const typeLabel = (t) => TYPE_LABELS[t] || t.replace(/_/g, ' ')
+  .replace(/\b\w/g, (c) => c.toUpperCase());
+
+let obsById = {};          // id -> annotation, pour repeupler le formulaire à l'édition
+let obsTypesReady = false; // les cases à cocher ne se rendent qu'une fois
+
+// datetime-local (heure LOCALE saisie) -> secondes Unix, et l'inverse. Les bornes
+// sont stockées en secondes Unix, comme l'axe de temps des mesures : le
+// rapprochement futur mesures/observation se fera sans conversion.
+const inputToEpoch = (v) => {
+  const ms = new Date(v).getTime();
+  return isNaN(ms) ? null : Math.floor(ms / 1000);
+};
+const epochToInput = (ts) => {
+  const d = new Date(ts * 1000);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+       + `T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+function renderTypeChoices(known) {
+  const box = document.getElementById('obs-types');
+  box.innerHTML = known.map((t) =>
+    `<label><input type="checkbox" value="${esc(t)}"> ${esc(typeLabel(t))}</label>`).join('');
+  obsTypesReady = true;
+}
+
+function selectedTypes() {
+  return [...document.querySelectorAll('#obs-types input:checked')].map((c) => c.value);
+}
+
+function resetObsForm() {
+  document.getElementById('obs-id').value = '';
+  document.getElementById('obs-start').value = '';
+  document.getElementById('obs-end').value = '';
+  document.getElementById('obs-desc').value = '';
+  document.querySelectorAll('#obs-types input:checked').forEach((c) => (c.checked = false));
+  document.getElementById('obs-cancel').hidden = true;
+  document.getElementById('obs-save').textContent = "Enregistrer l'observation";
+  document.getElementById('obs-msg').textContent = '';
+}
+
+function renderObsList(items) {
+  const list = document.getElementById('obs-list');
+  if (!items.length) {
+    list.innerHTML = '<p class="unavailable">Aucune observation enregistrée pour le moment.</p>';
+    return;
+  }
+  list.innerHTML = items.map((a) => {
+    const chips = (a.types || []).map((t) =>
+      `<span class="chip">${esc(typeLabel(t))}</span>`).join(' ');
+    const desc = a.description
+      ? `<div class="obs-text">${esc(a.description)}</div>` : '';
+    return `<div class="obs-item">
+      <div class="obs-when">${esc(fmtDate(a.start))} &rarr; ${esc(fmtDate(a.end))}</div>
+      <div class="chips">${chips}</div>
+      ${desc}
+      <div class="actions">
+        <button type="button" data-edit="${esc(a.id)}">Modifier</button>
+        <button type="button" class="danger" data-del="${esc(a.id)}">Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function loadObservations() {
+  try {
+    const data = await fetch('/meteohub/annotations').then((r) => r.json());
+    if (!obsTypesReady) renderTypeChoices(data.known_types || []);
+    const items = data.annotations || [];
+    obsById = {};
+    items.forEach((a) => (obsById[a.id] = a));
+    renderObsList(items);
+  } catch (e) {
+    document.getElementById('obs-list').innerHTML =
+      '<p class="unavailable">Observations momentanément indisponibles.</p>';
+  }
+}
+
+function editObservation(id) {
+  const a = obsById[id];
+  if (!a) return;
+  document.getElementById('obs-id').value = a.id;
+  document.getElementById('obs-start').value = epochToInput(a.start);
+  document.getElementById('obs-end').value = epochToInput(a.end);
+  document.getElementById('obs-desc').value = a.description || '';
+  const wanted = new Set(a.types || []);
+  document.querySelectorAll('#obs-types input').forEach((c) => (c.checked = wanted.has(c.value)));
+  document.getElementById('obs-cancel').hidden = false;
+  document.getElementById('obs-save').textContent = 'Enregistrer les modifications';
+  document.getElementById('obs-msg').textContent = '';
+  document.getElementById('observations').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function deleteObservation(id) {
+  if (!confirm('Supprimer cette observation ?')) return;
+  const msg = document.getElementById('obs-msg');
+  try {
+    const r = await fetch('/meteohub/annotations/delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    }).then((res) => res.json());
+    if (r && r.ok) { resetObsForm(); loadObservations(); }
+    else { msg.className = 'cleanup-result err'; msg.textContent = `Échec : ${(r && r.error) || 'inconnu'}`; }
+  } catch (e) {
+    msg.className = 'cleanup-result err'; msg.textContent = 'Service injoignable.';
+  }
+}
+
+document.getElementById('obs-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const msg = document.getElementById('obs-msg');
+  const start = inputToEpoch(document.getElementById('obs-start').value);
+  const end = inputToEpoch(document.getElementById('obs-end').value);
+  const types = selectedTypes();
+  // Validation côté client (miroir de celle du service) : un message immédiat vaut
+  // mieux qu'un aller-retour réseau pour une erreur de saisie évidente.
+  if (start === null || end === null) {
+    msg.className = 'cleanup-result err'; msg.textContent = 'Renseigner un début et une fin.'; return;
+  }
+  if (end < start) {
+    msg.className = 'cleanup-result err'; msg.textContent = 'La fin précède le début.'; return;
+  }
+  if (!types.length) {
+    msg.className = 'cleanup-result err'; msg.textContent = 'Cocher au moins un type.'; return;
+  }
+  const payload = {
+    start, end, types,
+    description: document.getElementById('obs-desc').value
+  };
+  const id = document.getElementById('obs-id').value;
+  if (id) payload.id = id;
+  try {
+    const r = await fetch('/meteohub/annotations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then((res) => res.json());
+    if (r && r.id) {
+      resetObsForm();
+      msg.className = 'cleanup-result ok';
+      msg.textContent = id ? 'Observation mise à jour.' : 'Observation enregistrée.';
+      loadObservations();
+    } else {
+      msg.className = 'cleanup-result err';
+      msg.textContent = `Échec : ${(r && r.error) || 'inconnu'}`;
+    }
+  } catch (e) {
+    msg.className = 'cleanup-result err'; msg.textContent = 'Service injoignable.';
+  }
+});
+
+document.getElementById('obs-cancel').addEventListener('click', resetObsForm);
+document.getElementById('obs-list').addEventListener('click', (ev) => {
+  const edit = ev.target.closest('[data-edit]');
+  const del = ev.target.closest('[data-del]');
+  if (edit) editObservation(edit.getAttribute('data-edit'));
+  else if (del) deleteObservation(del.getAttribute('data-del'));
+});
+
 let fitTimer;
 window.addEventListener('resize', () => {
   clearTimeout(fitTimer);
@@ -1688,6 +1942,7 @@ window.addEventListener('resize', () => {
 
 loadStatus();
 loadAnalyses();
+loadObservations();
 setInterval(loadStatus, 15000);
 setInterval(loadAnalyses, 120000);
 </script>
