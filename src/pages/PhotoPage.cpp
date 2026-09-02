@@ -153,6 +153,7 @@ function serializeFilters(){
   return {
     camExcl:[...S.camExcl], camOwned:[...S.camOwned],
     cam:names("cam"), lens:names("lens"), type:names("type"), folder:names("folder"),
+    ctx:names("ctx"), subj:names("subj"),
     year:[...S.year], month:[...S.month],
     focal:S.focal.slice(), aperture:S.aperture.slice(), iso:S.iso.slice(), shutter:S.shutter.slice(),
     period:{from:S.period.from,to:S.period.to}
@@ -164,6 +165,8 @@ function labelToKey(d,label){
   if(d==="lens") return D.dict.lens.indexOf(label);
   if(d==="type") return D.dict.file_type.indexOf(label);
   if(d==="folder"){for(const k in D.folders)if(D.folders[k]===label)return isNaN(+k)?k:+k;return -1;}
+  if(d==="ctx")  return D.dict.context?D.dict.context.indexOf(label):-1;
+  if(d==="subj") return D.dict.subject?D.dict.subject.indexOf(label):-1;
   return -1;
 }
 // Persiste les exclusions LOCALES (hors périmètre imposé par la config) comme périmètre
@@ -178,7 +181,7 @@ function applyView(v){
   S.camOwned=new Set(v.camOwned||[]);
   saveOwned(S.camOwned,false);
   persistExcl();
-  ["cam","lens","type","folder"].forEach(d=>(v[d]||[]).forEach(lab=>{
+  ["cam","lens","type","folder","ctx","subj"].forEach(d=>(v[d]||[]).forEach(lab=>{
     const k=labelToKey(d,lab); if(k!==-1&&k!==null&&k!==undefined)S[d].add(k);
   }));
   (v.year||[]).forEach(y=>S.year.add(y));
@@ -207,6 +210,7 @@ function fmtF(v,d){return (v===null||v===undefined)?"-":v.toFixed(d===undefined?
 // Catégoriel = Set de clés ; numérique = tableau de plages [min,max,libellé].
 // period = fenêtre continue d'années (from..to) sur taken_at. camExcl = périmètre.
 function emptyFilters(){return {cam:new Set(),lens:new Set(),type:new Set(),folder:new Set(),
+  ctx:new Set(),subj:new Set(),
   year:new Set(),month:new Set(),focal:[],aperture:[],iso:[],shutter:[],
   period:{from:null,to:null},camExcl:new Set(),camOwned:new Set()};}
 const S=emptyFilters();
@@ -222,6 +226,8 @@ function buildDims(){
     lens:  {label:"Objectif", kind:"cat", col:"lens",      key:i=>D.cols.lens[i],     lab:k=>D.dict.lens[k]??("#"+k)},
     type:  {label:"Type",     kind:"cat", col:"file_type", key:i=>D.cols.file_type[i],lab:k=>D.dict.file_type[k]??("#"+k)},
     folder:{label:"Dossier",  kind:"cat", col:"folder_id", key:i=>D.cols.folder_id[i],lab:k=>D.folders[k]??("#"+k)},
+    ctx:   {label:"Contexte", kind:"cat", col:"context", key:i=>(D.cols.context?D.cols.context[i]:null), lab:k=>((D.dict.context&&D.dict.context[k])||("#"+k))},
+    subj:  {label:"Sujet",    kind:"cat", col:"subject", key:i=>(D.cols.subject?D.cols.subject[i]:null), lab:k=>((D.dict.subject&&D.dict.subject[k])||("#"+k))},
     year:  {label:"Année",    kind:"cat", key:i=>D.years[i],  lab:k=>String(k)},
     month: {label:"Mois",     kind:"cat", key:i=>D.months[i], lab:k=>MONTHS[k]||("#"+k)},
     focal: {label:"Focale",   kind:"range", col:"focal_length", ranges:()=>(D.buckets||[]).map(b=>[b.min,b.max,b.label])},
@@ -230,7 +236,7 @@ function buildDims(){
     shutter:{label:"Vitesse", kind:"range", col:"shutter_speed_s", ranges:()=>SHUTTER_RANGES},
   };
 }
-const CAT_DIMS=["cam","lens","type","folder","year","month"];
+const CAT_DIMS=["cam","lens","type","folder","ctx","subj","year","month"];
 const RANGE_DIMS=["focal","aperture","iso","shutter"];
 
 // ---- Sélecteur de postes (multi-sources) -------------------------------------
@@ -299,6 +305,7 @@ function renderSources(){
 // à zéro au changement de sélection. Les plages, l'année, le périmètre restent.
 function resetCatFilters(){
   S.cam=new Set();S.lens=new Set();S.type=new Set();S.folder=new Set();
+  S.ctx=new Set();S.subj=new Set();
 }
 
 function updateSrcInfo(snap){
@@ -476,6 +483,40 @@ function rangeCard(dim){
     bars(a.rows,{filterKey:dim,isOn:r=>rangeOn(S[dim],r.k)})+'</div>';
 }
 
+// ---- Presets d'analyse (contexte / sujet) ------------------------------------
+// Raccourcis de filtres, JAMAIS une regle codee dans les donnees : un preset pose
+// une combinaison context/subject dans les filtres, ensuite combinable et comparable
+// comme n'importe quel autre filtre. « Focale naturelle » = DECOUVERTE + GENERAL est
+// le preset de reference, a comparer aux autres (LIBRE+ANIMAUX, SPECIALISEE+ANIMAUX...).
+// Le PERIMETRE de pratique (boitiers possedes/exclus) n'est pas un filtre : on le garde.
+function applyPreset(ctxLabel,subjLabel){
+  const owned=new Set(S.camOwned), excl=new Set(S.camExcl);
+  Object.assign(S,emptyFilters());
+  S.camOwned=owned; S.camExcl=excl;
+  if(ctxLabel){const k=D.dict.context?D.dict.context.indexOf(ctxLabel):-1; if(k>=0)S.ctx.add(k);}
+  if(subjLabel){const k=D.dict.subject?D.dict.subject.indexOf(subjLabel):-1; if(k>=0)S.subj.add(k);}
+  render();
+}
+function presetsBar(){
+  const P=[
+    ["Focale naturelle","DECOUVERTE","GENERAL"],
+    ["Découverte","DECOUVERTE",""],
+    ["Libre","LIBRE",""],
+    ["Animalier spontané","LIBRE","ANIMAUX"],
+    ["Animalier préparé","SPECIALISEE","ANIMAUX"],
+    ["Événements","EVENEMENT",""],
+    ["Spectacles","SPECTACLE",""],
+    ["Missions","MISSION",""],
+  ];
+  const btns=P.map(p=>'<button class="btn preset" data-pctx="'+esc(p[1])+'" data-psubj="'+esc(p[2])+'">'+esc(p[0])+'</button>').join("");
+  return '<div class="fg"><b>Analyses prêtes</b> '+btns+
+    ' <button class="btn" id="presetclr">tout le périmètre</button>'+
+    '<p class="note">Raccourcis de filtres (contexte / sujet), ensuite combinables avec boîtier, '+
+    'focale, ISO… « Focale naturelle » = DECOUVERTE + GENERAL, à comparer aux autres pour voir '+
+    'si une focale est une préférence générale ou liée à un sujet. Enregistrez une combinaison '+
+    'comme « Vue » pour la retrouver.</p></div>';
+}
+
 // ---- Filtres actifs (périmètre séparé, groupés par dimension) -----------------
 function filtersPanel(){
   chip._h={};
@@ -576,7 +617,7 @@ function cameraTimeline(idx){
 // ---- Matrice analytique (croisement libre X × Y × mesure) --------------------
 const MEASURES={count:"Nombre de photos",medfocal:"Focale médiane (mm)",medaperture:"Ouverture médiane",
   mediso:"ISO médian",medshutter:"Vitesse médiane"};
-const MX_DIMS=["cam","lens","type","folder","year","month","focal","aperture","iso","shutter"];
+const MX_DIMS=["cam","lens","type","folder","ctx","subj","year","month","focal","aperture","iso","shutter"];
 // Étiquette de bucket d'une photo pour une dimension (null si non classable).
 function bucketLabel(dim,i){
   const D_=DIMS[dim];
@@ -634,6 +675,7 @@ function matrixBlock(){
 
 // ---- Comparaison par groupes de filtres --------------------------------------
 function snapFilters(){return {cam:new Set(S.cam),lens:new Set(S.lens),type:new Set(S.type),folder:new Set(S.folder),
+  ctx:new Set(S.ctx),subj:new Set(S.subj),
   year:new Set(S.year),month:new Set(S.month),focal:S.focal.map(r=>r.slice()),aperture:S.aperture.map(r=>r.slice()),
   iso:S.iso.map(r=>r.slice()),shutter:S.shutter.map(r=>r.slice()),period:{...S.period},camExcl:new Set(S.camExcl),camOwned:new Set(S.camOwned)};}
 function describeFilters(F){
@@ -812,6 +854,11 @@ function render(){
   h+=sec("Vue d'ensemble",
       tiles(idx)+'<h3>Tendances (médianes)</h3>'+statTiles(idx), true);
 
+  h+=sec("Contexte et sujet",
+      presetsBar()+
+      '<div class="cols"><div><h3>Contexte</h3>'+catCard("ctx")+'</div>'+
+      '<div><h3>Sujet</h3>'+catCard("subj")+'</div></div>', true);
+
   h+=sec("Quand - années et mois",
       '<div class="cols"><div><h3>Par année</h3>'+catCard("year",
         '<div class="controls" style="margin-top:.5rem"><label class="muted">Période</label>'+
@@ -864,6 +911,11 @@ function wire(){
     el.addEventListener("click",()=>{const fn=chip._h[el.getAttribute("data-chip")];if(fn)fn();render();});});
   on("resetf","click",()=>{const ex=S.camExcl;const f=emptyFilters();f.camExcl=ex;Object.assign(S,f);render();});
   on("reload","click",reload);
+  // Presets contexte/sujet (raccourcis de filtres).
+  document.querySelectorAll(".preset").forEach(el=>el.addEventListener("click",
+    ()=>applyPreset(el.getAttribute("data-pctx"),el.getAttribute("data-psubj"))));
+  on("presetclr","click",()=>{const owned=new Set(S.camOwned),excl=new Set(S.camExcl);
+    Object.assign(S,emptyFilters());S.camOwned=owned;S.camExcl=excl;render();});
   // Vues enregistrées
   on("viewsave","click",()=>{
     const name=(prompt("Nom de la vue à enregistrer :","")||"").trim();

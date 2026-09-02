@@ -574,8 +574,8 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
 
     // Dictionnaires GLOBAUX (chaînes uniques toutes sources confondues) : chaque source
     // a ses propres index, on ré-interne pour un espace d'index commun.
-    QJsonArray gCam, gLens, gType;
-    QHash<QString, int> ciCam, ciLens, ciType;
+    QJsonArray gCam, gLens, gType, gCtx, gSubj;
+    QHash<QString, int> ciCam, ciLens, ciType, ciCtx, ciSubj;
     auto intern = [](QJsonArray& dict, QHash<QString, int>& idx, const QString& s) -> int {
         auto it = idx.constFind(s);
         if (it != idx.constEnd())
@@ -597,6 +597,7 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
 
     QJsonObject gFolders;
     QJsonArray cTaken, cCam, cLens, cType, cFocal, cFocal35, cAper, cIso, cShut, cFolder;
+    QJsonArray cCtx, cSubj;   // contexte photographique (morfphoto-context/2)
     // Empreinte -> rang de la PREMIÈRE source où on l'a vue. Le dédoublonnage est
     // strictement INTER-POSTES : une même empreinte revue depuis un AUTRE poste est un
     // doublon (même fichier indexé sur deux machines) et on l'écarte ; revue dans le
@@ -639,6 +640,8 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
         const QJsonArray dCam = dict.value(QStringLiteral("camera")).toArray();
         const QJsonArray dLens = dict.value(QStringLiteral("lens")).toArray();
         const QJsonArray dType = dict.value(QStringLiteral("file_type")).toArray();
+        const QJsonArray dCtx = dict.value(QStringLiteral("context")).toArray();
+        const QJsonArray dSubj = dict.value(QStringLiteral("subject")).toArray();
         const QJsonArray taken = cols.value(QStringLiteral("taken_at")).toArray();
         const QJsonArray camera = cols.value(QStringLiteral("camera")).toArray();
         const QJsonArray lens = cols.value(QStringLiteral("lens")).toArray();
@@ -649,6 +652,8 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
         const QJsonArray iso = cols.value(QStringLiteral("iso")).toArray();
         const QJsonArray shut = cols.value(QStringLiteral("shutter_speed_s")).toArray();
         const QJsonArray fol = cols.value(QStringLiteral("folder_id")).toArray();
+        const QJsonArray ctxCol = cols.value(QStringLiteral("context")).toArray();
+        const QJsonArray subjCol = cols.value(QStringLiteral("subject")).toArray();
         const QJsonArray fp = cols.value(QStringLiteral("fingerprint")).toArray();
         const int n = taken.size();
 
@@ -687,6 +692,10 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
             cFolder.append(fv.isDouble()
                 ? QJsonValue(static_cast<double>(nsBase + static_cast<qint64>(fv.toDouble())))
                 : QJsonValue(QJsonValue::Null));
+            // Contexte : ré-interné dans les dictionnaires globaux ; null (non qualifié)
+            // préservé, distinct d'INCONNU (valeur du dictionnaire).
+            cCtx.append(remap(at(ctxCol, i), dCtx, gCtx, ciCtx));
+            cSubj.append(remap(at(subjCol, i), dSubj, gSubj, ciSubj));
             ++kept;
             ++total;
         }
@@ -703,8 +712,10 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
         {"taken_at", cTaken}, {"camera", cCam}, {"lens", cLens}, {"file_type", cType},
         {"focal_length", cFocal}, {"focal_length_35mm", cFocal35}, {"aperture", cAper},
         {"iso", cIso}, {"shutter_speed_s", cShut}, {"folder_id", cFolder},
+        {"context", cCtx}, {"subject", cSubj},
     };
-    QJsonObject dictionaries{{"camera", gCam}, {"lens", gLens}, {"file_type", gType}};
+    QJsonObject dictionaries{{"camera", gCam}, {"lens", gLens}, {"file_type", gType},
+        {"context", gCtx}, {"subject", gSubj}};
     QJsonObject dataset{
         {"count", total}, {"dictionaries", dictionaries}, {"columns", columns},
         {"folders", gFolders},

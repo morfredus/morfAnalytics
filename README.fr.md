@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.35.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.36.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -122,7 +122,12 @@ source de vérité reste MeteoHub.
   répétitions de tentatives sensibles : ces analyses n'existent pas dans la
   vue de bureau de SiteWatch.
 - `/photo` lit la photothèque indexée par **morfPhoto** (source de vérité) :
-  boîtiers, objectifs, focales (regroupées en focales usuelles) et années.
+  boîtiers, objectifs, focales (regroupées en focales usuelles), années, et le
+  **contexte photographique** par dossier (`context` et `subject`, deux dimensions
+  indépendantes qualifiées dans PhotoHub). Des **presets** croisent ces dimensions -
+  « Focale naturelle » = `DECOUVERTE + GENERAL`, animalier spontané vs préparé,
+  événements, spectacles - à comparer entre eux ; ce ne sont que des raccourcis de
+  filtres, jamais une règle inscrite dans les données.
   morfAnalytics n'interroge que les agrégats de morfPhoto à intervalle régulier
   (jamais la liste des fichiers) et en garde un instantané. Les boîtiers possédés
   s'enregistrent depuis l'onglet Configuration (`POST /photo/practice`) pour

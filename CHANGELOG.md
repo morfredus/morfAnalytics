@@ -3,6 +3,24 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.36.0] - 2026-09-02
+
+### Added
+
+- **Photographic context on the /photo page** (contract `morfphoto-context/2`).
+  `context` and `subject` become two independent categorical dimensions in the
+  existing generic filter engine: filterable on their own, combinable with every
+  technical dimension (camera, lens, focal, ISO…), and available in the matrix, the
+  A/B comparison and saved views. `null` (unqualified) and `INCONNU` (a real value)
+  stay distinct.
+- A preset bar of ready-made analyses (filter shortcuts, never a rule baked into the
+  data): "Focale naturelle" = `DECOUVERTE + GENERAL`, plus spontaneous vs prepared
+  wildlife, events, shows, missions, to compare practices side by side.
+- Multi-source merge (`fetchMerged`) now carries `context`/`subject` through the
+  global dictionaries, so combined-machine analysis keeps the context. Single-source
+  datasets already passed it through unchanged; a dataset without the columns still
+  works (backward compatible).
+
 ## [0.35.0] - 2026-08-26
 
 ### Added

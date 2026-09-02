@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.35.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.36.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -99,8 +99,12 @@ the source access logs.
 ## Photo library (morfPhoto)
 
 The `/photo` space reads the photo library indexed by **morfPhoto** (the source
-of truth): camera bodies, lenses, focal lengths (bucketed into usual values) and
-years. morfAnalytics only polls morfPhoto's aggregate endpoints at a regular
+of truth): camera bodies, lenses, focal lengths (bucketed into usual values),
+years, and the per-folder **photographic context** (`context` and `subject`, two
+independent dimensions qualified in PhotoHub). **Presets** cross these dimensions -
+"Focale naturelle" = `DECOUVERTE + GENERAL`, spontaneous vs prepared wildlife,
+events, shows - to compare them; they are only filter shortcuts, never a rule baked
+into the data. morfAnalytics only polls morfPhoto's aggregate endpoints at a regular
 interval (never the file list) and keeps a snapshot. Owned camera bodies are
 saved from the Configuration tab (`POST /photo/practice`) so the selection can
 be recalled and edited later. Each analysed station is listed once, by hostname
