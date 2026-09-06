@@ -7,6 +7,7 @@
 #include "morfanalytics/HttpServer.h"
 #include "morfanalytics/ModuleRegistry.h"
 #include "morfanalytics/AnalyticsModule.h"
+#include "morfanalytics/StatePaths.h"
 #include "morfanalytics/Version.h"
 #include "morfanalytics/SelfDescription.h"
 #include "morfanalytics/pages/PortalPage.h"
@@ -104,9 +105,12 @@ bool HttpServer::openSiteWatchStore() {
         return false;
     }
 
-    const QString dbPath = QDir(m_config.siteWatchCacheDir).filePath(QStringLiteral("sitewatch-history.sqlite"));
+    // Vide => etat sous /var/lib (StateDirectory), jamais /opt (voir StatePaths.h).
+    const QString swDir = m_config.siteWatchCacheDir.isEmpty()
+                              ? stateDir() : m_config.siteWatchCacheDir;
+    const QString dbPath = QDir(swDir).filePath(QStringLiteral("sitewatch-history.sqlite"));
     if (!QDir().mkpath(QFileInfo(dbPath).absolutePath())) {
-        m_siteWatchStoreError = QStringLiteral("impossible de créer %1").arg(m_config.siteWatchCacheDir);
+        m_siteWatchStoreError = QStringLiteral("impossible de créer %1").arg(swDir);
         return false;
     }
 

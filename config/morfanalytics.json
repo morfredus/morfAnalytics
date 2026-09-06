@@ -1,30 +1,25 @@
 {
   "_comment": "Configuration morfAnalytics. Copier en 'morfanalytics.json' et adapter. Le service la lit via --config, ou la cherche dans le dossier courant, a cote du binaire, ou dans /etc/morfsystem/morfanalytics/.",
-
   "app_name": "morfAnalytics",
   "http_port": 8799,
   "bind_address": "0.0.0.0",
   "_comment_sitewatch_cache": "Historique des synthèses SiteWatch (SQLite). Il ne contient jamais les journaux source, qui restent souverains dans SiteWatch.",
-  "sitewatch_cache_dir": "/opt/morfanalytics/cache",
-
+  "sitewatch_cache_dir": "",
   "beacon": {
     "_comment": "Annonce de presence sur le LAN (protocole morfBeacon, port du parc).",
     "enabled": true,
     "udp_port": 45454,
     "interval_ms": 15000
   },
-
   "modules": [
     {
       "_comment": "Moteur d'analyse. Recopie l'historique de l'appareil dans un cache de travail local et execute les analyses a la demande.",
       "type": "analytics",
       "id": "analytics-1",
       "maintenance_ms": 60000,
-      "cache_dir": "cache",
-
+      "cache_dir": "",
       "_comment_source": "URL de base de MeteoHub. Sans ce parametre, aucune collecte n'est lancee : le service se contente d'exposer le cache deja constitue.",
       "source_url": "http://meteohub.local",
-
       "_comment_altitude": "Altitude de la station, en metres (environ 0,12 hPa par metre). A adapter. Une altitude nulle est une valeur valide : c'est l'absence de ce parametre qui est signalee dans les analyses de pression.",
       "altitude_m": 8
     },
@@ -32,37 +27,57 @@
       "_comment": "Specialisation Photo : lit les agregats de morfPhoto (source de verite) via son API HTTP et les interprete (regroupement de focales). Ne touche jamais au disque ni a la base de morfPhoto.",
       "type": "photo",
       "id": "photo-1",
-
       "_comment_source": "Base de l'API morfPhoto. Sur le Pi ou tourne aussi morfPhoto : http://127.0.0.1:8793. Laisse VIDE, la page /photo indique la source manquante et rien n'est interroge.",
       "source_url": "http://127.0.0.1:8793",
-
       "_comment_refresh": "Periode de rafraichissement de l'instantane, en ms.",
       "refresh_ms": 60000,
-
       "_comment_focal_buckets": "Regroupement des focales BRUTES en focales usuelles : [min, max, libelle]. Les valeurs brutes ne sont jamais remplacees (morfPhoto reste souverain) : lecture interpretee.",
       "focal_buckets": [
-        [23, 25, "24 mm"],
-        [26, 30, "28 mm"],
-        [33, 37, "35 mm"],
-        [47, 53, "50 mm"],
-        [66, 72, "70 mm"],
-        [295, 305, "300 mm"]
+        [
+          23,
+          25,
+          "24 mm"
+        ],
+        [
+          26,
+          30,
+          "28 mm"
+        ],
+        [
+          33,
+          37,
+          "35 mm"
+        ],
+        [
+          47,
+          53,
+          "50 mm"
+        ],
+        [
+          66,
+          72,
+          "70 mm"
+        ],
+        [
+          295,
+          305,
+          "300 mm"
+        ]
       ]
     },
     {
       "_comment": "Domaine Monitor : historise les metriques d'un ou plusieurs morfMonitor et sert la page /monitor. morfMonitor reste la sonde (maintenant) ; ce module donne la memoire dans le temps.",
       "type": "monitor",
       "id": "monitor-1",
-
       "_comment_sources": "morfMonitor a interroger (leur /api/all), une entree par machine du parc a historiser. Un slash de fin est tolere. Une source injoignable est simplement ignoree (visible dans /modules) sans bloquer les autres.",
-      "sources": [ "http://pi4fred:8790", "http://pi4dev:8790" ],
-
+      "sources": [
+        "http://pi4fred:8790",
+        "http://pi4dev:8790"
+      ],
       "_comment_interval": "Cadence d'echantillonnage, en ms. 15 s par defaut : assez fin pour le CPU/RAM, assez doux pour ne pas peser. La cadence par famille de metriques viendra dans un incrément ulterieur.",
       "interval_ms": 15000,
-
       "_comment_retention": "Retention des releves BRUTS, en jours. 0 => illimite. Etape simple avant la compaction par paliers (rollups + memoire remarquable) a venir.",
       "retention_days": 90,
-
       "_comment_db": "Emplacement du cache historique (SQLite). Vide => <cache_dir>/monitor.sqlite.",
       "db_path": ""
     },
@@ -70,9 +85,12 @@
       "type": "github",
       "id": "github-1",
       "collectors": [],
-      "discovery": { "enabled": true, "udp_port": 45454 },
+      "discovery": {
+        "enabled": true,
+        "udp_port": 45454
+      },
       "interval_ms": 300000,
-      "cache_dir": "/opt/morfanalytics/cache",
+      "cache_dir": "",
       "db_path": ""
     }
   ]

@@ -41,8 +41,9 @@ struct ServiceConfig {
 
     // Historique des synthèses envoyées par SiteWatch. Ce cache ne contient pas
     // les journaux source, qui restent exclusivement sous la responsabilité de
-    // SiteWatch.
-    QString siteWatchCacheDir = QStringLiteral("/opt/morfanalytics/cache");
+    // SiteWatch. Vide par defaut = etat sous /var/lib via StateDirectory (resolu au
+    // point d'usage par morfanalytics::stateDir) ; un chemin explicite en config surcharge.
+    QString siteWatchCacheDir;
 
     // Annonce de presence sur le LAN via morfBeacon.
     bool    beaconEnabled    = true;

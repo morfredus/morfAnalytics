@@ -59,6 +59,7 @@ add_library(morfAnalytics STATIC
     src/pages/GitHubPage.cpp              # page du domaine GitHub
     src/Service.cpp
     src/ModuleFactory.cpp
+    src/StatePaths.cpp                    # racine d'etat commune (/var/lib via StateDirectory)
     src/AnalyticsModule.cpp               # logique metier : moteur d'analyse
     src/PhotoAnalyticsModule.cpp          # specialisation Photo : lit morfPhoto, interprete
     src/MonitorModule.cpp                 # domaine Monitor : historise les metriques morfMonitor

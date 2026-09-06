@@ -3,6 +3,30 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.37.0] - 2026-09-06
+
+### Fixed
+
+- **"attempt to write a readonly database" on every analytics collection.** All SQLite
+  caches (meteo, monitor, github, sitewatch-history) were stored under `/opt` (via a
+  shipped `cache_dir` default), which escapes systemd's `StateDirectory` ownership
+  management. When the service's user changed (an old dedicated `morfanalytics` user →
+  the invoking user), the existing files kept the old owner and became unwritable, so
+  every collection failed - meteo stopped updating on Aug 27. State now lives under
+  `/var/lib/morfsystem/morfanalytics` (the `StateDirectory` systemd creates and owns for
+  the service user), the doctrine's place, so a user change can never orphan it again.
+
+### Changed
+
+- **All analytics state paths default to `/var/lib` (via `StateDirectory`), not `/opt`.**
+  A shared `morfanalytics::stateDir()` (`$STATE_DIRECTORY`, else
+  `/var/lib/morfsystem/morfanalytics`) is now the fallback for the meteo, monitor,
+  github and sitewatch-history caches; the hardcoded `/opt/morfanalytics/cache`
+  fallbacks are gone. The shipped config's `cache_dir`/`sitewatch_cache_dir` are emptied
+  so they resolve to that state dir; an explicit path in config still overrides.
+  Migrating an existing install: move `/opt/morfanalytics/cache/*.sqlite*` to
+  `/var/lib/morfsystem/morfanalytics/` (owned by the service user) before deploying.
+
 ## [0.36.1] - 2026-09-03
 
 ### Changed

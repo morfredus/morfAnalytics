@@ -10,7 +10,9 @@
 #include "morfanalytics/PhotoAnalyticsModule.h"
 #include "morfanalytics/MonitorModule.h"
 #include "morfanalytics/GitHubAnalyticsModule.h"
+#include "morfanalytics/StatePaths.h"
 
+#include <QDir>
 #include <QJsonArray>
 #include <QStringList>
 
@@ -90,9 +92,12 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
         // cache_dir, sinon l'emplacement standard du service.
         QString dbPath = def.params.value("db_path").toString();
         if (dbPath.isEmpty()) {
-            const QString cacheDir = def.params.value("cache_dir")
-                .toString(QStringLiteral("/opt/morfanalytics/cache"));
-            dbPath = cacheDir + QStringLiteral("/monitor.sqlite");
+            // Defaut = etat sous /var/lib (StateDirectory), pas /opt : voir StatePaths.h.
+            // Un cache_dir explicite en config reste honore (surcharge volontaire).
+            QString cacheDir = def.params.value("cache_dir").toString();
+            if (cacheDir.isEmpty())
+                cacheDir = stateDir();
+            dbPath = QDir(cacheDir).filePath(QStringLiteral("monitor.sqlite"));
         }
         // Rétention des relevés bruts, en jours (0 => illimité). Étape simple avant
         // la compaction par paliers à venir.
@@ -118,9 +123,11 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
             collectors << single;
         QString dbPath = def.params.value("db_path").toString();
         if (dbPath.isEmpty()) {
-            const QString cacheDir = def.params.value("cache_dir")
-                .toString(QStringLiteral("/opt/morfanalytics/cache"));
-            dbPath = cacheDir + QStringLiteral("/github.sqlite");
+            // Defaut = etat sous /var/lib (voir StatePaths.h) ; cache_dir explicite honore.
+            QString cacheDir = def.params.value("cache_dir").toString();
+            if (cacheDir.isEmpty())
+                cacheDir = stateDir();
+            dbPath = QDir(cacheDir).filePath(QStringLiteral("github.sqlite"));
         }
         const int intervalMs = def.params.value("interval_ms").toInt(300000);
         const QJsonObject discovery = def.params.value("discovery").toObject();

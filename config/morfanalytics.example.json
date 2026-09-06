@@ -1,33 +1,27 @@
 {
   "_comment": "Configuration morfAnalytics. Copier en 'morfanalytics.json' et adapter. Le service la lit via --config, ou la cherche dans le dossier courant, a cote du binaire, ou dans /etc/morfsystem/morfanalytics/.",
-
   "app_name": "morfAnalytics",
   "http_port": 8799,
   "bind_address": "0.0.0.0",
   "_comment_sitewatch_cache": "Historique des synthèses SiteWatch (SQLite). Il ne contient jamais les journaux source, qui restent souverains dans SiteWatch.",
-  "sitewatch_cache_dir": "/opt/morfanalytics/cache",
-
+  "sitewatch_cache_dir": "",
   "beacon": {
     "_comment": "Annonce de presence sur le LAN (protocole morfBeacon, port du parc).",
     "enabled": true,
     "udp_port": 45454,
     "interval_ms": 15000
   },
-
   "modules": [
     {
       "_comment": "Moteur d'analyse. Recopie l'historique de l'appareil dans un cache de travail local et execute les analyses a la demande.",
       "type": "analytics",
       "id": "analytics-1",
       "maintenance_ms": 60000,
-      "cache_dir": "cache",
-
+      "cache_dir": "",
       "_comment_source": "URL de base de MeteoHub, par exemple http://meteohub.local (mDNS) ou http://192.168.1.42. Laisse VIDE, aucune collecte n'est lancee : le service se contente d'exposer le cache deja constitue. Volontairement vide par defaut, pour qu'une valeur d'exemple ne soit jamais prise pour une adresse reelle.",
       "source_url": "",
-
       "_comment_altitude": "Altitude de la station, en metres (environ 0,12 hPa par metre). A adapter. Une altitude nulle est une valeur valide : c'est l'absence de ce parametre qui est signalee dans les analyses de pression.",
       "altitude_m": 8,
-
       "_comment_morfsync": "Publication (facultative) d'une synthese par jour vers le hub morfSync, pour rendre les resultats consultables par le reste du parc (morfDashboard, SiteWatch...). Ecriture SEULE, a sens unique : jamais vers l'appareil. Laisse VIDE, aucune publication n'est faite. Sur le Pi ou tourne aussi morfSync : http://127.0.0.1:8080. Le jeton reste vide sur un LAN de confiance.",
       "morfsync_url": "",
       "morfsync_token": ""
@@ -36,29 +30,50 @@
       "_comment": "Specialisation Photo : lit les agregats de morfPhoto (source de verite) via son API HTTP et les interprete (regroupement de focales). Ne touche jamais au disque ni a la base de morfPhoto.",
       "type": "photo",
       "id": "photo-1",
-
       "_comment_source": "Base de l'API morfPhoto DECLAREE (filet, toujours proposee sur la page /photo). Par defaut http://127.0.0.1:8793 (morfPhoto sur la meme machine). En PLUS, les morfPhoto du parc sont DECOUVERTS seuls par beacon (voir 'discovery') : la page /photo laisse cocher un ou plusieurs postes et FUSIONNE leurs bases en dedoublonnant (une photo indexee sur deux postes, meme CD, compte une fois). Peut rester VIDE : la decouverte suffit.",
       "source_url": "http://127.0.0.1:8793",
-
       "_comment_discovery": "Decouverte automatique des morfPhoto du parc par le beacon (capacite 'photo_index', jamais par nom). Chaque morfPhoto a sa base par machine ; la page /photo propose les postes decouverts en cases a cocher, en temps reel. 'enabled' a false revient a la seule source declaree. 'udp_port' : port du parc (45454).",
-      "discovery": { "enabled": true, "udp_port": 45454 },
-
+      "discovery": {
+        "enabled": true,
+        "udp_port": 45454
+      },
       "_comment_refresh": "Periode de rafraichissement de l'instantane, en ms.",
       "refresh_ms": 60000,
-
       "_comment_focal_buckets": "Regles de regroupement des focales BRUTES en focales usuelles : tableau de [min, max, libelle]. Configurable et documente ; si absent, un jeu par defaut est utilise. Les valeurs brutes ne sont jamais remplacees (morfPhoto reste souverain) : c'est une lecture interpretee.",
       "focal_buckets": [
-        [23, 25, "24 mm"],
-        [26, 30, "28 mm"],
-        [33, 37, "35 mm"],
-        [47, 53, "50 mm"],
-        [66, 72, "70 mm"],
-        [295, 305, "300 mm"]
+        [
+          23,
+          25,
+          "24 mm"
+        ],
+        [
+          26,
+          30,
+          "28 mm"
+        ],
+        [
+          33,
+          37,
+          "35 mm"
+        ],
+        [
+          47,
+          53,
+          "50 mm"
+        ],
+        [
+          66,
+          72,
+          "70 mm"
+        ],
+        [
+          295,
+          305,
+          "300 mm"
+        ]
       ],
-
       "_comment_exclude_cameras": "Perimetre de pratique (corpus != pratique) : boitiers exclus PAR DEFAUT (noms exacts). Filet admin /etc. La page /photo peut aussi EXCLURE localement.",
       "exclude_cameras": [],
-
       "_comment_owned_cameras": "Liste blanche optionnelle (filet /etc). La selection reelle est enregistree depuis l'onglet Configuration de /photo dans l'etat du service (photo-practice.json sous /var/lib), pour pouvoir la rappeler et la modifier sans editer /etc.",
       "owned_cameras": []
     },
@@ -66,19 +81,20 @@
       "_comment": "Domaine Monitor : historise les metriques d'un ou plusieurs morfMonitor (leur /api/all) et sert la page /monitor. morfMonitor reste la sonde (maintenant) ; ce module donne la memoire dans le temps. Aucune sonde systeme ici.",
       "type": "monitor",
       "id": "monitor-1",
-
       "_comment_sources": "morfMonitor a interroger EN PLUS de ceux decouverts seuls (voir 'discovery'). Filet stable : machines qui n'emettent pas de beacon, ou perimetre que l'on veut figer. Une entree par machine (ex. http://pi4fred:8790). Un slash de fin est tolere. Une source injoignable est ignoree sans bloquer les autres. Peut rester VIDE : la decouverte suffit alors.",
-      "sources": [ "http://pi4fred:8790", "http://pi4dev:8790" ],
-
+      "sources": [
+        "http://pi4fred:8790",
+        "http://pi4dev:8790"
+      ],
       "_comment_discovery": "Decouverte automatique des morfMonitor du parc par le beacon (capacite 'system_monitor', jamais par nom). Une machine qui s'annonce est integree seule -- son /api/all rejoint les sources interrogees -- sans declaration manuelle, comme morfMonitor apprend les machines. Ses donnees restent conservees meme deconnectee ; seul un oubli explicite (bouton 'Oublier cette machine' de la page /monitor, ou POST /api/monitor/forget) les retire. 'enabled' a false revient aux seules sources declarees. 'udp_port' : port du parc (45454), a ne changer que dans un cas particulier.",
-      "discovery": { "enabled": true, "udp_port": 45454 },
-
+      "discovery": {
+        "enabled": true,
+        "udp_port": 45454
+      },
       "_comment_interval": "Cadence d'echantillonnage, en ms. 15 s par defaut : assez fin pour CPU/RAM, assez doux pour ne pas peser. Une passe re-lit /api/all et ecrit un releve par machine.",
       "interval_ms": 15000,
-
       "_comment_retention": "Retention des releves BRUTS, en jours. 0 => illimite. Etape simple avant la compaction par paliers (rollups + memoire remarquable) a venir.",
       "retention_days": 90,
-
       "_comment_db": "Emplacement du cache historique (SQLite). Vide => <cache_dir>/monitor.sqlite, defaut /opt/morfanalytics/cache/monitor.sqlite.",
       "db_path": ""
     },
@@ -88,10 +104,13 @@
       "id": "github-1",
       "_comment_collectors": "URL de morfCollector en plus de la decouverte beacon. Peut rester vide.",
       "collectors": [],
-      "discovery": { "enabled": true, "udp_port": 45454 },
+      "discovery": {
+        "enabled": true,
+        "udp_port": 45454
+      },
       "_comment_interval": "Cadence d'import, en ms. 5 min par defaut : la collecte GitHub est quotidienne.",
       "interval_ms": 300000,
-      "cache_dir": "/opt/morfanalytics/cache",
+      "cache_dir": "",
       "db_path": ""
     }
   ]
