@@ -15,6 +15,17 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   background read-through now also pulls the quarterly endpoint alongside events,
   daily and life.
 
+## [0.39.1] - 2026-09-07
+
+### Fixed
+
+- **The HTTP server no longer blocks the event loop draining a reply to a slow client.**
+  Same defect and fix as morfMonitor 0.21.1 / morfBeacon 0.7.1: `reply()` used a
+  synchronous `waitForBytesWritten` drain that, while serving a large page or data
+  response to a slow peer, starved the morfBeacon heartbeat timer on the same event
+  loop (the service appearing to vanish from the parc while running). Replies now close
+  asynchronously, with a 10 s dead-client guard.
+
 ## [0.38.0] - 2026-09-07
 
 ### Added

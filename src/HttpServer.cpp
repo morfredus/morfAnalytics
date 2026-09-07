@@ -22,6 +22,7 @@
 
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTimer>
 #include <QHostAddress>
 #include <QHostInfo>
 #include <QJsonObject>
@@ -2006,14 +2007,21 @@ void HttpServer::reply(QTcpSocket* sock, int code, const QByteArray& reason, con
     resp += "Connection: close\r\n\r\n";
     resp += body;
     sock->write(resp);
-    // Vider le tampon d'écriture AVANT de fermer : sur une grande réponse (la page
-    // Photo dépasse 20 Ko), le corps déborde du tampon socket et `disconnectFromHost`
-    // seul en tronquait la fin. On draine jusqu'à ce qu'il ne reste rien à écrire,
-    // avec un délai de garde pour ne jamais bloquer indéfiniment.
-    while (sock->bytesToWrite() > 0)
-        if (!sock->waitForBytesWritten(2000))
-            break;
+    sock->flush();
+    // Fermeture ASYNCHRONE, jamais bloquante : Qt draine le tampon restant en
+    // arriere-plan (ClosingState) puis ferme (disconnected -> deleteLater). L'ancienne
+    // boucle waitForBytesWritten(2000) bloquait le thread principal le temps qu'un
+    // client lent absorbe une grosse reponse (la page Photo, /monitor/data...) ; sur un
+    // lien reseau degrade ce blocage affamait le QTimer du heartbeat morfBeacon (meme
+    // event-loop), faisant « disparaitre » le service du parc alors qu'il tournait.
     sock->disconnectFromHost();
+    // Garde-fou anti-accumulation : un client mort laisserait la socket en ClosingState.
+    // On la coupe apres 10 s (large pour un client vivant). `sock` en objet-contexte :
+    // socket deja detruite => timer annule, pas de pointeur pendouillant.
+    QTimer::singleShot(10000, sock, [sock]() {
+        if (sock->state() != QAbstractSocket::UnconnectedState)
+            sock->abort();
+    });
 }
 
 } // namespace morfanalytics
