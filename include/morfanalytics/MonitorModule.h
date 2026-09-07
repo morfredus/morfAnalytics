@@ -62,6 +62,13 @@ public:
     QJsonObject data(const QString& machineKey, qint64 fromTs, qint64 toTs,
                      int maxPoints) const;
 
+    // Historique de supervision (contrat `morfhistory/1`) : evenements des 24 h,
+    // statistiques du jour et table de vie, lus en READ-THROUGH sur le morfMonitor
+    // de la machine. morfMonitor reste PROPRIETAIRE de cette memoire ; morfAnalytics
+    // n'en garde qu'une projection en cache, rafraichie en arriere-plan par le poll,
+    // et sert ici la derniere copie connue (sans jamais bloquer le handler HTTP).
+    QJsonObject history(const QString& machineKey) const;
+
     // Oubli DÉFINITIF d'une machine (« Oublier cette machine ») : efface la machine
     // et tout son historique. Geste explicite, réservé à une machine réellement
     // partie. Retire aussi sa source découverte pour ne pas la réintégrer aussitôt.
@@ -80,6 +87,11 @@ private:
     void fetch(const QString& baseUrl);
     void onReply(const QString& baseUrl, QNetworkReply* reply);
     void ingest(const QString& baseUrl, const QJsonObject& all);
+
+    // Read-through de `morfhistory/1` sur un morfMonitor (evenements 24 h + stats
+    // du jour + vie), mis en cache par machine. Throttle par source : l'historique
+    // ne change pas assez vite pour justifier le rythme du poll de ressources.
+    void fetchHistory(const QString& baseUrl);
 
     // Sources effectivement interrogées : union des sources déclarées et des
     // morfMonitor découverts par beacon (entendus récemment).
@@ -110,6 +122,14 @@ private:
     QString m_lastError;
     qint64  m_lastPollAt = 0;
     QHash<QString, QJsonObject> m_sourceState;   // baseUrl -> { reachable, last_error, machine }
+
+    // Projection en cache de l'historique de supervision, par machine (hote) :
+    // { events, daily, life, fetched_at }. Rafraichie par fetchHistory, servie par
+    // history(). Non persistee : morfMonitor garde la copie durable, on re-tire au
+    // prochain cycle apres un redemarrage.
+    QHash<QString, QJsonObject> m_historyByMachine;   // hote -> historique
+    QHash<QString, qint64>      m_historyFetchedAt;   // baseUrl -> dernier fetch (throttle)
+    static constexpr qint64 kHistoryIntervalS = 60;   // rafraichissement de l'historique
 };
 
 } // namespace morfanalytics

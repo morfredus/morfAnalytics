@@ -58,6 +58,16 @@ table.svc th,table.svc td{padding:.3rem .55rem;text-align:right;white-space:nowr
 table.svc th:first-child,table.svc td:first-child{text-align:left;font-variant-numeric:normal}
 table.svc thead th{color:var(--muted);border-bottom:1px solid var(--line);font-weight:600}
 table.svc tbody tr:nth-child(even){background:#1a1d22}
+.evwrap{max-height:28rem;overflow:auto;padding:.2rem .3rem}
+.ev{display:flex;gap:.6rem;align-items:baseline;padding:.28rem .2rem;border-bottom:1px solid var(--line);font-size:.86rem}
+.ev:last-child{border-bottom:none}
+.ev .t{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:.8rem;min-width:5.2rem}
+.ev .s{color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.b{font-size:.72rem;font-weight:600;border-radius:999px;padding:.05rem .55rem;white-space:nowrap}
+.b-info{color:var(--soft);background:#242830;border:1px solid var(--line)}
+.b-warn{color:#f0c073;background:color-mix(in srgb,var(--warn) 15%,transparent);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent)}
+.b-bad{color:#f0a093;background:color-mix(in srgb,var(--bad) 16%,transparent);border:1px solid color-mix(in srgb,var(--bad) 40%,transparent)}
+.b-ok{color:#8fe0b0;background:color-mix(in srgb,var(--ok) 16%,transparent);border:1px solid color-mix(in srgb,var(--ok) 40%,transparent)}
 </style></head><body><div class="wrap">
 <p><a href="/">&larr; morfAnalytics</a></p>
 <h1>Analyse des machines <span id="vb" class="vb"></span></h1>
@@ -74,6 +84,7 @@ morfMonitor dit &laquo;&nbsp;maintenant&nbsp;&raquo; ; ici on regarde comment la
 </div>
 
 <div id="app"><p class="muted">Chargement&hellip;</p></div>
+<div id="superv"></div>
 </div>
 <script>
 "use strict";
@@ -218,6 +229,65 @@ function render(data){
   app.innerHTML=html;
 }
 
+// --- Supervision (contrat morfhistory/1) : disponibilite + chronologie 24 h ----
+// La memoire des evenements appartient a morfMonitor ; morfAnalytics la LIT et la
+// represente. Ici : la vie (totaux), le jour par service, et le ruban 24 h.
+const EV={
+  service_crashed:["crash","b-bad"], service_stuck:["bloqué","b-warn"],
+  heartbeat_lost:["heartbeat perdu","b-warn"], heartbeat_recovered:["heartbeat retrouvé","b-ok"],
+  service_recovered:["rétabli","b-ok"], restart_succeeded:["relance OK","b-ok"],
+  restart_failed:["relance échouée","b-bad"], restart_requested:["relance demandée","b-info"],
+  service_started:["démarré","b-info"], service_stopped:["arrêté","b-info"],
+  service_first_seen:["découvert","b-info"], monitor_started:["morfMonitor démarré","b-info"],
+  monitor_gap:["trou d’observation","b-warn"]};
+function evBadge(e){const m=EV[e]||[e,"b-info"];return '<span class="b '+m[1]+'">'+m[0]+'</span>';}
+function pct(v){return (v===null||v===undefined)?"—":(100*v).toFixed(v>0.999?3:2)+" %";}
+
+function renderHistory(h){
+  const box=$("#superv"); if(!box) return;
+  const life=(h&&h.life)||{}, g=life.global||{};
+  const days=((h&&h.daily)||{}).days||[];
+  const today=days.length?days[days.length-1]:null;
+  const evs=((h&&h.events)||{}).events||[];
+  if(!h||(!evs.length&&!today&&!(g&&g.observed_seconds))){
+    box.innerHTML='<h2>Supervision</h2><div class="chart"><p class="muted">Aucune mémoire de supervision pour cette machine. '+
+      'Elle apparaît dès que le morfMonitor de cette machine tourne en 0.20+ (contrat <code>morfhistory/1</code>) et a émis un premier relevé.</p></div>';
+    return;}
+  let todayInc=0, todayObs=0;
+  if(today){todayObs=today.observed_seconds||0;const sv=today.services||{};for(const k in sv)todayInc+=(sv[k].incidents?sv[k].incidents.count:0);}
+  let html='<h2>Supervision <span class="muted" style="font-size:.8rem;font-weight:400">(mémoire de morfMonitor · 24 h détaillé, agrégats permanents)</span></h2>';
+  html+='<div class="grid">'+
+    tile("Disponibilité globale", pct(g.availability), "depuis le début")+
+    tile("Incidents (total)", fmtNum(g.total_incidents), fmtNum(g.total_crashes)+" crashs · "+fmtNum(g.total_restarts)+" relances")+
+    tile("Indispo cumulée", fmtDur(g.total_downtime_seconds), "temps observé")+
+    (today?tile("Aujourd’hui", fmtNum(todayInc)+" incident(s)", "observé "+fmtDur(todayObs)):"")+
+    '</div>';
+  if(today&&today.services&&Object.keys(today.services).length){
+    const rows=Object.entries(today.services).sort((a,b)=>((b[1].incidents||{}).count||0)-((a[1].incidents||{}).count||0));
+    html+='<h3>Aujourd’hui, par service</h3><div class="chart tscroll"><table class="svc"><thead><tr>'+
+      '<th>Service</th><th>Incidents</th><th>crash</th><th>bloqué</th><th>silence</th><th>Indispo</th><th>Dispo</th></tr></thead><tbody>'+
+      rows.map(function(e){const k=e[0],s=e[1],i=s.incidents||{},c=i.by_cause||{};
+        return '<tr><td>'+k+'</td><td>'+fmtNum(i.count)+'</td><td>'+fmtNum(c.crash)+'</td><td>'+fmtNum(c.stuck)+'</td><td>'+fmtNum(c.silent)+'</td><td>'+fmtDur(i.downtime_seconds)+'</td><td>'+(s.availability==null?"—":pct(s.availability))+'</td></tr>';}).join("")+
+      '</tbody></table></div>';
+  }
+  html+='<h3>Chronologie (24 h)</h3>';
+  if(!evs.length){html+='<div class="chart"><p class="muted">Aucun événement sur les 24 dernières heures. Bon signe.</p></div>';}
+  else{
+    const sorted=evs.slice().sort((a,b)=>b.ts-a.ts).slice(0,120);
+    html+='<div class="chart evwrap">'+sorted.map(e=>
+      '<div class="ev"><span class="t">'+fmtClock(e.ts)+'</span>'+evBadge(e.event)+
+      '<span class="s">'+(e.service||"")+(e.host?' <span class="muted">· '+e.host+'</span>':"")+'</span></div>').join("")+'</div>';
+    if(evs.length>120)html+='<p class="muted" style="font-size:.8rem">120 événements les plus récents sur '+evs.length+'.</p>';
+  }
+  box.innerHTML=html;
+}
+function loadHistory(){
+  if(!S.machine){const b=$("#superv");if(b)b.innerHTML="";return;}
+  fetch("/monitor/history?machine="+encodeURIComponent(S.machine))
+    .then(r=>r.json()).then(renderHistory)
+    .catch(()=>{const b=$("#superv");if(b)b.innerHTML='<h2>Supervision</h2><div class="chart"><p class="muted">Historique indisponible.</p></div>';});
+}
+
 function load(){
   fetch("/monitor/data?machine="+encodeURIComponent(S.machine)+"&period="+S.period)
     .then(r=>r.json()).then(d=>{
@@ -226,7 +296,7 @@ function load(){
       // oubliee) n'existe plus. On persiste la correction, sinon la page resterait
       // figee « hors ligne » sur une machine absente a chaque rafraichissement.
       if(d.machine && d.machine!==S.machine){S.machine=d.machine;localStorage.setItem(LS_M,S.machine);}
-      render(d); })
+      render(d); loadHistory(); })
     .catch(e=>{$("#app").innerHTML='<div class="chart"><p class="muted">Données indisponibles : '+e+'</p></div>';});
 }
 

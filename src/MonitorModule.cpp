@@ -136,8 +136,10 @@ void MonitorModule::poll() {
     const qint64 now = QDateTime::currentSecsSinceEpoch();
     pruneDiscovered(now);
     const QStringList sources = activeSources();
-    for (const QString& s : sources)
+    for (const QString& s : sources) {
         fetch(s);
+        fetchHistory(s);   // read-through de morfhistory/1, throttle par source
+    }
 
     // Rétention : au plus une fois par jour, supprimer les relevés bruts au-delà de
     // l'horizon configuré. Borne la base sur une machine modeste. 0 => illimité.
@@ -234,8 +236,10 @@ bool MonitorModule::forgetMachine(const QString& key) {
         if (m_sourceState.value(url).value(QStringLiteral("machine")).toString() == key) {
             m_discovered.remove(url);
             m_sourceState.remove(url);
+            m_historyFetchedAt.remove(url);
         }
     }
+    m_historyByMachine.remove(key);   // la projection d'historique part avec la machine
     return true;
 }
 
@@ -337,6 +341,58 @@ void MonitorModule::ingest(const QString& baseUrl, const QJsonObject& all) {
         {"reachable", true}, {"machine", host},
         {"last_error", QJsonValue(QJsonValue::Null)}};
     emit updated(id());
+}
+
+void MonitorModule::fetchHistory(const QString& baseUrl) {
+    if (!m_net)
+        return;
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    if (now - m_historyFetchedAt.value(baseUrl) < kHistoryIntervalS)
+        return;   // throttle : l'historique bouge lentement
+    // On a besoin d'un /api/all reussi d'abord, pour connaitre l'hote (cle machine)
+    // sous lequel ranger la projection. Sans lui, on attend le prochain cycle.
+    const QString host = m_sourceState.value(baseUrl).value(QStringLiteral("machine")).toString();
+    if (host.isEmpty())
+        return;
+    m_historyFetchedAt[baseUrl] = now;
+
+    QString base = baseUrl;
+    while (base.endsWith(QLatin1Char('/')))
+        base.chop(1);
+
+    // Trois endpoints du contrat morfhistory/1. Chaque reponse met a jour sa propre
+    // clef dans la projection de la machine ; best-effort, un echec laisse la
+    // derniere valeur connue (la page affiche « — » plutot que de casser).
+    struct Ep { QString url; QString key; };
+    const QVector<Ep> eps{
+        {base + QStringLiteral("/api/events?since=") + QString::number(now - 86400),
+         QStringLiteral("events")},
+        {base + QStringLiteral("/api/stats/daily"), QStringLiteral("daily")},
+        {base + QStringLiteral("/api/stats/life"),  QStringLiteral("life")}};
+    for (const Ep& ep : eps) {
+        QNetworkRequest req{QUrl(ep.url)};
+        req.setTransferTimeout(4000);
+        QNetworkReply* reply = m_net->get(req);
+        const QString key = ep.key;
+        connect(reply, &QNetworkReply::finished, this, [this, reply, host, key]() {
+            reply->deleteLater();
+            if (reply->error() != QNetworkReply::NoError)
+                return;
+            const QJsonObject o = QJsonDocument::fromJson(reply->readAll()).object();
+            QJsonObject hist = m_historyByMachine.value(host);
+            hist[key] = o;
+            hist[QStringLiteral("fetched_at")] =
+                static_cast<double>(QDateTime::currentSecsSinceEpoch());
+            m_historyByMachine[host] = hist;
+        });
+    }
+}
+
+QJsonObject MonitorModule::history(const QString& machineKey) const {
+    // La cle machine EST l'hote (cf. ingest : upsertMachine(host, host, ...)).
+    QJsonObject o = m_historyByMachine.value(machineKey);
+    o["machine"] = machineKey;
+    return o;
 }
 
 QJsonArray MonitorModule::machines() const {

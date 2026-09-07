@@ -3,6 +3,24 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.38.0] - 2026-09-07
+
+### Added
+
+- **Supervision memory on the Machines page (`morfhistory/1` consumer).** The
+  `/monitor` page now shows what morfMonitor 0.20+ remembers over time: an overall
+  availability tile row (global availability, total incidents, cumulative downtime),
+  a per-service table for the current day (incidents by cause crash/stuck/silent,
+  downtime, availability), and a **24 h chronology** of structured events (crash,
+  stuck, heartbeat lost/recovered, restarts, gaps) with severity-coloured badges.
+  morfMonitor stays the **owner** of that memory; morfAnalytics only reads it. The
+  `MonitorModule` fetches the three `morfhistory/1` endpoints (`/api/events`,
+  `/api/stats/daily`, `/api/stats/life`) from each discovered morfMonitor in the
+  background (read-through, throttled ~60 s, cached per machine) and serves the last
+  known copy synchronously via `GET /monitor/history?machine=` - no blocking network
+  call in the HTTP handler. A machine with no 0.20+ morfMonitor simply shows an
+  explanatory note; forgetting a machine drops its cached history too.
+
 ## [0.37.0] - 2026-09-06
 
 ### Fixed

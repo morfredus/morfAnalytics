@@ -545,6 +545,24 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             // ~300 points : assez pour un tracé net, sans jamais déverser le brut.
             out = toJson(module->data(machine, from, to, 300));
         }
+    } else if (path == "/monitor/history") {
+        // Historique de supervision (contrat morfhistory/1) de la machine, lu en
+        // read-through par le module et servi depuis son cache : chronologie 24 h,
+        // stats du jour, table de vie. Non bloquant (aucune requete reseau ici).
+        auto* module = m_registry
+            ? qobject_cast<MonitorModule*>(m_registry->firstOfType(QStringLiteral("monitor")))
+            : nullptr;
+        QString machine;
+        const int qm = rawPath.indexOf('?');
+        if (qm >= 0) {
+            const QUrlQuery q(QString::fromUtf8(rawPath.mid(qm + 1)));
+            machine = q.queryItemValue(QStringLiteral("machine"), QUrl::FullyDecoded);
+        }
+        if (!module)
+            out = toJson(QJsonObject{{QStringLiteral("error"),
+                                      QStringLiteral("aucun module 'monitor' configure")}});
+        else
+            out = toJson(module->history(machine));
     } else if (path == "/github") {
         reply(sock, 200, "OK", pages::GitHubPage::render(), "text/html; charset=utf-8");
         return;
