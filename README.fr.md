@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.38.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.39.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -143,7 +143,13 @@ source de vérité reste MeteoHub.
   charge, et une vue **qui consomme quoi** par service (top CPU et RAM, moyennes et
   maxima par service sur la période), avec sélecteur de machine et de période
   (1 h - 30 j). morfMonitor reste la sonde (« maintenant ») ; ce domaine donne la
-  mémoire dans la durée. Les relevés sont historisés dans
+  mémoire dans la durée. Une section **Supervision** lit la mémoire temporelle
+  propre à morfMonitor (contrat `morfhistory/1`, en read-through mis en cache,
+  `GET /monitor/history?machine=`) : disponibilité globale, table du jour par service
+  (incidents par cause, indisponibilité), chronologie 24 h, graphes de tendance
+  disponibilité/incidents et table des trimestres. Cette mémoire appartient à
+  morfMonitor ; morfAnalytics ne fait que la lire et la représenter. Les relevés
+  (ressources) sont historisés dans
   `/opt/morfanalytics/cache/monitor.sqlite`, avec une rétention configurable des
   relevés bruts (`retention_days`, 90 j par défaut ; `0` = illimité), première étape
   avant la compaction par paliers. Les **activités** sont aussi historisées : tout

@@ -270,6 +270,23 @@ function renderHistory(h){
         return '<tr><td>'+k+'</td><td>'+fmtNum(i.count)+'</td><td>'+fmtNum(c.crash)+'</td><td>'+fmtNum(c.stuck)+'</td><td>'+fmtNum(c.silent)+'</td><td>'+fmtDur(i.downtime_seconds)+'</td><td>'+(s.availability==null?"—":pct(s.availability))+'</td></tr>';}).join("")+
       '</tbody></table></div>';
   }
+  // Tendance : graphes dérivés des jours (source de vérité permanente de morfMonitor).
+  if(days.length>=2){
+    const dts=days.map(d=>Date.parse(d.day+"T12:00:00")/1000);
+    const dInc=days.map(d=>{let n=0;const sv=d.services||{};for(const k in sv)n+=(sv[k].incidents?sv[k].incidents.count:0);return n;});
+    const dMin=days.map(d=>{let s=0;const sv=d.services||{};for(const k in sv)s+=(sv[k].incidents?(sv[k].incidents.downtime_seconds||0):0);return s/60;});
+    html+='<h3>Tendance</h3>';
+    html+='<div class="chart"><span class="cur">'+dInc.reduce((a,b)=>a+b,0)+' au total</span><h3 style="font-size:.95rem;margin:0 0 .1rem">Incidents par jour</h3>'+lineChart(dts,dInc,{dec:0,color:"#e0836f"})+'</div>';
+    html+='<div class="chart"><h3 style="font-size:.95rem;margin:0 0 .1rem">Indisponibilité par jour</h3>'+lineChart(dts,dMin,{dec:0,unit:" min",color:"#e6a54e"})+'</div>';
+  }
+  // Trimestres (roll-up long, dérivé des jours côté morfMonitor).
+  const qs=((h&&h.quarterly)||{}).periods||[];
+  if(qs.length){
+    html+='<h3>Trimestres</h3><div class="chart tscroll"><table class="svc"><thead><tr>'+
+      '<th>Trimestre</th><th>Incidents</th><th>Crashs</th><th>Relances</th><th>Indispo</th><th>Dispo</th></tr></thead><tbody>'+
+      qs.map(function(p){const g=p.global||{};return '<tr><td>'+p.period+'</td><td>'+fmtNum(g.incidents)+'</td><td>'+fmtNum(g.crashes)+'</td><td>'+fmtNum(g.restarts)+'</td><td>'+fmtDur(g.downtime_seconds)+'</td><td>'+(g.availability==null?"—":pct(g.availability))+'</td></tr>';}).join("")+
+      '</tbody></table></div>';
+  }
   html+='<h3>Chronologie (24 h)</h3>';
   if(!evs.length){html+='<div class="chart"><p class="muted">Aucun événement sur les 24 dernières heures. Bon signe.</p></div>';}
   else{

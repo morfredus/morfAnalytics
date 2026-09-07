@@ -3,6 +3,18 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.39.0] - 2026-09-07
+
+### Added
+
+- **Availability trend graphs and quarterly roll-up on the Machines page.** The
+  Supervision section now draws two trend charts derived from the permanent daily
+  aggregates - incidents per day and downtime (minutes) per day - so drift shows up
+  at a glance, plus a **Trimestres** table (incidents, crashes, restarts, downtime,
+  availability per quarter) from morfMonitor's new `GET /api/stats/quarterly`. The
+  background read-through now also pulls the quarterly endpoint alongside events,
+  daily and life.
+
 ## [0.38.0] - 2026-09-07
 
 ### Added

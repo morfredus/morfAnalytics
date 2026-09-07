@@ -367,8 +367,9 @@ void MonitorModule::fetchHistory(const QString& baseUrl) {
     const QVector<Ep> eps{
         {base + QStringLiteral("/api/events?since=") + QString::number(now - 86400),
          QStringLiteral("events")},
-        {base + QStringLiteral("/api/stats/daily"), QStringLiteral("daily")},
-        {base + QStringLiteral("/api/stats/life"),  QStringLiteral("life")}};
+        {base + QStringLiteral("/api/stats/daily"),     QStringLiteral("daily")},
+        {base + QStringLiteral("/api/stats/quarterly"), QStringLiteral("quarterly")},
+        {base + QStringLiteral("/api/stats/life"),      QStringLiteral("life")}};
     for (const Ep& ep : eps) {
         QNetworkRequest req{QUrl(ep.url)};
         req.setTransferTimeout(4000);
