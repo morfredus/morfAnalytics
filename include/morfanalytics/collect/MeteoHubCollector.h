@@ -41,7 +41,11 @@ class SampleStore;
 class MeteoHubCollector : public QObject {
     Q_OBJECT
 public:
-    MeteoHubCollector(QString baseUrl, SampleStore* store, QObject* parent = nullptr);
+    // `ctx` sélectionne le flux collecté côté MeteoHub : "in" (intérieur, défaut,
+    // rétro-compatible) ou "out" (extérieur). Il est propagé aux routes de collecte
+    // (/api/history/days et /api/history/raw acceptent ?ctx=out|in).
+    MeteoHubCollector(QString baseUrl, SampleStore* store,
+                      QString ctx = QStringLiteral("in"), QObject* parent = nullptr);
 
     // Lance un cycle de collecte. Sans effet si un cycle est deja en cours :
     // un cycle long ne doit pas etre relance par le timer de maintenance.
@@ -62,6 +66,7 @@ private:
     void finish(const QString& error);
 
     QString                m_baseUrl;
+    QString                m_ctx;   // "in" ou "out"
     SampleStore*           m_store;
     QNetworkAccessManager* m_net;
 

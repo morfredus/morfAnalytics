@@ -909,6 +909,11 @@ QByteArray HttpServer::landingPage() {
   .badge.ok   { background: color-mix(in srgb, var(--ok) 18%, transparent);   color: var(--ok); }
   .badge.warn { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
   .badge.bad  { background: color-mix(in srgb, var(--bad) 18%, transparent);  color: var(--bad); }
+  .badge.ctx-badge { font-size: .72rem; font-weight: 600; vertical-align: middle;
+           background: color-mix(in srgb, var(--accent, #4a90d9) 16%, transparent);
+           color: var(--accent, #4a90d9); }
+  .ctx-select { font-size: .85rem; display: inline-flex; align-items: center; gap: .3rem; }
+  .ctx-select select { font: inherit; padding: .15rem .4rem; }
 
   .note { font-size: .9rem; color: var(--muted); margin: .9rem 0 0; }
   .warning { font-size: .82rem; margin: .8rem 0 0; padding: .5rem .7rem; border-radius: .4rem;
@@ -968,6 +973,9 @@ QByteArray HttpServer::landingPage() {
   .cleanup-result { font-size: .88rem; margin-top: .6rem; }
   .cleanup-result.ok { color: var(--ok); }
   .cleanup-result.err { color: var(--bad); }
+  .collect-status { font-size: .82rem; color: var(--muted); }
+  .collect-status.ok { color: var(--ok); }
+  .collect-status.err { color: var(--bad); }
   .refresh-line { display: flex; align-items: center; gap: .6rem; margin-top: .5rem;
                   font-size: .82rem; color: var(--muted); }
 
@@ -1010,7 +1018,17 @@ QByteArray HttpServer::landingPage() {
     <p class="sub">Analyses avancées - <span id="hostline">…</span></p>
     <div class="refresh-line">
       <span>Analyses actualisées : <span id="refreshed">…</span></span>
-      <button id="refresh-btn" type="button">Actualiser</button>
+      <label class="ctx-select">Contexte :
+        <select id="ctx-override" title="Force le contexte des analyses. Auto = chaque analyse utilise son défaut (météo=extérieur, confort=intérieur).">
+          <option value="auto" selected>Auto (défaut de l'analyse)</option>
+          <option value="out">Extérieur (OUT)</option>
+          <option value="in">Intérieur (IN)</option>
+          <option value="both">Les deux (relation)</option>
+        </select>
+      </label>
+      <button id="refresh-btn" type="button" title="Lance une collecte depuis l'appareil (récupère les nouvelles mesures) puis recalcule les analyses.">Collecter et actualiser</button>
+      <button id="redraw-btn" type="button" title="Recalcule les analyses sur les données déjà collectées, sans nouvelle collecte.">Rafraîchir l'affichage</button>
+      <span id="collect-status" class="collect-status"></span>
     </div>
   </header>
 
@@ -1153,7 +1171,19 @@ const FIELD_LABELS = {
   heat_threshold: 'Seuil de chaleur', cold_threshold: 'Seuil de froid',
   min_days: 'Durée minimale', threshold: 'Sensibilité de détection',
   max_lag_hours: 'Décalage maximal recherché', channel: 'Mesure analysée',
-  total_anomalies: 'Valeurs inhabituelles détectées', residual_std: 'Variations non expliquées'
+  total_anomalies: 'Valeurs inhabituelles détectées', residual_std: 'Variations non expliquées',
+  ctx: 'Contexte',
+  // Confort intérieur (indoor_comfort)
+  temperature: 'Température', humidity: 'Humidité', dew_point: 'Point de rosée',
+  absolute_humidity: 'Humidité absolue', comfort: 'Confort',
+  temperature_zone: 'Zone de température', humidity_zone: "Zone d'humidité",
+  mold_risk: 'Risque de moisissure',
+  // Comportement thermique du bâtiment (thermal_behaviour)
+  indoor_temp: 'Température intérieure', outdoor_temp: 'Température extérieure',
+  gap: 'Écart intérieur / extérieur', indoor_amplitude: 'Amplitude intérieure',
+  outdoor_amplitude: 'Amplitude extérieure', damping: 'Amortissement',
+  correlation: 'Corrélation', lag_hours: 'Décalage (heures)',
+  inertia: 'Inertie', window_hours: 'Fenêtre analysée (heures)'
 };
 
 const humanLabel = (key) => FIELD_LABELS[key] || key
@@ -1553,8 +1583,15 @@ function renderCard(meta, result) {
     try { body = renderer(result); }
     catch (e) { body = renderGeneric(result); }
   }
+  // Badge de contexte : provenance de l'analyse (extérieur / intérieur / les
+  // deux). On prend le contexte EFFECTIF renvoyé par le serveur si présent,
+  // sinon le défaut du catalogue.
+  const c = (result && result.ctx) || meta.ctx;
+  const ctxLabel = c === 'out' ? 'Extérieur' : c === 'in' ? 'Intérieur'
+                 : c === 'both' ? 'Int + Ext' : '';
+  const ctxBadge = ctxLabel ? ` <span class="badge ctx-badge">${ctxLabel}</span>` : '';
   return `<div class="card">
-      <h3>${esc(meta.title)}</h3>${body}</div>`;
+      <h3>${esc(meta.title)}${ctxBadge}</h3>${body}</div>`;
 }
 
 function renderRow(ids, catalogById, resultsById) {
@@ -1585,14 +1622,22 @@ async function loadAnalyses() {
     return;
   }
 
+  // Surcharge de contexte (sélecteur global) : "auto" laisse chaque analyse sur
+  // son défaut intrinsèque ; sinon on force ctx pour toutes les requêtes.
+  const ctxSel = document.getElementById('ctx-override');
+  const ctxOverride = ctxSel ? ctxSel.value : 'auto';
+
   // Les analyses sont demandees en parallele : chacune est independante et
   // travaille sur le meme cache en lecture seule.
-  const results = await Promise.all(catalog.map((meta) =>
-    fetch('/analyze', {
+  const results = await Promise.all(catalog.map((meta) => {
+    const req = { type: meta.id };
+    if (ctxOverride && ctxOverride !== 'auto') req.ctx = ctxOverride;
+    return fetch('/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: meta.id })
-    }).then((r) => r.json()).catch(() => null)));
+      body: JSON.stringify(req)
+    }).then((r) => r.json()).catch(() => null);
+  }));
 
   const byId = {};
   const catalogById = {};
@@ -1785,10 +1830,36 @@ document.getElementById('purge-all').addEventListener('click', async () => {
   if (r && r.ok) { loadStatus(); loadAnalyses(); }
 });
 
-document.getElementById('refresh-btn').addEventListener('click', () => {
+// « Collecter et actualiser » : déclenche une VRAIE collecte depuis l'appareil
+// (pull), puis recalcule les analyses. La collecte est asynchrone : on recharge
+// une première fois tout de suite, puis une seconde fois après un court délai
+// pour afficher les mesures qui viennent d'arriver.
+document.getElementById('refresh-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('refresh-btn');
+  const status = document.getElementById('collect-status');
+  btn.disabled = true;
+  if (status) { status.className = 'collect-status'; status.textContent = 'Collecte en cours…'; }
+  const r = await cleanup({ action: 'collect_now' }).catch(() => null);
+  loadStatus();
+  loadAnalyses();
+  if (status) {
+    status.className = 'collect-status ' + (r && r.ok ? 'ok' : 'err');
+    status.textContent = (r && r.ok) ? 'Collecte lancée.' : 'Collecte indisponible.';
+  }
+  // Deuxième rafraîchissement après l'arrivée des mesures (collecte asynchrone).
+  setTimeout(() => { loadStatus(); loadAnalyses(); btn.disabled = false; }, 2500);
+});
+
+// « Rafraîchir l'affichage » : recalcule seulement, sans collecte (ancien
+// comportement du bouton Actualiser, désormais explicite).
+document.getElementById('redraw-btn').addEventListener('click', () => {
   loadStatus();
   loadAnalyses();
 });
+
+// Changer le contexte global relance les analyses avec la surcharge choisie.
+const ctxOverrideEl = document.getElementById('ctx-override');
+if (ctxOverrideEl) ctxOverrideEl.addEventListener('change', () => loadAnalyses());
 
 // --- Observations météo (annotations humaines) ------------------------------
 // Données ORIGINALES de l'utilisateur, distinctes des mesures. La station relève

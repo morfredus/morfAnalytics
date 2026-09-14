@@ -1242,12 +1242,188 @@ QJsonObject analyzeDecomposition(const AnalysisContext& ctx, const QJsonObject& 
     return out;
 }
 
+// Comportement thermique du bâtiment : première analyse de RELATION (contexte
+// Both, lit les DEUX caches). Compare l'intérieur (confort) à l'extérieur (météo)
+// pour caractériser comment le bâti filtre les variations du dehors :
+//   - l'écart intérieur/extérieur courant ;
+//   - l'AMORTISSEMENT : amplitude intérieure / amplitude extérieure sur la
+//     fenêtre (plus il est faible, plus le bâtiment tamponne) ;
+//   - le DÉCALAGE : le retard horaire où l'intérieur suit le mieux l'extérieur
+//     (inertie thermique), par corrélation à décalage sur des moyennes horaires.
+// Aucun repli croisé : les deux séries gardent leur provenance, on ne mélange
+// jamais une mesure intérieure et une mesure extérieure.
+QJsonObject analyzeThermalBehaviour(const AnalysisContext& ctx, const QJsonObject& params) {
+    if (!ctx.storeIn || !ctx.storeOut || !ctx.storeIn->isOpen() || !ctx.storeOut->isOpen())
+        return failure(QStringLiteral("les deux caches (intérieur ET extérieur) sont nécessaires"));
+
+    int hours = params.value(QStringLiteral("hours")).toInt(48);
+    if (hours < 12)  hours = 12;
+    if (hours > 240) hours = 240;
+    const qint64 from = ctx.now - static_cast<qint64>(hours) * kHour;
+
+    const Series outS = ctx.storeOut->range(from, ctx.now);
+    const Series inS  = ctx.storeIn->range(from, ctx.now);
+    const QVector<double>* outT = outS.channel(kTemp);
+    const QVector<double>* inT  = inS.channel(kTemp);
+    if (!outT || !inT)
+        return failure(QStringLiteral("canal température manquant"));
+
+    const int oi = lastValidIndex(*outT);
+    const int ii = lastValidIndex(*inT);
+    if (oi < 0) return failure(QStringLiteral("aucune mesure extérieure récente"));
+    if (ii < 0) return failure(QStringLiteral("aucune mesure intérieure récente"));
+
+    const double outNow = (*outT)[oi];
+    const double inNow  = (*inT)[ii];
+
+    // Amplitudes (max - min des valeurs valides) sur la fenêtre.
+    double outMin = 1e9, outMax = -1e9, inMin = 1e9, inMax = -1e9;
+    int outN = 0, inN = 0;
+    for (double v : *outT) if (Series::isValid(v)) {
+        if (v < outMin) outMin = v; if (v > outMax) outMax = v; outN++;
+    }
+    for (double v : *inT) if (Series::isValid(v)) {
+        if (v < inMin) inMin = v; if (v > inMax) inMax = v; inN++;
+    }
+    if (outN < 3 || inN < 3)
+        return failure(QStringLiteral("historique insuffisant sur la fenêtre"));
+    const double outAmp = outMax - outMin;
+    const double inAmp  = inMax - inMin;
+
+    // Moyennes horaires (indexées par heure Unix) pour la corrélation à décalage.
+    auto hourlyMeans = [](const Series& s, const QVector<double>& ch) {
+        QHash<qint64, double> sum;
+        QHash<qint64, int>    cnt;
+        const auto& ts = s.timestamps();
+        for (int k = 0; k < ch.size(); ++k) {
+            if (!Series::isValid(ch[k])) continue;
+            const qint64 h = ts[k] / kHour;
+            sum[h] += ch[k];
+            cnt[h] += 1;
+        }
+        QHash<qint64, double> means;
+        for (auto it = sum.constBegin(); it != sum.constEnd(); ++it)
+            means[it.key()] = it.value() / cnt[it.key()];
+        return means;
+    };
+    const QHash<qint64, double> outH = hourlyMeans(outS, *outT);
+    const QHash<qint64, double> inH  = hourlyMeans(inS, *inT);
+
+    // Corrélation de Pearson entre IN[h] et OUT[h - lag], lag de 0 à maxLag heures.
+    const int maxLag = 8;
+    int bestLag = 0;
+    double bestR = -2.0;
+    for (int lag = 0; lag <= maxLag; ++lag) {
+        double sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+        int n = 0;
+        for (auto it = inH.constBegin(); it != inH.constEnd(); ++it) {
+            const auto oit = outH.constFind(it.key() - lag);
+            if (oit == outH.constEnd()) continue;
+            const double x = oit.value(), y = it.value();
+            sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y; ++n;
+        }
+        if (n < 6) continue;
+        const double cov = sxy - sx * sy / n;
+        const double vx  = sxx - sx * sx / n;
+        const double vy  = syy - sy * sy / n;
+        if (vx <= 0 || vy <= 0) continue;
+        const double r = cov / std::sqrt(vx * vy);
+        if (r > bestR) { bestR = r; bestLag = lag; }
+    }
+
+    QJsonObject o;
+    o["outdoor_temp"]      = round1(outNow);
+    o["indoor_temp"]       = round1(inNow);
+    o["gap"]               = round1(inNow - outNow); // >0 : intérieur plus chaud
+    o["window_hours"]      = hours;
+    o["outdoor_amplitude"] = round1(outAmp);
+    o["indoor_amplitude"]  = round1(inAmp);
+    if (outAmp > 0.2) {
+        const double damping = inAmp / outAmp; // <1 : le bâti amortit
+        o["damping"] = round2(damping);
+        o["inertia"] = damping < 0.3 ? QStringLiteral("forte inertie (bâtiment tampon)")
+                     : damping < 0.6 ? QStringLiteral("inertie moyenne")
+                                     : QStringLiteral("faible inertie (suit l'extérieur)");
+    }
+    if (bestR > -2.0) {
+        o["lag_hours"]   = bestLag;
+        o["correlation"] = round2(bestR);
+    }
+    o["note"] = QStringLiteral(
+        "Relation intérieur/extérieur. L'amortissement compare l'amplitude "
+        "intérieure à l'extérieure (plus il est faible, plus le bâtiment tamponne). "
+        "Le décalage est le retard horaire où l'intérieur suit le mieux l'extérieur.");
+    return o;
+}
+
+// Confort intérieur : première analyse de CONFORT (contexte In par défaut, lit le
+// cache intérieur). Zones de température et d'humidité, point de rosée, et un
+// repère de risque de condensation/moisissure. Une analyse de confort décrit le
+// DEDANS ; elle ne se rabat jamais sur les mesures extérieures.
+QJsonObject analyzeIndoorComfort(const AnalysisContext& ctx, const QJsonObject&) {
+    const Series series = ctx.store->range(ctx.now - 6 * kHour, ctx.now);
+    const QVector<double>* temp = series.channel(kTemp);
+    const QVector<double>* hum  = series.channel(kHum);
+    if (!temp || !hum)
+        return failure(QStringLiteral("canaux température/humidité manquants"));
+
+    const int i = lastValidIndex(*temp);
+    if (i < 0)
+        return failure(QStringLiteral("aucune mesure récente"));
+    const double t = (*temp)[i];
+    const double h = (*hum)[i];
+    if (std::isnan(h))
+        return failure(QStringLiteral("humidité manquante"));
+
+    QJsonObject o;
+    o["temperature"]       = round1(t);
+    o["humidity"]          = round1(h);
+    o["dew_point"]         = round1(meteo::dewPoint(t, h));
+    o["absolute_humidity"] = round1(meteo::absoluteHumidity(t, h));
+
+    // Zones de confort (repères usuels d'un logement).
+    const QString tempZone = t < 16.0 ? QStringLiteral("froid")
+                           : t < 19.0 ? QStringLiteral("frais")
+                           : t <= 24.0 ? QStringLiteral("confortable")
+                           : t <= 27.0 ? QStringLiteral("chaud")
+                                       : QStringLiteral("trop chaud");
+    const QString humZone = h < 30.0 ? QStringLiteral("trop sec")
+                          : h < 40.0 ? QStringLiteral("sec")
+                          : h <= 60.0 ? QStringLiteral("confortable")
+                          : h <= 70.0 ? QStringLiteral("humide")
+                                      : QStringLiteral("trop humide");
+    o["temperature_zone"] = tempZone;
+    o["humidity_zone"]    = humZone;
+    const bool comfyT = (t >= 19.0 && t <= 24.0);
+    const bool comfyH = (h >= 40.0 && h <= 60.0);
+    o["comfort"] = (comfyT && comfyH) ? QStringLiteral("confortable")
+                                      : QStringLiteral("hors zone de confort");
+
+    // Risque de condensation / moisissure : humidité intérieure élevée.
+    if (h >= 65.0) {
+        o["mold_risk"] = h >= 75.0 ? QStringLiteral("élevé") : QStringLiteral("modéré");
+        o["mold_note"] = QStringLiteral(
+            "Humidité intérieure élevée : risque de condensation sur les parois "
+            "froides (ponts thermiques) et de moisissure. Aérer / ventiler.");
+    } else {
+        o["mold_risk"] = QStringLiteral("faible");
+    }
+    o["note"] = QStringLiteral(
+        "Confort intérieur (mesures IN) : zones de température et d'humidité, point "
+        "de rosée, et repère de risque de condensation.");
+    return o;
+}
+
 void registerMeteoAnalyses(AnalysisRegistry& registry) {
     using A = FunctionAnalysis;
+    // `ctx` = contexte météo par défaut de l'analyse (intrinsèque à sa nature).
+    // OUT pour toute la météo/climatologie de ce dépôt ; passer MeteoCtx::In pour
+    // une future analyse de confort intérieur, MeteoCtx::Both pour un modèle de
+    // relation intérieur/extérieur. Toujours surchargeable via params["ctx"].
     auto add = [&](const char* id, const char* title, const char* group,
-                   qint64 minSpan, A::Fn fn) {
+                   qint64 minSpan, A::Fn fn, MeteoCtx ctx = MeteoCtx::Out) {
         registry.add(std::make_unique<A>(QString::fromUtf8(id), QString::fromUtf8(title),
-                                         QString::fromUtf8(group), minSpan, std::move(fn)));
+                                         QString::fromUtf8(group), minSpan, std::move(fn), ctx));
     };
 
     // --- Vague 1 : etat courant et prevision locale -------------------------
@@ -1273,6 +1449,14 @@ void registerMeteoAnalyses(AnalysisRegistry& registry) {
     add("correlations", "Corrélations à décalage", "avancé", 2 * kDay, analyzeLaggedCorrelation);
     add("episodes", "Épisodes (canicule, coup de froid)", "avancé", 3 * kDay, analyzeEpisodes);
     add("decomposition", "Décomposition tendance / saison", "avancé", 3 * kDay, analyzeDecomposition);
+
+    // --- Confort interieur (contexte In) -------------------------------------
+    add("indoor_comfort", "Confort intérieur", "confort", 0, analyzeIndoorComfort,
+        MeteoCtx::In);
+
+    // --- Relation interieur / exterieur (contexte Both) ----------------------
+    add("thermal_behaviour", "Comportement thermique du bâtiment", "relation",
+        1 * kDay, analyzeThermalBehaviour, MeteoCtx::Both);
 
     // --- Qualite -------------------------------------------------------------
     add("data_quality", "Complétude des données", "qualite", 2 * kDay, analyzeDataQuality);

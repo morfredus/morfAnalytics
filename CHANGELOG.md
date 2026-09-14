@@ -3,6 +3,93 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.46.0] - 2026-09-14
+
+### Changed
+
+- **"Actualiser" button was misleading** - it only recomputed analyses on the
+  already-collected cache and refreshed the status, never triggering a collection.
+  Split into two honest buttons: **"Collecter et actualiser"** now triggers a real
+  collection cycle from the device (new `collect_now` maintenance action calling
+  the collectors' sync) then reloads, and **"Rafraîchir l'affichage"** does the
+  former recompute-only refresh. Collection is asynchronous, so the page reloads
+  again shortly after to show freshly landed measurements.
+
+## [0.45.0] - 2026-09-14
+
+### Fixed
+
+- **"Purge cache" now clears both weather caches.** The `purge_all` maintenance
+  action only purged the indoor store (`meteohub-cache.sqlite`), leaving the whole
+  outdoor history (`meteohub-out-cache.sqlite`) in place. It now purges both IN
+  and OUT stores (samples and collection cursors), so a clean restart really
+  starts from zero and both flows re-collect from the device.
+- **French row labels for the comfort and thermal analyses.** The `indoor_comfort`
+  and `thermal_behaviour` cards showed their result rows with English labels (Dew
+  Point, Mold Risk, Indoor Temp, ...) because those keys were missing from the UI
+  `FIELD_LABELS` map and fell back to the raw key. Added French labels for every
+  field of both analyses (plus a shared `ctx` -> "Contexte").
+
+## [0.44.0] - 2026-09-14
+
+### Added
+
+- **Context selector in the analyses web UI.** A global "Contexte" dropdown
+  (Auto / Extérieur / Intérieur / Les deux) forces the `ctx` of every analysis;
+  "Auto" keeps each analysis on its intrinsic default. Each analysis card now
+  shows a context badge (Extérieur / Intérieur / Int + Ext) so the provenance is
+  visible at a glance.
+
+## [0.43.0] - 2026-09-13
+
+### Added
+
+- **First comfort analysis (In context): "indoor_comfort"** (Confort intérieur).
+  Reads the indoor cache and reports temperature and humidity comfort zones, dew
+  point, absolute humidity, and a condensation/mould risk cue when indoor
+  humidity is high. Defaults to IN (comfort describes the inside) and never falls
+  back to outdoor measurements. New "confort" group.
+
+## [0.42.0] - 2026-09-13
+
+### Added
+
+- **First relation analysis (Both context): "thermal_behaviour"** (Comportement
+  thermique du bâtiment). Reads both caches (indoor + outdoor) and characterises
+  how the building filters outdoor variations: the current indoor/outdoor gap,
+  the damping (indoor amplitude / outdoor amplitude - the lower, the more the
+  building buffers), and the lag in hours where indoor best follows outdoor
+  (thermal inertia), via lagged Pearson correlation on hourly means. No
+  cross-context fallback: each series keeps its provenance. New "relation" group.
+
+## [0.41.0] - 2026-09-13
+
+### Changed
+
+- **Analyses are context-aware (IN / OUT / Both).** Each analysis declares an
+  intrinsic default context (all current weather/climate analyses = OUT); it is
+  overridable per call via `params["ctx"]` ("in"|"out"|"both") but never
+  mandatory. `AnalysisContext` now carries both caches (`storeIn`/`storeOut`) and
+  the resolved primary `store`; the catalog exposes each analysis's `ctx`.
+- **No cross-context fallback.** A weather analysis (OUT) whose outdoor cache is
+  empty now reports "données extérieures indisponibles" instead of silently
+  computing on indoor data. This also fixes weather analyses previously running
+  on the indoor stream. Run an analysis on the other context explicitly with
+  `ctx` when relevant; relation models (Both) read `storeIn` + `storeOut`.
+
+## [0.40.0] - 2026-09-13
+
+### Added
+
+- **Outdoor (OUT) weather ingestion.** The meteo module now collects the outdoor
+  stream from MeteoHub alongside the indoor one, into a separate cache
+  (`meteohub-out-cache.sqlite`). `MeteoHubCollector` gained a `ctx` parameter
+  ("in" default, "out") propagated to `/api/history/days` and `/api/history/raw`
+  (MeteoHub ≥ 1.17.0). Two caches, one per context, following the generic-store
+  doctrine: IN = indoor comfort, OUT = outdoor weather. `/status` reports both
+  collectors (`collector` and `collector_out`). Analyses still run on the indoor
+  cache for now; pointing the weather analyses at OUT is the next step.
+
 ## [0.39.0] - 2026-09-07
 
 ### Added

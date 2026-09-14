@@ -50,11 +50,14 @@ double plausible(double v, double lo, double hi) {
 }
 } // namespace
 
-MeteoHubCollector::MeteoHubCollector(QString baseUrl, SampleStore* store, QObject* parent)
-    : QObject(parent), m_baseUrl(std::move(baseUrl)), m_store(store),
+MeteoHubCollector::MeteoHubCollector(QString baseUrl, SampleStore* store,
+                                     QString ctx, QObject* parent)
+    : QObject(parent), m_baseUrl(std::move(baseUrl)), m_ctx(std::move(ctx)), m_store(store),
       m_net(new QNetworkAccessManager(this)) {
     while (m_baseUrl.endsWith(QLatin1Char('/')))
         m_baseUrl.chop(1);
+    if (m_ctx.isEmpty())
+        m_ctx = QStringLiteral("in");
 }
 
 void MeteoHubCollector::sync() {
@@ -72,7 +75,11 @@ void MeteoHubCollector::sync() {
 }
 
 void MeteoHubCollector::requestDays() {
-    QNetworkRequest req{QUrl(m_baseUrl + QStringLiteral("/api/history/days"))};
+    QUrl daysUrl(m_baseUrl + QStringLiteral("/api/history/days"));
+    QUrlQuery daysQuery;
+    daysQuery.addQueryItem(QStringLiteral("ctx"), m_ctx);
+    daysUrl.setQuery(daysQuery);
+    QNetworkRequest req{daysUrl};
     req.setTransferTimeout(kTimeoutMs);
     QNetworkReply* reply = m_net->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, reply] { onDaysReply(reply); });
@@ -122,6 +129,7 @@ void MeteoHubCollector::requestNextChunk() {
     query.addQueryItem(QStringLiteral("day"), QString::number(m_currentDay));
     query.addQueryItem(QStringLiteral("index"), QString::number(m_currentIndex));
     query.addQueryItem(QStringLiteral("limit"), QString::number(kChunkLimit));
+    query.addQueryItem(QStringLiteral("ctx"), m_ctx);
     url.setQuery(query);
 
     QNetworkRequest req{url};
@@ -207,6 +215,7 @@ void MeteoHubCollector::finish(const QString& error) {
 QJsonObject MeteoHubCollector::statusJson() const {
     QJsonObject o;
     o["source"]        = m_baseUrl;
+    o["ctx"]           = m_ctx;
     o["running"]       = m_running;
     o["last_sync_ts"]  = static_cast<double>(m_lastSyncTs);
     o["last_imported"] = m_lastImported;

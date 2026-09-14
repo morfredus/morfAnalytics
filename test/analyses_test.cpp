@@ -72,7 +72,11 @@ int main(int argc, char** argv) {
     registerMeteoAnalyses(reg);
 
     AnalysisContext ctx;
-    ctx.store = &store;
+    // Ces analyses sont OUT par défaut : on fournit le même store comme cache
+    // extérieur (et intérieur), le test validant la logique, pas le routage IN/OUT.
+    ctx.store    = &store;
+    ctx.storeIn  = &store;
+    ctx.storeOut = &store;
     ctx.now   = ts.last();
 
     // --- Anomalies : les deux pics a 60 doivent ressortir (vers le haut) ------

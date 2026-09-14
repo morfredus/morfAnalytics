@@ -105,8 +105,25 @@ bool AnalyticsModule::start() {
     // Sans source configurée, le module reste valide mais inerte : il expose le
     // cache déjà constitué sans jamais le rafraîchir. Cela permet d'analyser un
     // historique déjà recopié même si l'appareil est hors service.
+    // Cache OUT (météo extérieure), séparé du cache IN. Additif : s'il ne peut
+    // s'ouvrir, l'IN continue de fonctionner (on le signale sans échouer).
+    const QString dbPathOut = QDir(dir).filePath(QStringLiteral("meteohub-out-cache.sqlite"));
+    m_storeOut = std::make_unique<SampleStore>(dbPathOut, kChannels);
+    if (!m_storeOut->open()) {
+        qWarning().noquote()
+            << QStringLiteral("module analytics : cache OUT indisponible (%1) : %2 — "
+                              "la météo extérieure ne sera pas historisée.")
+                   .arg(dbPathOut, m_storeOut->lastError());
+        m_storeOut.reset();
+    }
+
     if (!m_sourceUrl.isEmpty()) {
-        m_collector = new MeteoHubCollector(m_sourceUrl, m_store.get(), this);
+        m_collector = new MeteoHubCollector(m_sourceUrl, m_store.get(),
+                                            QStringLiteral("in"), this);
+        // Collecteur OUT : même appareil, flux extérieur (ctx=out).
+        if (m_storeOut)
+            m_collectorOut = new MeteoHubCollector(m_sourceUrl, m_storeOut.get(),
+                                                   QStringLiteral("out"), this);
         // Première collecte immédiate : au démarrage du service, on ne fait pas
         // attendre une période de maintenance complète avant le premier import.
         QTimer::singleShot(0, this, &AnalyticsModule::maintainCache);
@@ -135,6 +152,8 @@ void AnalyticsModule::stop() {
     m_timer->stop();
     if (m_store)
         m_store->close();
+    if (m_storeOut)
+        m_storeOut->close();
 }
 
 QJsonObject AnalyticsModule::statusJson() const {
@@ -145,6 +164,8 @@ QJsonObject AnalyticsModule::statusJson() const {
     o["ts"]         = static_cast<double>(QDateTime::currentSecsSinceEpoch());
     if (m_collector)
         o["collector"] = m_collector->statusJson();
+    if (m_collectorOut)
+        o["collector_out"] = m_collectorOut->statusJson();
     if (m_publisher)
         o["publisher"] = m_publisher->statusJson();
     return o;
@@ -152,7 +173,12 @@ QJsonObject AnalyticsModule::statusJson() const {
 
 QJsonObject AnalyticsModule::analyze(const QJsonObject& request) const {
     AnalysisContext ctx;
+    // Les deux caches sont fournis ; le registre choisit la source primaire selon
+    // le contexte de l'analyse (IN confort / OUT météo / Both relation). `store`
+    // reste renseigné (IN) comme repli si aucun contexte n'est résolu.
     ctx.store     = m_store.get();
+    ctx.storeIn   = m_store.get();
+    ctx.storeOut  = m_storeOut ? m_storeOut.get() : nullptr;
     ctx.altitudeM     = m_altitudeM;
     ctx.altitudeKnown = m_altitudeKnown;
     ctx.now       = QDateTime::currentSecsSinceEpoch();
@@ -169,6 +195,22 @@ QJsonArray AnalyticsModule::analysisCatalog() const {
 
 QJsonObject AnalyticsModule::cleanupData(const QJsonObject& request) {
     QJsonObject o;
+
+    // Collecte à la demande : déclenche un vrai cycle de collecte (pull depuis
+    // l'appareil) au lieu d'attendre le timer de maintenance. La collecte est
+    // ASYNCHRONE (les nouvelles mesures arrivent dans les instants qui suivent) :
+    // on la lance et on répond immédiatement. Distinct du simple rafraîchissement
+    // d'affichage, qui ne fait que recalculer les analyses sur le cache existant.
+    if (request.value(QStringLiteral("action")).toString() == QLatin1String("collect_now")) {
+        if (m_collector) m_collector->sync();
+        if (m_collectorOut) m_collectorOut->sync();
+        o["ok"] = true;
+        o["note"] = QStringLiteral(
+            "Cycle de collecte lancé : récupération des nouvelles mesures depuis "
+            "l'appareil. Les données apparaissent dans les instants qui suivent.");
+        return o;
+    }
+
     if (!m_store || !m_store->isOpen()) {
         o["ok"] = false;
         o["error"] = QStringLiteral("cache indisponible");
@@ -205,16 +247,28 @@ QJsonObject AnalyticsModule::cleanupData(const QJsonObject& request) {
         n = m_store->invalidateChannels(fromTs, toTs, channels,
                                         request.value(QStringLiteral("dry_run")).toBool());
     } else if (action == QLatin1String("purge_all")) {
+        // Purge SYMÉTRIQUE : les deux caches météo, IN (m_store) ET OUT
+        // (m_storeOut). Sans cela, vider « le cache » laissait tout l'historique
+        // extérieur en place, et le repli d'analyse continuait sur d'anciennes
+        // mesures. Chaque curseur de collecte est réinitialisé par purgeAll(),
+        // donc les deux flux se reconstruisent depuis l'appareil au cycle suivant.
         if (!m_store->purgeAll()) {
             o["ok"] = false;
             o["error"] = m_store->lastError();
             return o;
         }
+        if (m_storeOut && m_storeOut->isOpen() && !m_storeOut->purgeAll()) {
+            o["ok"] = false;
+            o["error"] = m_storeOut->lastError();
+            return o;
+        }
         o["ok"] = true;
         o["note"] = QStringLiteral(
-            "Cache vidé. Il sera reconstruit intégralement depuis l'appareil au "
-            "prochain cycle de collecte ; les mesures d'origine n'ont pas été touchées.");
-        o["cached_points"] = static_cast<double>(m_store->count());
+            "Caches intérieur et extérieur vidés. Ils seront reconstruits "
+            "intégralement depuis l'appareil au prochain cycle de collecte ; les "
+            "mesures d'origine n'ont pas été touchées.");
+        o["cached_points"] = static_cast<double>(
+            m_store->count() + (m_storeOut ? m_storeOut->count() : 0));
         return o;
     } else {
         o["ok"] = false;
@@ -266,6 +320,8 @@ void AnalyticsModule::maintainCache() {
     // maintenance plus courte qu'un rattrapage complet n'empile donc rien.
     if (m_collector)
         m_collector->sync();
+    if (m_collectorOut)
+        m_collectorOut->sync();
     // Publication des synthèses journalières. La collecte ci-dessus est ASYNCHRONE
     // (les mesures arrivent après cet appel) : on publie donc l'état STABILISÉ,
     // celui de la collecte du cycle précédent. Un jour qui vient de gagner des

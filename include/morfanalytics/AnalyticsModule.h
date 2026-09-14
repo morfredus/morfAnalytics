@@ -117,8 +117,14 @@ private:
     QTimer* m_timer;
     bool    m_running = false;
 
-    std::unique_ptr<SampleStore> m_store;
-    MeteoHubCollector*           m_collector = nullptr; // possédé via l'arbre QObject
+    // Deux caches distincts, un par contexte météo (doctrine du store générique :
+    // un flux = un cache). IN = confort intérieur (flux legacy, historique) ;
+    // OUT = météo extérieure (sonde ESP-NOW). Les analyses météo viseront l'OUT
+    // (étape suivante) ; l'IN reste la référence du confort.
+    std::unique_ptr<SampleStore> m_store;     // IN (intérieur)
+    std::unique_ptr<SampleStore> m_storeOut;  // OUT (extérieur)
+    MeteoHubCollector*           m_collector = nullptr;    // IN, possédé via l'arbre QObject
+    MeteoHubCollector*           m_collectorOut = nullptr; // OUT, possédé via l'arbre QObject
     MeteoSyncPublisher*          m_publisher = nullptr; // possédé via l'arbre QObject
     AnalysisRegistry             m_analyses;
 
