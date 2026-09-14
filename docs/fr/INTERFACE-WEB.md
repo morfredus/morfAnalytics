@@ -19,6 +19,27 @@ photothèque, machines du parc).
 
 ![Portail morfAnalytics (données d'exemple)](pictures/interface-portail.png)
 
+## Météo
+
+Le domaine météo (données recopiées depuis MeteoHub) a **deux onglets**, reliés par
+une barre en haut de page :
+
+- **Analyses** - « qu'est-ce que ça veut dire ? » : une carte par analyse (prévision
+  locale, tendances, chaleur/humidex, sécheresse, brouillard, gelée, normales, cycle
+  journalier, records, confort intérieur, comportement thermique du bâtiment, modèle
+  d'inertie, prévu vs observé, complétude…). Chaque analyse a un **contexte** propre
+  (Extérieur pour la météo, Intérieur pour le confort, les Deux pour les relations),
+  rappelé par un badge ; un sélecteur global permet de forcer le contexte. Deux
+  boutons : **Collecter et actualiser** (lance une vraie collecte depuis l'appareil)
+  et **Rafraîchir l'affichage** (recalcule sur le cache déjà collecté).
+
+- **Graphiques** - « montre-moi ce qui s'est réellement passé » : l'évolution d'une
+  grandeur (ou de **toutes**) dans le temps, source **Intérieur / Extérieur / les
+  deux** sur le même axe de temps, période de 6 h à 30 j. Échelles de valeurs à
+  gauche et à droite (dynamiques), infobulle au survol donnant la valeur de chaque
+  courbe à l'instant pointé. Les points sont reliés (une coupure = un vrai silence du
+  capteur, jamais un simple espacement de cadence).
+
 ## Analyse des machines
 
 L'historique du parc dans le temps, à partir des relevés de morfMonitor. morfMonitor

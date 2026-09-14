@@ -3,6 +3,17 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.52.1] - 2026-09-14
+
+### Documentation
+
+- **Docs pass over the Meteo domain.** The web-interface guide now documents the
+  Meteo tabs (Analyses and Graphs), FILESYSTEM lists the three work caches
+  (indoor, outdoor, forecast), ARCHITECTURE describes the per-analysis context
+  (IN / OUT / both) with no cross fallback, ROADMAP marks the IN/OUT split,
+  forecast-vs-observed and Graphs as done, and the English docs index links the
+  French guides that existed only in the tree. No behaviour change.
+
 ## [0.52.0] - 2026-09-14
 
 ### Added

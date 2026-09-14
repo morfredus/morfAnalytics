@@ -17,10 +17,14 @@ Sous Windows, l'état se replie sous
 
 ## L'état persistant
 
-Le cache `meteohub-cache.sqlite` contient les échantillons collectés et sert de
-base aux analyses. C'est de l'**état généré** par le service : le perdre oblige à
-re-collecter. Il vit donc sous `/var/lib`, jamais dans le dossier courant
-(`/opt`, le programme) ni dans `/etc` (la config admin).
+Le domaine météo tient **trois caches SQLite** distincts sous cette racine, un par
+flux : `meteohub-cache.sqlite` (intérieur / confort), `meteohub-out-cache.sqlite`
+(extérieur / météo) et `meteohub-forecast-cache.sqlite` (prévisions « du lendemain »
+archivées, pour l'analyse prévu vs observé). Ils contiennent les données collectées
+et servent de base aux analyses. C'est de l'**état généré** par le service : le
+perdre oblige seulement à re-collecter depuis l'appareil (le bouton « Vider le
+cache » les purge tous). Ils vivent donc sous `/var/lib`, jamais dans le dossier
+courant (`/opt`, le programme) ni dans `/etc` (la config admin).
 
 Quand le module ne fixe pas `cache_dir`, le service résout la racine de l'état
 via `$STATE_DIRECTORY` (posé par systemd grâce à

@@ -47,8 +47,9 @@ réglages propres.
 
 C'est **ici** que vit le métier. Une sous-classe implémente `start()`, `stop()`
 et `statusJson()` (état exposé dans `/modules`), et peut émettre `updated()`.
-`id()`/`type()` l'identifient. Voir `AnalyticsModule` : il détient le cache de
-travail, pilote le collecteur et expose le registre d'analyses.
+`id()`/`type()` l'identifient. Voir `AnalyticsModule` (domaine météo) : il détient
+les caches de travail (intérieur, extérieur, prévisions), pilote leurs collecteurs
+et expose le registre d'analyses (chacune avec son contexte IN / OUT / les deux).
 
 ### `ModuleFactory`
 

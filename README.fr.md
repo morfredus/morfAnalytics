@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.52.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.52.1-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -218,8 +218,27 @@ l'amplitude et le moment de la variation, pas seulement sa forme.
 | Cycle journalier | `daily_cycle` | Température moyenne par heure, heures extrêmes |
 | Complétude | `data_quality` | Journées complètes, partielles et trous de collecte |
 
+### Confort, bâtiment et prévision (analyses contextuelles)
+
+Chaque analyse porte un **contexte** intrinsèque - Extérieur (météo), Intérieur
+(confort) ou Les deux (relation intérieur/extérieur) - surchargeable par requête
+avec `ctx=in|out|both`, jamais par un repli croisé silencieux. L'intérieur et
+l'extérieur sont deux caches séparés ; la prévision a le sien.
+
+| Analyse | `type` | Contexte | Ce qu'elle apporte |
+|---|---|---|---|
+| Confort intérieur | `indoor_comfort` | Intérieur | Zones de confort température/humidité, point de rosée, repère de moisissure |
+| Comportement thermique du bâtiment | `thermal_behaviour` | Les deux | Écart intérieur/extérieur, amortissement, décalage d'inertie |
+| Modèle d'inertie intérieure | `indoor_inertia_model` | Les deux | Ajuste l'intérieur à partir de l'extérieur décalé (gain, offset, R²/RMSE), prédit vs réel |
+| Prévu vs observé | `forecast_vs_observed` | Extérieur | Prévision « du lendemain » vs min/max observés : biais et erreur moyenne |
+
 Paramètres facultatifs : `days` (profondeur de la fenêtre), `window_days` (demi-
-fenêtre des normales), `heating_base` / `cooling_base` (degrés-jours).
+fenêtre des normales), `heating_base` / `cooling_base` (degrés-jours), `ctx`
+(forçage du contexte).
+
+Au-delà des analyses, un onglet **Graphiques** (`/meteohub/graphs`) trace les
+séries dans le temps - température, humidité, pression, source intérieur /
+extérieur / les deux - en complément visuel des analyses.
 
 Une analyse qui manque d'historique ne renvoie pas d'erreur HTTP : elle répond
 `ok: false` avec la raison et la profondeur requise. Le service a bien répondu ;

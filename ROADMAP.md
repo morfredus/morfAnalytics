@@ -37,6 +37,20 @@ Deux principes cadrent tout ce qui suit :
   `.morfredus_travail/Evolution/`. Reste à écrire : la détection automatique et
   le rapprochement mesures/observation.
 
+- ~~**Séparation intérieur / extérieur (IN/OUT) et analyses contextuelles.**~~ FAITE :
+  deux caches météo distincts (intérieur, extérieur) alimentés par deux collecteurs,
+  chaque analyse portant un contexte intrinsèque (Extérieur pour la météo, Intérieur
+  pour le confort, les Deux pour la relation), sans repli croisé. Nouvelles analyses
+  `indoor_comfort` (confort), `thermal_behaviour` et `indoor_inertia_model` (relation
+  intérieur/extérieur : amortissement, décalage, modèle prédictif).
+- ~~**Prévu vs observé.**~~ FAITE : MeteoHub archive la prévision « du lendemain »,
+  morfAnalytics la collecte dans un cache dédié et l'analyse `forecast_vs_observed`
+  compare, jour par jour, la prévision aux mesures extérieures réellement relevées
+  (biais et erreur moyenne sur les min/max).
+- ~~**Onglet Graphiques.**~~ FAIT : représentation visuelle des séries (température,
+  humidité, pression), source Intérieur / Extérieur / les deux, échelles dynamiques
+  et infobulle au survol. Complément visuel des analyses (`/meteohub/graphs`).
+
 ## Envisagé
 
 - **Second équipement suivi.** Le cache et le moteur sont déjà génériques ; il

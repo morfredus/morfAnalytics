@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.52.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.52.1-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -170,8 +170,26 @@ curl -X POST -H 'Content-Type: application/json'      -d '{"type":"zambretti"}' 
 | Daily cycle | `daily_cycle` | Mean temperature per hour, extreme hours |
 | Completeness | `data_quality` | Complete days, partial days and collection gaps |
 
+### Comfort, building and forecast (context-aware)
+
+Each analysis carries an intrinsic **context** - Outdoor (weather), Indoor
+(comfort), or Both (indoor/outdoor relation) - overridable per request with
+`ctx=in|out|both`, never with a silent cross-fallback. Indoor and outdoor are two
+separate caches; the forecast has its own.
+
+| Analysis | `type` | Context | What it gives |
+|---|---|---|---|
+| Indoor comfort | `indoor_comfort` | Indoor | Temperature/humidity comfort zones, dew point, mould-risk cue |
+| Building thermal behaviour | `thermal_behaviour` | Both | Indoor/outdoor gap, damping, inertia lag |
+| Indoor inertia model | `indoor_inertia_model` | Both | Fits indoor from lagged outdoor (gain, offset, R²/RMSE), predicted-vs-actual |
+| Forecast vs observed | `forecast_vs_observed` | Outdoor | Day-ahead forecast vs observed min/max: bias and mean absolute error |
+
 Optional parameters: `days` (window depth), `window_days` (normals half-window),
-`heating_base` / `cooling_base` (degree days).
+`heating_base` / `cooling_base` (degree days), `ctx` (context override).
+
+Beyond the analyses, a **Graphiques** tab (`/meteohub/graphs`) plots the series
+over time - temperature, humidity, pressure, source indoor / outdoor / both - as
+the visual counterpart to the analyses.
 
 An analysis short of history does not return an HTTP error: it answers
 `ok: false` with the reason and the required depth. The service did answer; it is
