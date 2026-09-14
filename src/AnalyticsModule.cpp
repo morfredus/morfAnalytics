@@ -247,12 +247,15 @@ QJsonObject AnalyticsModule::seriesJson(const QString& ctx, const QString& metri
                 if (b < 0 || b >= nb) continue;
                 sum[b] += val; cnt[b]++;
             }
+            // On n'émet QUE les tranches qui contiennent une mesure : pas de trou
+            // artificiel entre deux points simplement espacés de la cadence (5 min).
+            // Un VRAI trou (capteur muet longtemps) se lit alors à l'écart temporel
+            // entre deux points consécutifs, que le client coupe au-delà d'un seuil.
+            o["bucket_s"] = static_cast<double>(bucket);
             for (int b = 0; b < nb; ++b) {
+                if (cnt[b] <= 0) continue;
                 tsArr.append(static_cast<double>(from + static_cast<qint64>(b) * bucket + bucket / 2));
-                if (cnt[b] > 0)
-                    vArr.append(qRound(sum[b] / cnt[b] * 10.0) / 10.0); // 1 décimale
-                else
-                    vArr.append(QJsonValue::Null); // tranche vide : trou préservé
+                vArr.append(qRound(sum[b] / cnt[b] * 10.0) / 10.0); // 1 décimale
             }
         }
     }

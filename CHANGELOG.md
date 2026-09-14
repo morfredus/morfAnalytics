@@ -3,6 +3,21 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.50.0] - 2026-09-14
+
+### Changed
+
+- **Graphiques tab: continuous curves, distinct colours, all metrics.**
+  - Measurements land every ~5 min: those spacings are no longer treated as holes.
+    `seriesJson` emits only non-empty buckets (plus `bucket_s`), and the chart
+    connects consecutive points, breaking the line only on a real silence (gap >
+    ~2.5 buckets). No more dotted-looking broken curves.
+  - IN + OUT now uses two distinct solid colours (outdoor blue, indoor orange)
+    instead of a dashed line.
+  - New "Toutes" metric option: temperature, humidity and pressure each get their
+    own chart (their scales are unrelated), every chart keeping the same blue/orange
+    IN/OUT convention - the readable way to show all six curves at once.
+
 ## [0.49.0] - 2026-09-14
 
 ### Added
