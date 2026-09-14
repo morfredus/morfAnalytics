@@ -3,6 +3,47 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.49.0] - 2026-09-14
+
+### Added
+
+- **New "Graphiques" tab (`/meteohub/graphs`).** Where analyses answer "what does
+  it mean?", the graph answers "show me what actually happened": temperature (and
+  humidity, pressure) over time, source Indoor / Outdoor / both on one time axis
+  (outdoor solid, indoor dashed). Period presets 6 h to 30 j. Self-contained page
+  (SVG drawn client-side, no CDN), fed by the new `GET /meteohub/series?ctx=&metric=&hours=`
+  route which returns a sub-sampled series (bucket averages, gaps preserved) from
+  the collected caches (`AnalyticsModule::seriesJson`). A tab bar links Analyses
+  and Graphiques both ways. First visual entry point toward the analyses (e.g. the
+  IN+OUT view makes the inertia lag and damping visible at a glance).
+
+## [0.48.0] - 2026-09-14
+
+### Added
+
+- **Forecast-vs-observed analysis (`forecast_vs_observed`, weather chantier step 9,
+  analytics side).** New `ForecastStore` (dedicated SQLite cache, upsert by target
+  day) and `ForecastCollector` (pulls MeteoHub's `/api/forecast/history`), wired
+  into the module: collected each maintenance cycle and on "Collecter et
+  actualiser", purged by "Vider le cache", exposed under `collector_forecast` in
+  `/status`. The analysis (context Out) compares, day by day, the archived
+  day-ahead forecast against the observed OUT min/max, reporting bias and mean
+  absolute error on T° min/max plus the latest evaluated day's detail. Analyses now
+  receive `AnalysisContext::forecastStore`. No cross-context fallback.
+
+## [0.47.0] - 2026-09-14
+
+### Added
+
+- **Indoor inertia model (`indoor_inertia_model`, relation / Both context)** — the
+  predictive step of the weather chantier (step 10). Extends `thermal_behaviour`
+  from measurement to a simple model: indoor temperature is fitted as a linear
+  function of outdoor temperature shifted by the building's inertia lag,
+  `T_in ≈ offset + gain × T_out(t - lag)`. Reports the lag, the gain (damping), the
+  offset (own contribution: heating/occupancy/sun), the fit quality (R²/RMSE/MAE),
+  and the model's predicted indoor temperature "now" versus the actual, with the
+  residual. No cross-context fallback; each series keeps its provenance.
+
 ## [0.46.0] - 2026-09-14
 
 ### Changed

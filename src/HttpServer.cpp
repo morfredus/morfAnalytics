@@ -12,6 +12,7 @@
 #include "morfanalytics/SelfDescription.h"
 #include "morfanalytics/pages/PortalPage.h"
 #include "morfanalytics/pages/MeteoHubPage.h"
+#include "morfanalytics/pages/MeteoGraphsPage.h"
 #include "morfanalytics/pages/SiteWatchPage.h"
 #include "morfanalytics/pages/PhotoPage.h"
 #include "morfanalytics/pages/MonitorPage.h"
@@ -465,6 +466,36 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         // que les analyses existent.
         reply(sock, 200, "OK", pages::MeteoHubPage::render(landingPage()), "text/html; charset=utf-8");
         return;
+    } else if (path == "/meteohub/graphs") {
+        // Onglet Graphiques : « montrer ce que font les données » (complément visuel
+        // des analyses). Page autonome, données via /meteohub/series.
+        reply(sock, 200, "OK", pages::MeteoGraphsPage::render(), "text/html; charset=utf-8");
+        return;
+    } else if (path == "/meteohub/series") {
+        // Série temporelle sous-échantillonnée pour l'onglet Graphiques.
+        auto* module = m_registry
+            ? qobject_cast<AnalyticsModule*>(m_registry->firstOfType(QStringLiteral("analytics")))
+            : nullptr;
+        QString ctx = QStringLiteral("out"), metric = QStringLiteral("temp");
+        int hours = 24;
+        const int qm = rawPath.indexOf('?');
+        if (qm >= 0) {
+            const QUrlQuery q(QString::fromUtf8(rawPath.mid(qm + 1)));
+            const QString c = q.queryItemValue(QStringLiteral("ctx"));
+            const QString m = q.queryItemValue(QStringLiteral("metric"));
+            const int h = q.queryItemValue(QStringLiteral("hours")).toInt();
+            if (c == QLatin1String("in") || c == QLatin1String("out")) ctx = c;
+            if (m == QLatin1String("temp") || m == QLatin1String("hum") || m == QLatin1String("pres")) metric = m;
+            if (h > 0) hours = h;
+        }
+        if (!module) {
+            out = toJson(QJsonObject{{"ts", QJsonArray{}}, {"v", QJsonArray{}},
+                                     {"error", QStringLiteral("aucun module 'analytics' configuré")}});
+        } else {
+            const qint64 to = QDateTime::currentSecsSinceEpoch();
+            const qint64 from = to - static_cast<qint64>(hours) * 3600;
+            out = toJson(module->seriesJson(ctx, metric, from, to, 400));
+        }
     } else if (path == "/sitewatch") {
         const QJsonArray reports = siteWatchReports();
         reply(sock, 200, "OK", pages::SiteWatchPage::render(siteWatchPage(), reports), "text/html; charset=utf-8");
@@ -1016,6 +1047,10 @@ QByteArray HttpServer::landingPage() {
     <a id="backlink" class="back" href="#" hidden>&larr; Retour à MeteoHub</a>
     <h1>Analyse de la météo <span id="version-badge" class="version-badge"></span></h1>
     <p class="sub">Analyses avancées - <span id="hostline">…</span></p>
+    <p class="tabs" style="margin:.2rem 0 .6rem">
+      <span class="tab on" style="display:inline-block;padding:.25rem .7rem;border:1px solid var(--accent);background:#2a3350;color:#fff;border-radius:999px;margin-right:.4rem;font-size:.9rem">Analyses</span>
+      <a class="tab" href="/meteohub/graphs" style="display:inline-block;padding:.25rem .7rem;border:1px solid var(--line);color:var(--soft);border-radius:999px;font-size:.9rem;text-decoration:none">Graphiques</a>
+    </p>
     <div class="refresh-line">
       <span>Analyses actualisées : <span id="refreshed">…</span></span>
       <label class="ctx-select">Contexte :
@@ -1183,7 +1218,19 @@ const FIELD_LABELS = {
   gap: 'Écart intérieur / extérieur', indoor_amplitude: 'Amplitude intérieure',
   outdoor_amplitude: 'Amplitude extérieure', damping: 'Amortissement',
   correlation: 'Corrélation', lag_hours: 'Décalage (heures)',
-  inertia: 'Inertie', window_hours: 'Fenêtre analysée (heures)'
+  inertia: 'Inertie', window_hours: 'Fenêtre analysée (heures)',
+  // Modèle d'inertie intérieure (indoor_inertia_model)
+  gain: 'Gain (°C int. / °C ext.)', offset: 'Apport propre (offset °C)',
+  fit_r2: 'Qualité du modèle (R²)', rmse: 'Erreur type (RMSE °C)',
+  mae: 'Erreur moyenne (MAE °C)', predicted_indoor: 'Intérieur prédit',
+  residual: 'Écart réel / modèle', model_quality: 'Fiabilité du modèle',
+  // Prévu vs observé (forecast_vs_observed)
+  days_evaluated: 'Jours comparés', forecasts_in_cache: 'Prévisions en cache',
+  tmin_bias: 'Biais T° min (obs − prévu)', tmin_mae: 'Erreur moyenne T° min',
+  tmax_bias: 'Biais T° max (obs − prévu)', tmax_mae: 'Erreur moyenne T° max',
+  last_day: 'Dernier jour comparé', last_forecast_min: 'Prévu min (dernier jour)',
+  last_forecast_max: 'Prévu max (dernier jour)', last_observed_min: 'Observé min (dernier jour)',
+  last_observed_max: 'Observé max (dernier jour)', last_forecast_desc: 'Prévision (dernier jour)'
 };
 
 const humanLabel = (key) => FIELD_LABELS[key] || key

@@ -19,6 +19,8 @@ namespace morfanalytics {
 class SampleStore;
 class MeteoHubCollector;
 class MeteoSyncPublisher;
+class ForecastStore;
+class ForecastCollector;
 
 // -----------------------------------------------------------------------------
 // AnalyticsModule : moteur d'analyse.
@@ -76,6 +78,15 @@ public:
     // sans les connaître à l'avance.
     QJsonArray analysisCatalog() const;
 
+    // Série temporelle sous-échantillonnée d'une grandeur, pour l'onglet
+    // Graphiques (« montrer ce que font les données », complément visuel des
+    // analyses). `ctx` = "in"|"out" (une seule source ; l'UI combine IN+OUT en
+    // deux appels), `metric` = "temp"|"hum"|"pres". Renvoie
+    // { ctx, metric, ts:[...], v:[... | null] } : moyennes par tranche, une tranche
+    // vide donne null (trou préservé, jamais comblé). ~maxPoints points au plus.
+    QJsonObject seriesJson(const QString& ctx, const QString& metric,
+                           qint64 from, qint64 to, int maxPoints) const;
+
     // Nettoyage du CACHE — et de lui seul : la source de vérité (l'appareil)
     // n'est jamais touchée, le collecteur n'émettant que des GET.
     // `request` : {"action": "scan_faults" | "invalidate_faults"
@@ -126,6 +137,12 @@ private:
     MeteoHubCollector*           m_collector = nullptr;    // IN, possédé via l'arbre QObject
     MeteoHubCollector*           m_collectorOut = nullptr; // OUT, possédé via l'arbre QObject
     MeteoSyncPublisher*          m_publisher = nullptr; // possédé via l'arbre QObject
+
+    // Prévisions « day-ahead » archivées par l'appareil (étape 9 : prévu vs
+    // observé). Cache et collecteur dédiés, distincts des mesures : un flux d'un
+    // jour par prévision, réécrit au fil de la veille (UPSERT).
+    std::unique_ptr<ForecastStore> m_forecastStore;
+    ForecastCollector*             m_forecastCollector = nullptr; // possédé via l'arbre QObject
     AnalysisRegistry             m_analyses;
 
     // Observations humaines. Etat persistant, distinct du cache : cree des la

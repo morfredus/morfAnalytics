@@ -7,8 +7,10 @@
 #include "morfanalytics/AnalyticsModule.h"
 #include "morfanalytics/StatePaths.h"
 #include "morfanalytics/data/SampleStore.h"
+#include "morfanalytics/data/ForecastStore.h"
 #include "morfanalytics/data/AnnotationStore.h"
 #include "morfanalytics/collect/MeteoHubCollector.h"
+#include "morfanalytics/collect/ForecastCollector.h"
 #include "morfanalytics/publish/MeteoSyncPublisher.h"
 
 #include <QTimer>
@@ -117,6 +119,18 @@ bool AnalyticsModule::start() {
         m_storeOut.reset();
     }
 
+    // Cache des prévisions « day-ahead » archivées par l'appareil (étape 9).
+    // Additif comme le cache OUT : un échec n'empêche pas le reste de tourner.
+    const QString dbPathFc = QDir(dir).filePath(QStringLiteral("meteohub-forecast-cache.sqlite"));
+    m_forecastStore = std::make_unique<ForecastStore>(dbPathFc);
+    if (!m_forecastStore->open()) {
+        qWarning().noquote()
+            << QStringLiteral("module analytics : cache prévisions indisponible (%1) : %2 — "
+                              "l'analyse prévu vs observé sera inactive.")
+                   .arg(dbPathFc, m_forecastStore->lastError());
+        m_forecastStore.reset();
+    }
+
     if (!m_sourceUrl.isEmpty()) {
         m_collector = new MeteoHubCollector(m_sourceUrl, m_store.get(),
                                             QStringLiteral("in"), this);
@@ -124,6 +138,9 @@ bool AnalyticsModule::start() {
         if (m_storeOut)
             m_collectorOut = new MeteoHubCollector(m_sourceUrl, m_storeOut.get(),
                                                    QStringLiteral("out"), this);
+        // Collecteur de prévisions : même appareil, route /api/forecast/history.
+        if (m_forecastStore)
+            m_forecastCollector = new ForecastCollector(m_sourceUrl, m_forecastStore.get(), this);
         // Première collecte immédiate : au démarrage du service, on ne fait pas
         // attendre une période de maintenance complète avant le premier import.
         QTimer::singleShot(0, this, &AnalyticsModule::maintainCache);
@@ -154,6 +171,8 @@ void AnalyticsModule::stop() {
         m_store->close();
     if (m_storeOut)
         m_storeOut->close();
+    if (m_forecastStore)
+        m_forecastStore->close();
 }
 
 QJsonObject AnalyticsModule::statusJson() const {
@@ -166,6 +185,8 @@ QJsonObject AnalyticsModule::statusJson() const {
         o["collector"] = m_collector->statusJson();
     if (m_collectorOut)
         o["collector_out"] = m_collectorOut->statusJson();
+    if (m_forecastCollector)
+        o["collector_forecast"] = m_forecastCollector->statusJson();
     if (m_publisher)
         o["publisher"] = m_publisher->statusJson();
     return o;
@@ -179,6 +200,7 @@ QJsonObject AnalyticsModule::analyze(const QJsonObject& request) const {
     ctx.store     = m_store.get();
     ctx.storeIn   = m_store.get();
     ctx.storeOut  = m_storeOut ? m_storeOut.get() : nullptr;
+    ctx.forecastStore = m_forecastStore ? m_forecastStore.get() : nullptr;
     ctx.altitudeM     = m_altitudeM;
     ctx.altitudeKnown = m_altitudeKnown;
     ctx.now       = QDateTime::currentSecsSinceEpoch();
@@ -193,6 +215,52 @@ QJsonArray AnalyticsModule::analysisCatalog() const {
     return m_analyses.catalogJson();
 }
 
+QJsonObject AnalyticsModule::seriesJson(const QString& ctx, const QString& metric,
+                                        qint64 from, qint64 to, int maxPoints) const {
+    QJsonObject o;
+    o["ctx"] = ctx;
+    o["metric"] = metric;
+    QJsonArray tsArr, vArr;
+
+    const SampleStore* store =
+        (ctx == QLatin1String("in"))  ? m_store.get() :
+        (ctx == QLatin1String("out")) ? (m_storeOut ? m_storeOut.get() : nullptr) : nullptr;
+
+    if (store && store->isOpen() && to > from) {
+        const Series s = store->range(from, to);
+        const QVector<double>* ch = s.channel(metric);
+        const QVector<qint64>& ts = s.timestamps();
+        if (ch && !ts.isEmpty()) {
+            if (maxPoints < 1) maxPoints = 1;
+            const qint64 span = to - from;
+            qint64 bucket = span / maxPoints;
+            if (bucket < 1) bucket = 1;
+            int nb = static_cast<int>((span + bucket - 1) / bucket);
+            if (nb < 1) nb = 1;
+
+            QVector<double> sum(nb, 0.0);
+            QVector<int>    cnt(nb, 0);
+            for (int i = 0; i < ch->size() && i < ts.size(); ++i) {
+                const double val = (*ch)[i];
+                if (!Series::isValid(val)) continue;
+                const int b = static_cast<int>((ts[i] - from) / bucket);
+                if (b < 0 || b >= nb) continue;
+                sum[b] += val; cnt[b]++;
+            }
+            for (int b = 0; b < nb; ++b) {
+                tsArr.append(static_cast<double>(from + static_cast<qint64>(b) * bucket + bucket / 2));
+                if (cnt[b] > 0)
+                    vArr.append(qRound(sum[b] / cnt[b] * 10.0) / 10.0); // 1 décimale
+                else
+                    vArr.append(QJsonValue::Null); // tranche vide : trou préservé
+            }
+        }
+    }
+    o["ts"] = tsArr;
+    o["v"]  = vArr;
+    return o;
+}
+
 QJsonObject AnalyticsModule::cleanupData(const QJsonObject& request) {
     QJsonObject o;
 
@@ -204,6 +272,7 @@ QJsonObject AnalyticsModule::cleanupData(const QJsonObject& request) {
     if (request.value(QStringLiteral("action")).toString() == QLatin1String("collect_now")) {
         if (m_collector) m_collector->sync();
         if (m_collectorOut) m_collectorOut->sync();
+        if (m_forecastCollector) m_forecastCollector->sync();
         o["ok"] = true;
         o["note"] = QStringLiteral(
             "Cycle de collecte lancé : récupération des nouvelles mesures depuis "
@@ -260,6 +329,12 @@ QJsonObject AnalyticsModule::cleanupData(const QJsonObject& request) {
         if (m_storeOut && m_storeOut->isOpen() && !m_storeOut->purgeAll()) {
             o["ok"] = false;
             o["error"] = m_storeOut->lastError();
+            return o;
+        }
+        // Le cache des prévisions se purge aussi (reconstruit depuis l'appareil).
+        if (m_forecastStore && m_forecastStore->isOpen() && !m_forecastStore->purgeAll()) {
+            o["ok"] = false;
+            o["error"] = m_forecastStore->lastError();
             return o;
         }
         o["ok"] = true;
@@ -322,6 +397,8 @@ void AnalyticsModule::maintainCache() {
         m_collector->sync();
     if (m_collectorOut)
         m_collectorOut->sync();
+    if (m_forecastCollector)
+        m_forecastCollector->sync();
     // Publication des synthèses journalières. La collecte ci-dessus est ASYNCHRONE
     // (les mesures arrivent après cet appel) : on publie donc l'état STABILISÉ,
     // celui de la collecte du cycle précédent. Un jour qui vient de gagner des

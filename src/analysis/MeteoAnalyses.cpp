@@ -7,6 +7,7 @@
 #include "morfanalytics/analysis/AnalysisRegistry.h"
 #include "morfanalytics/analysis/MeteoMath.h"
 #include "morfanalytics/data/SampleStore.h"
+#include "morfanalytics/data/ForecastStore.h"
 #include "morfanalytics/data/Series.h"
 
 #include <QDateTime>
@@ -1356,6 +1357,140 @@ QJsonObject analyzeThermalBehaviour(const AnalysisContext& ctx, const QJsonObjec
     return o;
 }
 
+// Modèle d'inertie intérieure : analyse de RELATION (contexte Both). Prolonge
+// thermal_behaviour en un vrai MODÈLE PRÉDICTIF simple : la température intérieure
+// est ajustée comme une fonction linéaire de l'extérieur DÉCALÉ de l'inertie du
+// bâti, T_in(h) ≈ offset + gain · T_out(h - lag). Le lag est le décalage de
+// meilleure corrélation ; gain et offset sont estimés par régression sur les
+// moyennes horaires. On expose la qualité d'ajustement (R², RMSE, MAE) et, à titre
+// de repère, la température intérieure PRÉDITE par le modèle « maintenant » face au
+// réel. Aucun repli croisé : chaque série garde sa provenance.
+QJsonObject analyzeIndoorInertiaModel(const AnalysisContext& ctx, const QJsonObject& params) {
+    if (!ctx.storeIn || !ctx.storeOut || !ctx.storeIn->isOpen() || !ctx.storeOut->isOpen())
+        return failure(QStringLiteral("les deux caches (intérieur ET extérieur) sont nécessaires"));
+
+    int hours = params.value(QStringLiteral("hours")).toInt(72);
+    if (hours < 24)  hours = 24;
+    if (hours > 336) hours = 336;
+    const qint64 from = ctx.now - static_cast<qint64>(hours) * kHour;
+
+    const Series outS = ctx.storeOut->range(from, ctx.now);
+    const Series inS  = ctx.storeIn->range(from, ctx.now);
+    const QVector<double>* outT = outS.channel(kTemp);
+    const QVector<double>* inT  = inS.channel(kTemp);
+    if (!outT || !inT)
+        return failure(QStringLiteral("canal température manquant"));
+
+    const int ii = lastValidIndex(*inT);
+    if (ii < 0) return failure(QStringLiteral("aucune mesure intérieure récente"));
+    const double inNow = (*inT)[ii];
+
+    // Moyennes horaires (indexées par heure Unix), comme thermal_behaviour.
+    auto hourlyMeans = [](const Series& s, const QVector<double>& ch) {
+        QHash<qint64, double> sum;
+        QHash<qint64, int>    cnt;
+        const auto& ts = s.timestamps();
+        for (int k = 0; k < ch.size(); ++k) {
+            if (!Series::isValid(ch[k])) continue;
+            const qint64 h = ts[k] / kHour;
+            sum[h] += ch[k];
+            cnt[h] += 1;
+        }
+        QHash<qint64, double> means;
+        for (auto it = sum.constBegin(); it != sum.constEnd(); ++it)
+            means[it.key()] = it.value() / cnt[it.key()];
+        return means;
+    };
+    const QHash<qint64, double> outH = hourlyMeans(outS, *outT);
+    const QHash<qint64, double> inH  = hourlyMeans(inS, *inT);
+
+    // 1) Lag = décalage (0..maxLag h) de meilleure corrélation IN[h] vs OUT[h-lag].
+    const int maxLag = 12;
+    int bestLag = 0;
+    double bestR = -2.0;
+    for (int lag = 0; lag <= maxLag; ++lag) {
+        double sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+        int n = 0;
+        for (auto it = inH.constBegin(); it != inH.constEnd(); ++it) {
+            const auto oit = outH.constFind(it.key() - lag);
+            if (oit == outH.constEnd()) continue;
+            const double x = oit.value(), y = it.value();
+            sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y; ++n;
+        }
+        if (n < 6) continue;
+        const double cov = sxy - sx * sy / n;
+        const double vx  = sxx - sx * sx / n;
+        const double vy  = syy - sy * sy / n;
+        if (vx <= 0 || vy <= 0) continue;
+        const double r = cov / std::sqrt(vx * vy);
+        if (r > bestR) { bestR = r; bestLag = lag; }
+    }
+    if (bestR <= -2.0)
+        return failure(QStringLiteral("historique horaire insuffisant pour ajuster le modèle"));
+
+    // 2) Régression linéaire IN[h] = offset + gain · OUT[h - bestLag] au lag retenu.
+    double sx = 0, sy = 0, sxx = 0, sxy = 0;
+    int n = 0;
+    for (auto it = inH.constBegin(); it != inH.constEnd(); ++it) {
+        const auto oit = outH.constFind(it.key() - bestLag);
+        if (oit == outH.constEnd()) continue;
+        const double x = oit.value(), y = it.value();
+        sx += x; sy += y; sxx += x * x; sxy += x * y; ++n;
+    }
+    const double meanX = sx / n, meanY = sy / n;
+    const double vx = sxx - sx * sx / n;
+    if (n < 6 || vx <= 0)
+        return failure(QStringLiteral("variance extérieure trop faible pour ajuster le modèle"));
+    const double gain   = (sxy - sx * sy / n) / vx;
+    const double offset = meanY - gain * meanX;
+
+    // 3) Qualité d'ajustement : R², RMSE, MAE des résidus (réel - prédit).
+    double ssRes = 0, ssTot = 0, absSum = 0;
+    for (auto it = inH.constBegin(); it != inH.constEnd(); ++it) {
+        const auto oit = outH.constFind(it.key() - bestLag);
+        if (oit == outH.constEnd()) continue;
+        const double pred = offset + gain * oit.value();
+        const double resid = it.value() - pred;
+        ssRes += resid * resid;
+        ssTot += (it.value() - meanY) * (it.value() - meanY);
+        absSum += std::abs(resid);
+    }
+    const double r2   = ssTot > 0 ? 1.0 - ssRes / ssTot : 0.0;
+    const double rmse = std::sqrt(ssRes / n);
+    const double mae  = absSum / n;
+
+    QJsonObject o;
+    o["window_hours"] = hours;
+    o["lag_hours"]    = bestLag;
+    o["gain"]         = round2(gain);     // °C intérieur par °C extérieur (≈ amortissement)
+    o["offset"]       = round1(offset);   // apport propre (chauffage / occupation / soleil)
+    o["fit_r2"]       = round2(r2);
+    o["rmse"]         = round2(rmse);
+    o["mae"]          = round2(mae);
+    o["indoor_temp"]  = round1(inNow);
+
+    // Prédiction « maintenant » : extérieur d'il y a bestLag heures, si disponible.
+    const qint64 nowH = ctx.now / kHour;
+    const auto oitNow = outH.constFind(nowH - bestLag);
+    if (oitNow != outH.constEnd()) {
+        const double pred = offset + gain * oitNow.value();
+        o["predicted_indoor"] = round1(pred);
+        o["residual"]         = round1(inNow - pred); // >0 : plus chaud que le modèle
+    }
+
+    o["model_quality"] = r2 >= 0.75 ? QStringLiteral("modèle fiable")
+                       : r2 >= 0.4  ? QStringLiteral("modèle indicatif")
+                                    : QStringLiteral("modèle faible (autres facteurs dominants)");
+    o["note"] = QStringLiteral(
+        "Modèle d'inertie : la température intérieure est estimée à partir de "
+        "l'extérieur décalé du retard d'inertie (T_in ≈ offset + gain × T_ext "
+        "décalé). Le gain reflète l'amortissement du bâti, l'offset l'apport propre "
+        "(chauffage, occupation, soleil). R²/RMSE/MAE mesurent la qualité du modèle ; "
+        "un résidu positif signale un intérieur plus chaud que ce que le dehors seul "
+        "expliquerait.");
+    return o;
+}
+
 // Confort intérieur : première analyse de CONFORT (contexte In par défaut, lit le
 // cache intérieur). Zones de température et d'humidité, point de rosée, et un
 // repère de risque de condensation/moisissure. Une analyse de confort décrit le
@@ -1414,6 +1549,94 @@ QJsonObject analyzeIndoorComfort(const AnalysisContext& ctx, const QJsonObject&)
     return o;
 }
 
+// Prévu vs observé (étape 9) : compare, jour par jour, la prévision « day-ahead »
+// archivée (émise la veille) aux mesures OUT réellement observées ce jour-là.
+// Source primaire = OUT (les observations) ; les prévisions viennent du cache
+// dédié ctx.forecastStore. On mesure le biais et l'erreur moyenne sur les
+// températures min/max. Contexte Out ; sans repli croisé.
+QJsonObject analyzeForecastVsObserved(const AnalysisContext& ctx, const QJsonObject& params) {
+    if (!ctx.forecastStore)
+        return failure(QStringLiteral("collecte des prévisions inactive (aucun cache prévisions)"));
+    if (!ctx.store || !ctx.store->isOpen())
+        return failure(QStringLiteral("données extérieures (OUT) indisponibles"));
+
+    int days = params.value(QStringLiteral("days")).toInt(14);
+    if (days < 2)  days = 2;
+    if (days > 60) days = 60;
+
+    auto dayKeyOf = [](qint64 ts) -> quint32 {
+        const QDate d = QDateTime::fromSecsSinceEpoch(ts).date();
+        return static_cast<quint32>(d.year() * 10000 + d.month() * 100 + d.day());
+    };
+    const quint32 dayTo   = dayKeyOf(ctx.now);
+    const quint32 dayFrom = dayKeyOf(ctx.now - static_cast<qint64>(days) * 86400);
+
+    const QVector<ForecastEntry> forecasts = ctx.forecastStore->range(dayFrom, dayTo);
+    if (forecasts.isEmpty())
+        return failure(QStringLiteral("aucune prévision archivée sur la fenêtre"));
+
+    int evaluated = 0;
+    double sumBiasMin = 0, sumAbsMin = 0, sumBiasMax = 0, sumAbsMax = 0;
+    // Détail du dernier jour évalué (le plus récent avec prévision ET observation).
+    quint32 lastDay = 0;
+    double lastFcMin = 0, lastFcMax = 0, lastObsMin = 0, lastObsMax = 0;
+    QString lastDesc;
+
+    for (const ForecastEntry& fc : forecasts) {
+        // Observations OUT de ce jour cible (même découpage AAAAMMJJ que l'appareil).
+        const Series obs = ctx.store->rangeForDay(fc.targetDay);
+        const QVector<double>* obsT = obs.channel(kTemp);
+        if (!obsT) continue;
+        double obsMin = 1e9, obsMax = -1e9; int obsN = 0;
+        for (double v : *obsT) if (Series::isValid(v)) {
+            if (v < obsMin) obsMin = v;
+            if (v > obsMax) obsMax = v;
+            obsN++;
+        }
+        if (obsN < 3) continue; // journée pas (encore) assez observée
+
+        const double eMin = obsMin - fc.tempMin; // >0 : observé plus chaud que prévu
+        const double eMax = obsMax - fc.tempMax;
+        sumBiasMin += eMin; sumAbsMin += std::abs(eMin);
+        sumBiasMax += eMax; sumAbsMax += std::abs(eMax);
+        evaluated++;
+        if (fc.targetDay >= lastDay) {
+            lastDay = fc.targetDay;
+            lastFcMin = fc.tempMin; lastFcMax = fc.tempMax;
+            lastObsMin = obsMin; lastObsMax = obsMax;
+            lastDesc = fc.description;
+        }
+    }
+
+    if (evaluated == 0)
+        return failure(QStringLiteral(
+            "prévisions archivées mais aucun jour encore observé pour comparer "
+            "(laisser passer au moins une journée complète)"));
+
+    QJsonObject o;
+    o["days_evaluated"]     = evaluated;
+    o["forecasts_in_cache"] = forecasts.size();
+    o["tmin_bias"] = round1(sumBiasMin / evaluated); // signé : + = observé plus chaud
+    o["tmin_mae"]  = round1(sumAbsMin / evaluated);
+    o["tmax_bias"] = round1(sumBiasMax / evaluated);
+    o["tmax_mae"]  = round1(sumAbsMax / evaluated);
+    if (lastDay > 0) {
+        o["last_day"]          = static_cast<double>(lastDay);
+        o["last_forecast_min"] = round1(lastFcMin);
+        o["last_forecast_max"] = round1(lastFcMax);
+        o["last_observed_min"] = round1(lastObsMin);
+        o["last_observed_max"] = round1(lastObsMax);
+        if (!lastDesc.isEmpty())
+            o["last_forecast_desc"] = lastDesc;
+    }
+    o["note"] = QStringLiteral(
+        "Prévu vs observé : compare la prévision archivée la veille (day-ahead) aux "
+        "mesures extérieures réellement relevées. Le biais est l'écart moyen signé "
+        "(positif = observé plus chaud que prévu) ; le MAE est l'erreur absolue "
+        "moyenne sur la fenêtre. Nécessite au moins une journée complète observée.");
+    return o;
+}
+
 void registerMeteoAnalyses(AnalysisRegistry& registry) {
     using A = FunctionAnalysis;
     // `ctx` = contexte météo par défaut de l'analyse (intrinsèque à sa nature).
@@ -1457,6 +1680,12 @@ void registerMeteoAnalyses(AnalysisRegistry& registry) {
     // --- Relation interieur / exterieur (contexte Both) ----------------------
     add("thermal_behaviour", "Comportement thermique du bâtiment", "relation",
         1 * kDay, analyzeThermalBehaviour, MeteoCtx::Both);
+    add("indoor_inertia_model", "Modèle d'inertie intérieure", "relation",
+        1 * kDay, analyzeIndoorInertiaModel, MeteoCtx::Both);
+
+    // --- Prevision (prevu vs observe) ----------------------------------------
+    add("forecast_vs_observed", "Prévu vs observé", "prévision",
+        1 * kDay, analyzeForecastVsObserved, MeteoCtx::Out);
 
     // --- Qualite -------------------------------------------------------------
     add("data_quality", "Complétude des données", "qualite", 2 * kDay, analyzeDataQuality);

@@ -12,6 +12,7 @@
 namespace morfanalytics {
 
 class SampleStore;
+class ForecastStore;
 
 // Contexte météo d'une analyse : quelle source de vérité elle interroge.
 //   In   = confort intérieur ; Out = météo extérieure ; Both = les deux
@@ -52,6 +53,11 @@ struct AnalysisContext {
     const SampleStore* store = nullptr;     // source primaire résolue
     const SampleStore* storeIn = nullptr;   // cache intérieur (confort)
     const SampleStore* storeOut = nullptr;  // cache extérieur (météo)
+    // Cache des prévisions « day-ahead » archivées (étape 9). Indépendant des
+    // SampleStore : c'est un flux d'un jour par prévision, pas une série de mesures.
+    // Utilisé par forecast_vs_observed ; nullptr si le module n'a pas de collecte
+    // de prévisions active.
+    const ForecastStore* forecastStore = nullptr;
     MeteoCtx resolvedCtx = MeteoCtx::In;     // contexte effectivement retenu
     double altitudeM = 0.0;  // altitude de la station, en metres
     // Une altitude nulle est une valeur LEGITIME (station au bord de mer). On ne

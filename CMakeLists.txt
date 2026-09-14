@@ -53,6 +53,7 @@ add_library(morfAnalytics STATIC
     src/HttpServer.cpp
     src/pages/PortalPage.cpp
     src/pages/MeteoHubPage.cpp
+    src/pages/MeteoGraphsPage.cpp         # onglet Graphiques du domaine meteo
     src/pages/SiteWatchPage.cpp
     src/pages/PhotoPage.cpp               # page de la specialisation Photo
     src/pages/MonitorPage.cpp             # page du domaine Monitor (historique machines)
@@ -65,10 +66,12 @@ add_library(morfAnalytics STATIC
     src/MonitorModule.cpp                 # domaine Monitor : historise les metriques morfMonitor
     src/GitHubAnalyticsModule.cpp         # domaine GitHub : importe github-traffic depuis morfCollector
     src/data/SampleStore.cpp              # cache de travail local (SQLite)
+    src/data/ForecastStore.cpp            # cache des previsions day-ahead (etape 9)
     src/data/AnnotationStore.cpp          # observations meteo humaines (etat JSON, hors cache)
     src/data/MonitorStore.cpp             # historique des metriques machines (SQLite)
     src/data/GitHubStore.cpp              # historique des metriques GitHub
     src/collect/MeteoHubCollector.cpp     # collecte incrementale depuis MeteoHub
+    src/collect/ForecastCollector.cpp     # collecte des previsions day-ahead
     src/publish/MeteoSyncPublisher.cpp    # publication des syntheses journalieres vers morfSync
     # Header liste explicitement pour qu'AUTOMOC traite son Q_OBJECT de facon
     # fiable (il vit sous include/, hors du dossier de son .cpp).
@@ -81,7 +84,10 @@ add_library(morfAnalytics STATIC
     include/morfanalytics/analysis/MeteoMath.h
     include/morfanalytics/data/Series.h
     include/morfanalytics/data/SampleStore.h
+    include/morfanalytics/data/ForecastStore.h
     include/morfanalytics/collect/MeteoHubCollector.h
+    # Header liste explicitement : son Q_OBJECT doit passer par AUTOMOC.
+    include/morfanalytics/collect/ForecastCollector.h
     include/morfanalytics/IModule.h
     include/morfanalytics/ModuleRegistry.h
     include/morfanalytics/ServiceConfig.h
@@ -89,6 +95,7 @@ add_library(morfAnalytics STATIC
     include/morfanalytics/HttpServer.h
     include/morfanalytics/pages/PortalPage.h
     include/morfanalytics/pages/MeteoHubPage.h
+    include/morfanalytics/pages/MeteoGraphsPage.h
     include/morfanalytics/pages/SiteWatchPage.h
     include/morfanalytics/pages/PhotoPage.h
     include/morfanalytics/pages/MonitorPage.h
