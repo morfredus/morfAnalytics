@@ -3,6 +3,18 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.52.0] - 2026-09-14
+
+### Added
+
+- **Graphiques: value axes (left and right) and hover tooltip.**
+  - Dynamic value scales on both sides of the plot. In "Toutes" each metric gets
+    its own coloured axis (temperature left, humidity and pressure right), so the
+    six curves are read against real values, not just normalised shapes.
+  - Hovering the plot shows a guide line and a tooltip listing, at the pointed
+    time, every curve's value with its unit and colour (a point beyond a real gap
+    is not invented).
+
 ## [0.51.0] - 2026-09-14
 
 ### Changed

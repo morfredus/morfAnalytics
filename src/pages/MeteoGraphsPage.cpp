@@ -13,21 +13,14 @@ namespace morfanalytics::pages {
 // -----------------------------------------------------------------------------
 // Page /meteohub/graphs : onglet Graphiques.
 //
-// Là où les analyses répondent « qu'est-ce que ça veut dire ? », le graphique
-// répond « montre-moi ce qui s'est réellement passé ».
-//
-// Choix de tracé :
-//   - Mesures ~toutes les 5 min (jusqu'à 10 au pire) : ces écarts ne sont pas des
-//     trous. On relie les points ; le trait n'est coupé que sur un vrai silence
-//     (écart bien plus grand que la cadence, seuil plancher ~20 min, quelle que
-//     soit la finesse de sous-échantillonnage de la période).
-//   - IN et OUT : deux COULEURS distinctes (bleu / orange) en vue mono-grandeur.
-//   - « Toutes » : UN SEUL graphe, les 3 grandeurs superposées (6 courbes avec
-//     IN+OUT). Comme les échelles °C / % / hPa n'ont rien à voir, chaque grandeur
-//     est normalisée à sa propre échelle (on compare les FORMES et le TIMING, pas
-//     les valeurs absolues) : couleur par grandeur, et l'intérieur en trait plus
-//     fin et atténué pour distinguer IN de OUT sans pointillés. Les plages
-//     réelles sont rappelées dans la légende.
+// « Montre-moi ce qui s'est réellement passé » (complément visuel des analyses).
+//   - Mesures ~toutes les 5 min : on relie les points ; le trait n'est coupé que
+//     sur un vrai silence (seuil par série = max(2,5 x tranche, 20 min)).
+//   - Échelles de valeurs à GAUCHE et à DROITE (dynamiques). En « Toutes », chaque
+//     grandeur a son propre axe (temp à gauche, humidité et pression à droite),
+//     couleur = grandeur ; l'intérieur en trait plus fin et atténué.
+//   - Survol : ligne-guide + infobulle donnant, à l'instant pointé, la valeur de
+//     chaque courbe.
 //
 // Page autonome (SVG côté navigateur, sans CDN), données via /meteohub/series.
 // -----------------------------------------------------------------------------
@@ -51,12 +44,17 @@ select{background:#242830;border:1px solid var(--line);color:var(--ink);border-r
 .pbtn:hover{border-color:var(--accent);color:var(--ink)}.pbtn.on{background:#2a3350;border-color:var(--accent);color:#fff}
 .chart{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.9rem 1.1rem;margin:1rem 0}
 .chart h3{margin:0 0 .1rem;font-size:1.05rem}
-.chart svg{display:block;width:100%;height:auto;margin-top:.5rem}
-.chart .ax{fill:var(--muted);font-size:11px}.chart .grid-l{stroke:var(--line);stroke-width:1}
+.plot{position:relative;margin-top:.5rem}
+.plot svg{display:block;width:100%;height:auto}
+.ax{fill:var(--muted);font-size:11px}.grid-l{stroke:var(--line);stroke-width:1}
 .legend{display:flex;gap:1.1rem;flex-wrap:wrap;margin-top:.5rem;font-size:.85rem;color:var(--soft)}
 .legend .k{display:inline-flex;align-items:center;gap:.4rem}
 .legend .sw{width:1.4rem;height:0;border-top:3px solid;display:inline-block}
 .note{color:var(--muted);font-size:.82rem;margin-top:.4rem}
+.tip{position:absolute;pointer-events:none;background:#0e1013;border:1px solid var(--line);border-radius:8px;padding:.4rem .55rem;font-size:.82rem;color:var(--ink);box-shadow:0 4px 14px rgba(0,0,0,.45);z-index:5;white-space:nowrap}
+.tip .th{color:var(--muted);margin-bottom:.2rem;font-variant-numeric:tabular-nums}
+.tip .tr{display:flex;align-items:center;gap:.4rem;font-variant-numeric:tabular-nums}
+.tip .sw{width:.7rem;height:.7rem;border-radius:2px;display:inline-block}
 </style></head><body><div class="wrap">
 <p><a href="/">&larr; morfAnalytics</a></p>
 <h1>Météo <span id="vb" class="vb"></span></h1>
@@ -83,54 +81,57 @@ const METRICS=[
 const METRIC_OPTS=METRICS.map(m=>[m[0],m[1]]).concat([["all","Toutes"]]);
 const SOURCES=[["out","Extérieur"],["in","Intérieur"],["both","Intérieur + Extérieur"]];
 const PERIODS=[["6 h",6],["12 h",12],["24 h",24],["3 j",72],["7 j",168],["30 j",720]];
-// Mono-grandeur : IN et OUT en deux couleurs bien distinctes (jamais de pointillés).
+// Mono-grandeur : IN et OUT en deux couleurs distinctes (jamais de pointillés).
 const SRC_COL={out:"#6f9bff",in:"#e6a54e"};
-// Cadence des mesures ~5 min (jusqu'à 10 au boot). On relie les points tant que
-// l'écart reste sous ce seuil ; au-delà, c'est un vrai silence -> trait coupé.
-const CONNECT_MAX_S=20*60;
+// Cadence ~5 min (10 au boot) : plancher de connexion des points.
+const CONNECT_MIN_S=20*60;
+const AXIS_MUTED="#99a1ad";
 
 let S={
   metric:localStorage.getItem(LS+"metric")||"temp",
   source:localStorage.getItem(LS+"source")||"out",
   hours:+(localStorage.getItem(LS+"hours")||24)
 };
+let G=null; // géométrie + séries du graphe courant, pour le survol
 
 const $=s=>document.querySelector(s);
 function metricDef(k){return METRICS.find(m=>m[0]===k)||METRICS[0];}
 function srcLabel(k){return (SOURCES.find(s=>s[0]===k)||["","",""])[1];}
 function fmtClock(ts){const d=new Date(ts*1000);const sameDay=(new Date()*1-d)<86400000;
   return d.toLocaleString("fr-FR",sameDay?{hour:"2-digit",minute:"2-digit"}:{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});}
+function fmtFull(ts){return new Date(ts*1000).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});}
 function minMax(vals){let mn=Infinity,mx=-Infinity;for(const v of vals){if(v!==null&&v!==undefined){if(v<mn)mn=v;if(v>mx)mx=v;}}return [mn,mx];}
+function nf(v,d){return (v===null||!isFinite(v))?"—":v.toFixed(d);}
 
-// Graphe SVG. `series` = [{ts,vals,color,width,opacity,bucket,smin,smax}] : chaque
-// série est tracée avec SA propre échelle [smin,smax] (permet de superposer des
-// grandeurs d'échelles différentes). `opt.axis` = échelle numérique affichée à
-// gauche (mono-grandeur) ; sinon grille sans valeurs (mode "Toutes", normalisé).
-function chart(series, opt){
-  opt=opt||{};
-  const W=760,H=230,pL=opt.axis?54:16,pR=12,pT=12,pB=24;
+// Graphe SVG. `series` = [{ts,vals,color,width,opacity,bucket,smin,smax,label,unit,dec}].
+// `axes` = [{min,max,dec,side:'L'|'R',col}] : échelles de valeurs affichées à
+// gauche/droite (dynamiques). Chaque série est tracée avec SA propre [smin,smax].
+function buildChart(series, axes){
+  const W=760,H=240,pT=12,pB=24;
+  const lefts=axes.filter(a=>a.side==='L'), rights=axes.filter(a=>a.side==='R');
+  const pL = lefts.length ? 48 : 16;
+  const pR = 14 + rights.length*46;
   let t0=Infinity,t1=-Infinity,any=false;
   series.forEach(s=>{for(let i=0;i<s.vals.length;i++){const v=s.vals[i];
     if(v!==null&&v!==undefined){any=true;const t=s.ts[i];if(t<t0)t0=t;if(t>t1)t1=t;}}});
-  if(!any) return '<div class="muted">Pas encore de mesure sur cette période.</div>';
+  if(!any){G=null;return '<div class="muted">Pas encore de mesure sur cette période.</div>';}
   if(!(t1>t0))t1=t0+1;
   const X=t=>pL+(W-pL-pR)*((t-t0)/Math.max(1,(t1-t0)));
   const Ys=(s,v)=>pT+(H-pT-pB)*(1-(v-s.smin)/Math.max(1e-9,s.smax-s.smin));
+
   let grid="",labels="";
   [0,.5,1].forEach(f=>{const y=pT+(H-pT-pB)*(1-f);
     grid+='<line class="grid-l" x1="'+pL+'" y1="'+y.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+y.toFixed(1)+'"/>';
-    if(opt.axis){const val=opt.axis.min+(opt.axis.max-opt.axis.min)*f;
-      labels+='<text class="ax" x="'+(pL-6)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end">'+val.toFixed(opt.axis.dec||0)+'</text>';}});
+    lefts.forEach(a=>{const val=a.min+(a.max-a.min)*f;
+      labels+='<text class="ax" x="'+(pL-6)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end" fill="'+a.col+'">'+val.toFixed(a.dec||0)+'</text>';});
+    rights.forEach((a,ri)=>{const val=a.min+(a.max-a.min)*f;const xr=(W-pR)+10+ri*46;
+      labels+='<text class="ax" x="'+xr+'" y="'+(y+3).toFixed(1)+'" text-anchor="start" fill="'+a.col+'">'+val.toFixed(a.dec||0)+'</text>';});});
   const xt0='<text class="ax" x="'+pL+'" y="'+(H-6)+'">'+fmtClock(t0)+'</text>';
   const xt1='<text class="ax" x="'+(W-pR)+'" y="'+(H-6)+'" text-anchor="end">'+fmtClock(t1)+'</text>';
+
   let paths="";
   series.forEach(s=>{
-    // Seuil de coupure PAR SÉRIE : proportionnel à la tranche (pour que les vues
-    // longues, où un point = plusieurs heures, restent des courbes) avec un
-    // plancher à la cadence (pour les vues courtes, où la tranche < 5 min). On ne
-    // coupe donc que sur un écart bien plus grand que l'espacement normal : un
-    // VRAI silence du capteur, quelle que soit la période.
-    const gapMax=Math.max((s.bucket>0?s.bucket:600)*2.5, CONNECT_MAX_S);
+    const gapMax=Math.max((s.bucket>0?s.bucket:600)*2.5, CONNECT_MIN_S);
     let d="",prevT=null;
     for(let i=0;i<s.ts.length;i++){const v=s.vals[i];if(v===null||v===undefined)continue;
       const t=s.ts[i];const move=(prevT===null)||((t-prevT)>gapMax);
@@ -139,7 +140,12 @@ function chart(series, opt){
     paths+='<path d="'+d+'" fill="none" stroke="'+s.color+'" stroke-width="'+(s.width||2)+'"'+op+'/>';
     let last=null;for(let i=s.ts.length-1;i>=0;i--){if(s.vals[i]!==null&&s.vals[i]!==undefined){last=[s.ts[i],s.vals[i]];break;}}
     if(last)paths+='<circle cx="'+X(last[0]).toFixed(1)+'" cy="'+Ys(s,last[1]).toFixed(1)+'" r="3" fill="'+s.color+'"'+op+'/>';});
-  return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img">'+grid+labels+paths+xt0+xt1+'</svg>';
+
+  // Contexte de survol : tout ce qu'il faut pour retrouver un point depuis la souris.
+  G={W,H,pL,pR,pT,pB,t0,t1,series};
+
+  return '<svg id="gsvg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img">'+
+    grid+labels+paths+'<g id="hoverg"></g>'+xt0+xt1+'</svg>';
 }
 
 function fetchSeries(ctx, metric){
@@ -147,47 +153,98 @@ function fetchSeries(ctx, metric){
     .then(r=>r.json()).catch(()=>({ts:[],v:[],bucket_s:0}));
 }
 
-function nf(v,d){return (v===null||!isFinite(v))?"—":v.toFixed(d);}
-
-// Vue MONO-GRANDEUR : une carte, échelle numérique, IN/OUT en deux couleurs.
+// Vue MONO-GRANDEUR : IN/OUT en deux couleurs, échelle numérique à gauche ET à droite.
 function renderSingle(byCtx){
   const md=metricDef(S.metric);
   const ctxs = S.source==="both" ? ["out","in"] : [S.source];
   let allv=[]; ctxs.forEach(c=>{allv=allv.concat((byCtx[c].v||[]).filter(x=>x!==null&&x!==undefined));});
   let [mn,mx]=minMax(allv); if(!isFinite(mn)){mn=0;mx=1;}
-  let pad=(mx-mn)*0.08; if(pad<0.5)pad=0.5; const smin=mn-pad, smax=mx+pad;
-  const series=ctxs.map(c=>({ts:byCtx[c].ts||[],vals:byCtx[c].v||[],color:SRC_COL[c],width:2,bucket:byCtx[c].bucket_s||0,smin,smax}));
+  let pad=(mx-mn)*0.08; if(pad<(md[3]?0.5:1))pad=(md[3]?0.5:1); const smin=mn-pad, smax=mx+pad;
+  const series=ctxs.map(c=>({ts:byCtx[c].ts||[],vals:byCtx[c].v||[],color:SRC_COL[c],width:2,
+    bucket:byCtx[c].bucket_s||0,smin,smax,label:srcLabel(c),unit:md[2],dec:md[3]}));
+  const axes=[{min:smin,max:smax,dec:md[3],side:'L',col:AXIS_MUTED},
+              {min:smin,max:smax,dec:md[3],side:'R',col:AXIS_MUTED}];
   const legend=ctxs.map(c=>'<span class="k"><span class="sw" style="border-color:'+SRC_COL[c]+'"></span>'+srcLabel(c)+'</span>').join("");
-  const title=md[1]+" ("+md[2]+")";
-  return '<div class="chart"><h3>'+title+'</h3>'+chart(series,{axis:{min:smin,max:smax,dec:md[3]}})+'<div class="legend">'+legend+'</div></div>';
+  return '<div class="chart"><h3>'+md[1]+" ("+md[2]+")"+'</h3><div class="plot">'+buildChart(series,axes)+
+    '<div class="tip" hidden></div></div><div class="legend">'+legend+'</div>'+noteFor()+'</div>';
 }
 
-// Vue TOUTES : une seule carte, 3 grandeurs superposées (6 courbes avec IN+OUT),
-// chacune normalisée à sa propre échelle. Couleur = grandeur ; l'intérieur est
-// plus fin et atténué. Les plages réelles sont rappelées dans la légende.
+// Vue TOUTES : un seul graphe, 3 grandeurs superposées (6 courbes avec IN+OUT).
+// Chaque grandeur a son axe : température à gauche, humidité et pression à droite.
 function renderAll(data){
   const ctxs = S.source==="both" ? ["out","in"] : [S.source];
-  let series=[], legend=[];
-  METRICS.forEach(m=>{
+  let series=[], axes=[], legend=[], rightCount=0;
+  METRICS.forEach((m,mi)=>{
     const key=m[0], col=m[4];
     let allv=[]; ctxs.forEach(c=>{allv=allv.concat((data[key][c].v||[]).filter(x=>x!==null&&x!==undefined));});
-    let [mn,mx]=minMax(allv); if(!isFinite(mn)){return;} // pas de mesure pour cette grandeur
+    let [mn,mx]=minMax(allv); if(!isFinite(mn))return;
     let pad=(mx-mn)*0.08; if(pad<(m[3]?0.5:1))pad=(m[3]?0.5:1); const smin=mn-pad, smax=mx+pad;
-    ctxs.forEach(c=>{
-      const inner=(c==="in");
+    axes.push({min:smin,max:smax,dec:m[3],side: mi===0?'L':'R',col:col});
+    ctxs.forEach(c=>{const inner=(c==="in");
       series.push({ts:data[key][c].ts||[],vals:data[key][c].v||[],color:col,
-        width:inner?1.4:2.2, opacity:inner?0.55:1, bucket:data[key][c].bucket_s||0, smin,smax});
-    });
+        width:inner?1.4:2.2,opacity:inner?0.55:1,bucket:data[key][c].bucket_s||0,smin,smax,
+        label:m[1]+(S.source==="both"?(inner?" (int)":" (ext)"):""),unit:m[2],dec:m[3]});});
     const range=nf(mn,m[3])+"–"+nf(mx,m[3])+" "+m[2];
-    ctxs.forEach(c=>{
-      const inner=(c==="in");
+    ctxs.forEach(c=>{const inner=(c==="in");
       legend.push('<span class="k"><span class="sw" style="border-color:'+col+';opacity:'+(inner?0.55:1)+';border-top-width:'+(inner?2:3)+'px"></span>'+
-        m[1]+(S.source==="both"?" "+(inner?"(int)":"(ext)"):"")+(c===ctxs[ctxs.length-1]?' · '+range:'')+'</span>');
-    });
+        m[1]+(S.source==="both"?" "+(inner?"(int)":"(ext)"):"")+(c===ctxs[ctxs.length-1]?' · '+range:'')+'</span>');});
   });
   const title = S.source==="both" ? "Toutes les grandeurs (Intérieur + Extérieur)" : "Toutes les grandeurs ("+srcLabel(S.source)+")";
-  const body = series.length ? chart(series,{}) : '<div class="muted">Pas encore de mesure sur cette période.</div>';
-  return '<div class="chart"><h3>'+title+'</h3>'+body+'<div class="legend">'+legend.join("")+'</div></div>';
+  const body = series.length ? buildChart(series,axes) : '<div class="muted">Pas encore de mesure sur cette période.</div>';
+  return '<div class="chart"><h3>'+title+'</h3><div class="plot">'+body+'<div class="tip" hidden></div></div>'+
+    '<div class="legend">'+legend.join("")+'</div>'+noteFor()+'</div>';
+}
+
+function noteFor(){
+  if(S.metric==="all"){
+    return '<p class="note">'+(S.source==="both"
+      ? "Six courbes sur un axe de temps commun ; chaque grandeur a sa propre échelle (temp à gauche, humidité et pression à droite). Intérieur en trait plus fin et atténué. Survolez pour lire les valeurs."
+      : "Trois grandeurs sur un axe de temps commun, chacune à son échelle. Survolez pour lire les valeurs.")+'</p>';
+  }
+  return '<p class="note">'+(S.source==="both"
+    ? "IN et OUT en deux couleurs ; échelle à gauche et à droite. Pour les chiffres d'inertie, voir « Comportement thermique » et « Modèle d'inertie » dans les <a href=\"/meteohub\">analyses</a>."
+    : "Échelle à gauche et à droite. Points reliés tant que l'écart reste proche de la cadence ; coupé seulement sur un vrai silence du capteur.")+'</p>';
+}
+
+// --- Survol : ligne-guide + infobulle des valeurs à l'instant pointé ----------
+function attachHover(){
+  const svg=$("#gsvg"); const tip=document.querySelector(".plot .tip");
+  const hg=$("#hoverg"); if(!svg||!tip||!hg||!G)return;
+  const plot=svg.closest(".plot");
+  function move(ev){
+    const r=svg.getBoundingClientRect();
+    const sx=(ev.clientX-r.left)/r.width*G.W;
+    if(sx<G.pL||sx>G.W-G.pR){leave();return;}
+    const t=G.t0+(sx-G.pL)/Math.max(1,(G.W-G.pL-G.pR))*(G.t1-G.t0);
+    const X=tt=>G.pL+(G.W-G.pL-G.pR)*((tt-G.t0)/Math.max(1,(G.t1-G.t0)));
+    const Ys=(s,v)=>G.pT+(G.H-G.pT-G.pB)*(1-(v-s.smin)/Math.max(1e-9,s.smax-s.smin));
+    let dots="",rows="";
+    G.series.forEach(s=>{
+      let best=-1,bd=Infinity;
+      for(let i=0;i<s.ts.length;i++){const v=s.vals[i];if(v===null||v===undefined)continue;
+        const d=Math.abs(s.ts[i]-t);if(d<bd){bd=d;best=i;}}
+      if(best<0)return;
+      const gapMax=Math.max((s.bucket>0?s.bucket:600)*2.5, CONNECT_MIN_S);
+      if(bd>gapMax)return; // point trop loin (vrai trou) : on ne l'invente pas
+      const px=X(s.ts[best]),py=Ys(s,s.vals[best]);
+      dots+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="3.6" fill="'+s.color+'" stroke="#0e1013" stroke-width="1.2"/>';
+      rows+='<div class="tr"><span class="sw" style="background:'+s.color+(s.opacity!==undefined?';opacity:'+s.opacity:'')+'"></span>'+
+        s.label+' : <b>'+s.vals[best].toFixed(s.dec)+' '+s.unit+'</b></div>';});
+    hg.innerHTML='<line x1="'+sx.toFixed(1)+'" y1="'+G.pT+'" x2="'+sx.toFixed(1)+'" y2="'+(G.H-G.pB)+
+      '" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1"/>'+dots;
+    if(!rows){tip.hidden=true;return;}
+    tip.innerHTML='<div class="th">'+fmtFull(t)+'</div>'+rows;
+    tip.hidden=false;
+    const pr=plot.getBoundingClientRect();
+    let left=ev.clientX-pr.left+14, top=ev.clientY-pr.top+14;
+    if(left+tip.offsetWidth>pr.width) left=ev.clientX-pr.left-tip.offsetWidth-14;
+    if(top+tip.offsetHeight>pr.height) top=pr.height-tip.offsetHeight-4;
+    if(top<0)top=4;
+    tip.style.left=left+"px";tip.style.top=top+"px";
+  }
+  function leave(){tip.hidden=true;hg.innerHTML="";}
+  svg.addEventListener("mousemove",move);
+  svg.addEventListener("mouseleave",leave);
 }
 
 function draw(){
@@ -202,20 +259,8 @@ function draw(){
     const data={};
     list.forEach(x=>{(data[x.m]=data[x.m]||{})[x.c]=x.r;});
     metrics.forEach(m=>{const d=data[m]=data[m]||{};["out","in"].forEach(c=>{if(!d[c])d[c]={ts:[],v:[],bucket_s:0};});});
-
-    let html;
-    if(S.metric==="all"){
-      html=renderAll(data);
-      html+='<p class="note">'+(S.source==="both"
-        ? "Six courbes sur un axe de temps commun ; chaque grandeur garde sa propre échelle (on compare les formes et le décalage, pas les valeurs absolues). Intérieur en trait plus fin et atténué. Plages réelles dans la légende."
-        : "Trois grandeurs sur un axe de temps commun ; chacune à sa propre échelle. Plages réelles dans la légende.")+'</p>';
-    } else {
-      html=renderSingle(data[S.metric]);
-      html+='<p class="note">'+(S.source==="both"
-        ? "IN et OUT en deux couleurs. L'écart, le décalage et l'amortissement se lisent d'un coup d'œil ; pour les chiffres, voir « Comportement thermique » et « Modèle d'inertie » dans les <a href=\"/meteohub\">analyses</a>."
-        : "Points reliés tant que l'écart reste proche de la cadence ; le trait n'est coupé que sur un vrai silence du capteur.")+'</p>';
-    }
-    charts.innerHTML=html;
+    charts.innerHTML = (S.metric==="all") ? renderAll(data) : renderSingle(data[S.metric]);
+    attachHover();
   });
 }
 
