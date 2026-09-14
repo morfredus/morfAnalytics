@@ -3,6 +3,22 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.51.0] - 2026-09-14
+
+### Changed
+
+- **Graphiques: curves stay curves on every period, and "Toutes" is one chart.**
+  - The line-break threshold is now per-series `max(2.5 x bucket, 20 min)`: a floor
+    for short views (where the bucket is finer than the ~5 min cadence, which left
+    6 h empty and 12 h dotted) and proportional to the bucket for long views (so
+    30 j, where a point spans hours, still draws a continuous line). The line only
+    breaks on a real sensor silence (gap well beyond the normal spacing).
+  - "Toutes" now overlays the three metrics on a SINGLE chart (six curves with
+    IN+OUT), each normalised to its own scale so shapes and timing are comparable;
+    colour = metric, indoor drawn thinner and dimmed, real ranges in the legend.
+  - The metric selector label is "Afficher" (it picks one metric or all), and
+    single-metric Y-axis labels dropped the unit that was clipping (e.g. pressure).
+
 ## [0.50.0] - 2026-09-14
 
 ### Changed
