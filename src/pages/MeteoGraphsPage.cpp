@@ -16,13 +16,17 @@ namespace morfanalytics::pages {
 // « Montre-moi ce qui s'est réellement passé » (complément visuel des analyses).
 //   - Mesures ~toutes les 5 min : on relie les points ; le trait n'est coupé que
 //     sur un vrai silence (seuil par série = max(2,5 x tranche, 20 min)).
-//   - Échelles de valeurs à GAUCHE et à DROITE (dynamiques). En « Toutes », chaque
-//     grandeur a son propre axe (temp à gauche, humidité et pression à droite),
-//     couleur = grandeur ; l'intérieur en trait plus fin et atténué.
+//   - Grandeurs à afficher : sélection LIBRE par cases à cocher (une seule, un
+//     couple T+hum, hum+pression, les trois...). Une seule cochée -> vue mono
+//     (IN/OUT en deux couleurs). Plusieurs -> superposées, chacune son axe et sa
+//     couleur (la première sélectionnée à gauche, les autres à droite),
+//     l'intérieur en trait plus fin et atténué.
+//   - Échelles de valeurs à GAUCHE et à DROITE (dynamiques).
 //   - Survol : ligne-guide + infobulle donnant, à l'instant pointé, la valeur de
 //     chaque courbe.
 //
-// Page autonome (SVG côté navigateur, sans CDN), données via /meteohub/series.
+// Page autonome (SVG côté navigateur, sans CDN), données via /meteohub/series
+// et /meteohub/events (croisements, tendances, régimes : source commune).
 // -----------------------------------------------------------------------------
 QByteArray MeteoGraphsPage::render() {
     static const char* kPage = R"PAGE(<!doctype html><html lang="fr"><head>
@@ -44,6 +48,12 @@ QByteArray MeteoGraphsPage::render() {
 .controls{display:flex;flex-wrap:wrap;gap:.8rem 1.2rem;align-items:center;margin:1rem 0}
 label{font-size:.9rem;color:var(--soft)}
 select{background:#242830;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.3rem .5rem;font-size:.9rem}
+.metricsel{display:inline-flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.metricsel .mslabel{font-size:.9rem;color:var(--soft)}
+.metricsel .mk{display:inline-flex;align-items:center;gap:.3rem;background:#242830;border:1px solid var(--line);border-radius:8px;padding:.25rem .55rem;font-size:.85rem;color:var(--soft);cursor:pointer}
+.metricsel .mk:hover{border-color:var(--accent);color:var(--ink)}
+.metricsel .mk input{accent-color:var(--accent);margin:0}
+.metricsel .mk.on{background:#2a3350;border-color:var(--accent);color:#fff}
 .periods{display:flex;gap:.3rem;flex-wrap:wrap}
 .pbtn{background:#242830;border:1px solid var(--line);color:var(--soft);border-radius:8px;padding:.3rem .7rem;cursor:pointer;font-size:.85rem}
 .pbtn:hover{border-color:var(--accent);color:var(--ink)}.pbtn.on{background:#2a3350;border-color:var(--accent);color:#fff}
@@ -78,7 +88,7 @@ select{background:#242830;border:1px solid var(--line);color:var(--ink);border-r
 <div class="tabs"><a class="tab" href="/meteohub">Analyses</a><span class="tab on">Graphiques</span></div>
 <p class="muted">Montre ce que font réellement les données dans le temps. Les analyses, elles, disent ce que ça signifie.</p>
 <div class="controls">
-  <label>Afficher&nbsp;<select id="metric"></select></label>
+  <span class="metricsel"><span class="mslabel">Afficher</span><span id="metricsel"></span></span>
   <label>Source&nbsp;<select id="source"></select></label>
   <div class="periods" id="periods"></div>
 </div>
@@ -97,7 +107,7 @@ const METRICS=[
   ["hum","Humidité","%",0,"#7ee0b8"],
   ["pres","Pression","hPa",1,"#c58bf2"]
 ];
-const METRIC_OPTS=METRICS.map(m=>[m[0],m[1]]).concat([["all","Toutes"]]);
+const METRIC_KEYS=METRICS.map(m=>m[0]);
 const SOURCES=[["out","Extérieur"],["in","Intérieur"],["both","Intérieur + Extérieur"]];
 const PERIODS=[["6 h",6],["12 h",12],["24 h",24],["3 j",72],["7 j",168],["30 j",720]];
 // Mono-grandeur : IN et OUT en deux couleurs distinctes (jamais de pointillés).
@@ -106,8 +116,21 @@ const SRC_COL={out:"#6f9bff",in:"#e6a54e"};
 const CONNECT_MIN_S=20*60;
 const AXIS_MUTED="#99a1ad";
 
+// Grandeurs affichées : sélection LIBRE (cases à cocher). On peut afficher n'importe
+// quel sous-ensemble (une seule, un couple T+hum, hum+pression, les trois...).
+// Migration depuis l'ancien menu déroulant mono : "all" -> les trois, sinon la seule.
+function loadMetrics(){
+  const raw=localStorage.getItem(LS+"metrics");
+  if(raw){ try{const a=JSON.parse(raw);
+    if(Array.isArray(a)){const f=METRIC_KEYS.filter(k=>a.indexOf(k)>=0); if(f.length)return f;}
+  }catch(e){} }
+  const old=localStorage.getItem(LS+"metric");
+  if(old==="all") return METRIC_KEYS.slice();
+  if(old&&METRIC_KEYS.indexOf(old)>=0) return [old];
+  return ["temp"];
+}
 let S={
-  metric:localStorage.getItem(LS+"metric")||"temp",
+  metrics:loadMetrics(),  // sous-ensemble de METRIC_KEYS, dans l'ordre de METRICS
   source:localStorage.getItem(LS+"source")||"out",
   hours:+(localStorage.getItem(LS+"hours")||24)
 };
@@ -260,8 +283,8 @@ function fetchSeries(ctx, metric){
 }
 
 // Vue MONO-GRANDEUR : IN/OUT en deux couleurs, échelle numérique à gauche ET à droite.
-function renderSingle(byCtx){
-  const md=metricDef(S.metric);
+function renderSingle(byCtx, key){
+  const md=metricDef(key);
   const ctxs = S.source==="both" ? ["out","in"] : [S.source];
   let allv=[]; ctxs.forEach(c=>{allv=allv.concat((byCtx[c].v||[]).filter(x=>x!==null&&x!==undefined));});
   let [mn,mx]=minMax(allv); if(!isFinite(mn)){mn=0;mx=1;}
@@ -274,24 +297,25 @@ function renderSingle(byCtx){
   // Croisements : seulement si Int ET Ext tracés. Régimes : dès que l'Ext est visible.
   const showCross = S.source==="both";
   const showRegime = (S.source==="out"||S.source==="both");
-  const scaleByMetric={}; scaleByMetric[S.metric]={smin,smax};
-  const events = assembleEvents([S.metric], showCross, showRegime);
+  const scaleByMetric={}; scaleByMetric[key]={smin,smax};
+  const events = assembleEvents([key], showCross, showRegime);
   const box = (showCross||showRegime) ? eventsBox(events) : "";
   return '<div class="chart"><h3>'+md[1]+" ("+md[2]+")"+'</h3><div class="plot">'+buildChart(series,axes,events,scaleByMetric)+
-    '<div class="tip" hidden></div></div><div class="legend">'+legend+'</div>'+noteFor()+'</div>'+box;
+    '<div class="tip" hidden></div></div><div class="legend">'+legend+'</div>'+noteFor(false)+'</div>'+box;
 }
 
-// Vue TOUTES : un seul graphe, 3 grandeurs superposées (6 courbes avec IN+OUT).
-// Chaque grandeur a son axe : température à gauche, humidité et pression à droite.
-function renderAll(data){
+// Vue MULTI-GRANDEURS : un seul graphe, les grandeurs SÉLECTIONNÉES superposées
+// (2 courbes par grandeur avec IN+OUT). Chaque grandeur a son axe : la première
+// sélectionnée à gauche, les suivantes à droite.
+function renderAll(data, metrics){
   const ctxs = S.source==="both" ? ["out","in"] : [S.source];
-  let series=[], axes=[], legend=[], shownKeys=[]; const scaleByMetric={};
-  METRICS.forEach((m,mi)=>{
-    const key=m[0], col=m[4];
+  let series=[], axes=[], legend=[], shownKeys=[], drawn=0; const scaleByMetric={};
+  metrics.forEach((key)=>{
+    const m=metricDef(key), col=m[4];
     let allv=[]; ctxs.forEach(c=>{allv=allv.concat((data[key][c].v||[]).filter(x=>x!==null&&x!==undefined));});
     let [mn,mx]=minMax(allv); if(!isFinite(mn))return;
     let pad=(mx-mn)*0.08; if(pad<(m[3]?0.5:1))pad=(m[3]?0.5:1); const smin=mn-pad, smax=mx+pad;
-    axes.push({min:smin,max:smax,dec:m[3],side: mi===0?'L':'R',col:col});
+    axes.push({min:smin,max:smax,dec:m[3],side: drawn===0?'L':'R',col:col}); drawn++;
     scaleByMetric[key]={smin,smax}; shownKeys.push(key);
     ctxs.forEach(c=>{const inner=(c==="in");
       series.push({ts:data[key][c].ts||[],vals:data[key][c].v||[],color:col,
@@ -305,18 +329,19 @@ function renderAll(data){
   const showCross = S.source==="both";
   const showRegime = (S.source==="out"||S.source==="both");
   const events = assembleEvents(shownKeys, showCross, showRegime);
-  const title = S.source==="both" ? "Toutes les grandeurs (Intérieur + Extérieur)" : "Toutes les grandeurs ("+srcLabel(S.source)+")";
+  const names = metrics.map(k=>metricDef(k)[1]).join(" + ");
+  const title = names+(S.source==="both" ? " (Intérieur + Extérieur)" : " ("+srcLabel(S.source)+")");
   const body = series.length ? buildChart(series,axes,events,scaleByMetric) : '<div class="muted">Pas encore de mesure sur cette période.</div>';
   const box = (series.length && (showCross||showRegime)) ? eventsBox(events) : "";
   return '<div class="chart"><h3>'+title+'</h3><div class="plot">'+body+'<div class="tip" hidden></div></div>'+
-    '<div class="legend">'+legend.join("")+'</div>'+noteFor()+'</div>'+box;
+    '<div class="legend">'+legend.join("")+'</div>'+noteFor(true)+'</div>'+box;
 }
 
-function noteFor(){
-  if(S.metric==="all"){
+function noteFor(multi){
+  if(multi){
     return '<p class="note">'+(S.source==="both"
-      ? "Six courbes sur un axe de temps commun ; chaque grandeur a sa propre échelle (temp à gauche, humidité et pression à droite). Intérieur en trait plus fin et atténué. Survolez pour lire les valeurs."
-      : "Trois grandeurs sur un axe de temps commun, chacune à son échelle. Survolez pour lire les valeurs.")+'</p>';
+      ? "Plusieurs grandeurs sur un axe de temps commun ; chacune a sa propre échelle (la première sélectionnée à gauche, les autres à droite). Intérieur en trait plus fin et atténué. Survolez pour lire les valeurs."
+      : "Plusieurs grandeurs sur un axe de temps commun, chacune à son échelle. Survolez pour lire les valeurs.")+'</p>';
   }
   return '<p class="note">'+(S.source==="both"
     ? "IN et OUT en deux couleurs ; échelle à gauche et à droite. Pour les chiffres d'inertie, voir « Comportement thermique » et « Modèle d'inertie » dans les <a href=\"/meteohub\">analyses</a>."
@@ -366,8 +391,12 @@ function attachHover(){
 
 function draw(){
   const charts=$("#charts");
+  const metrics = METRIC_KEYS.filter(k=>S.metrics.indexOf(k)>=0); // ordre METRICS stable
+  if(!metrics.length){
+    charts.innerHTML='<p class="muted">Cochez au moins une grandeur à afficher.</p>';
+    return;
+  }
   charts.innerHTML='<p class="muted">Chargement&hellip;</p>';
-  const metrics = S.metric==="all" ? METRICS.map(m=>m[0]) : [S.metric];
   const ctxs = S.source==="both" ? ["out","in"] : [S.source];
 
   const jobs=[];
@@ -378,16 +407,30 @@ function draw(){
     const data={};
     list.forEach(x=>{(data[x.m]=data[x.m]||{})[x.c]=x.r;});
     metrics.forEach(m=>{const d=data[m]=data[m]||{};["out","in"].forEach(c=>{if(!d[c])d[c]={ts:[],v:[],bucket_s:0};});});
-    charts.innerHTML = (S.metric==="all") ? renderAll(data) : renderSingle(data[S.metric]);
+    charts.innerHTML = (metrics.length===1) ? renderSingle(data[metrics[0]], metrics[0]) : renderAll(data, metrics);
     attachHover();
   });
 }
 
-$("#metric").innerHTML=METRIC_OPTS.map(m=>'<option value="'+m[0]+'"'+(m[0]===S.metric?" selected":"")+'>'+m[1]+'</option>').join("");
+// Cases à cocher des grandeurs (sélection libre : une, un couple, les trois...).
+function renderMetricSel(){
+  $("#metricsel").innerHTML=METRICS.map(m=>{
+    const on=S.metrics.indexOf(m[0])>=0;
+    return '<label class="mk'+(on?" on":"")+'"><input type="checkbox" data-m="'+m[0]+'"'+(on?" checked":"")+'>'+m[1]+'</label>';
+  }).join("");
+}
+renderMetricSel();
 $("#source").innerHTML=SOURCES.map(s=>'<option value="'+s[0]+'"'+(s[0]===S.source?" selected":"")+'>'+s[1]+'</option>').join("");
 $("#periods").innerHTML=PERIODS.map(p=>'<button class="pbtn'+(p[1]===S.hours?" on":"")+'" data-h="'+p[1]+'">'+p[0]+'</button>').join("");
 
-$("#metric").addEventListener("change",e=>{S.metric=e.target.value;localStorage.setItem(LS+"metric",S.metric);draw();});
+$("#metricsel").addEventListener("change",e=>{
+  const cb=e.target.closest("input[data-m]"); if(!cb)return;
+  // Reconstruit la sélection dans l'ordre de METRICS d'après les cases cochées.
+  S.metrics=METRIC_KEYS.filter(k=>{const el=document.querySelector('#metricsel input[data-m="'+k+'"]');return el&&el.checked;});
+  localStorage.setItem(LS+"metrics",JSON.stringify(S.metrics));
+  renderMetricSel();
+  draw();
+});
 $("#source").addEventListener("change",e=>{S.source=e.target.value;localStorage.setItem(LS+"source",S.source);draw();});
 $("#periods").addEventListener("click",e=>{const b=e.target.closest(".pbtn");if(!b)return;
   S.hours=+b.dataset.h;localStorage.setItem(LS+"hours",S.hours);

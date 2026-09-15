@@ -35,9 +35,13 @@ une barre en haut de page :
   les filtres restent **collants** en haut de la page : accessibles quel que soit le
   défilement, et changer un filtre ne renvoie plus tout en haut.
 
-- **Graphiques** - « montre-moi ce qui s'est réellement passé » : l'évolution d'une
-  grandeur (ou de **toutes**) dans le temps, source **Intérieur / Extérieur / les
-  deux** sur le même axe de temps, période de 6 h à 30 j. Échelles de valeurs à
+- **Graphiques** - « montre-moi ce qui s'est réellement passé » : l'évolution des
+  grandeurs dans le temps. Les grandeurs à afficher se choisissent par **cases à
+  cocher** (sélection libre : une seule, un couple température + humidité, humidité +
+  pression, ou les trois). Une seule cochée donne la vue mono (Intérieur/Extérieur en
+  deux couleurs) ; plusieurs se superposent, chacune avec son axe et sa couleur.
+  Source **Intérieur / Extérieur / les deux** sur le même axe de temps, période de
+  6 h à 30 j. Échelles de valeurs à
   gauche et à droite (dynamiques), infobulle au survol donnant la valeur de chaque
   courbe à l'instant pointé. Les points sont reliés (une coupure = un vrai silence du
   capteur, jamais un simple espacement de cadence). En-tête et filtres **collants**,

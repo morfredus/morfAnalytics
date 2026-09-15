@@ -3,6 +3,19 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.55.0] - 2026-09-15
+
+### Changed
+
+- **Graphs: free metric selection via checkboxes.** The "Afficher" dropdown
+  (temperature / humidity / pressure / all) is replaced by checkboxes, so any
+  combination can be plotted: a single quantity, a pair (temperature + humidity,
+  humidity + pressure…) or all three. One quantity checked keeps the mono view
+  (Indoor/Outdoor in two colours); two or more overlay the selected quantities,
+  each with its own axis and colour (first selected on the left, the rest on the
+  right). The selection is remembered (localStorage), migrating the previous
+  single-choice setting. Unchecking all shows a hint instead of an empty plot.
+
 ## [0.54.0] - 2026-09-15
 
 ### Added
