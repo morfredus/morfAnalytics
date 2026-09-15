@@ -39,6 +39,17 @@ une barre en haut de page :
   gauche et à droite (dynamiques), infobulle au survol donnant la valeur de chaque
   courbe à l'instant pointé. Les points sont reliés (une coupure = un vrai silence du
   capteur, jamais un simple espacement de cadence).
+  - **Croisements détectés** : quand l'Intérieur ET l'Extérieur d'une même grandeur
+    sont tracés, la page repère les instants où les deux valeurs deviennent égales
+    (température, humidité, pression). Le croisement est le changement de signe de
+    `D(t) = Extérieur(t) - Intérieur(t)` ; son heure et sa valeur sont interpolées
+    entre les deux mesures qui l'encadrent (une estimation, pas une mesure), jamais
+    au travers d'un vrai trou de capteur. Une bande morte par grandeur écarte le
+    bruit et les recroisements immédiats. Aucun croisement n'est jamais généré entre
+    grandeurs de natures différentes. Chaque croisement est matérialisé sur le tracé
+    (guide vertical, losange, numéro) et repris dans un encart chronologique sous le
+    graphique. C'est une première timeline analytique tirée directement des relations
+    entre séries comparables.
 
 ## Analyse des machines
 

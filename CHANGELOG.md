@@ -3,6 +3,31 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.53.0] - 2026-09-15
+
+### Added
+
+- **Graphs: detection and display of series crossings.** When both Indoor and
+  Outdoor of the same physical quantity are drawn, morfAnalytics now detects the
+  instants where the two values become equal (temperature, humidity, pressure).
+  - Detection works on `D(t) = Outdoor(t) - Indoor(t)`: a crossing is a sign
+    change of `D`. Both series are projected onto a common clock by linear
+    interpolation, never across a real sensor gap. The crossing time and value
+    are themselves interpolated between the two enclosing measurements (an
+    estimate, not an acquired sample).
+  - A per-quantity dead band (eps) avoids spurious events from noise or curves
+    that touch and immediately re-cross.
+  - No crossing is ever produced between quantities of different natures
+    (temperature vs humidity, etc.): the behaviour is limited to comparable
+    series (same quantity, same unit).
+  - On the plot each crossing is materialised by a vertical guide, a diamond
+    marker at the estimated value and a number that links it to the list.
+  - A "Croisements détectés" panel under the chart lists the events
+    chronologically (time, quantity, estimated value, explicit wording), turning
+    the plot into a first analytical timeline. Groundwork for the upcoming
+    thermal-inertia work, whose first event of interest is exactly the moment the
+    outdoor temperature catches up with the indoor one.
+
 ## [0.52.1] - 2026-09-14
 
 ### Documentation
