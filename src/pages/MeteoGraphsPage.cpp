@@ -32,6 +32,11 @@ QByteArray MeteoGraphsPage::render() {
 --accent:#6f9bff;--ok:#2e8b57;--warn:#e6a54e;--bad:#c8483a;--track:#242830}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui,sans-serif;padding:1.5rem}
 .wrap{max-width:72rem;margin:auto}h1{margin:.2rem 0}
+/* En-tete + filtres collants : restent accessibles quel que soit le defilement,
+   et changer un filtre ne renvoie plus en haut de la page. */
+.topbar{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--line);
+  margin:-1.5rem -1.5rem 0;padding:1rem 1.5rem .6rem}
+.topbar .wrap{padding:0}
 .muted{color:var(--muted)}a{color:var(--accent)}
 .vb{font-size:.8rem;font-weight:600;vertical-align:middle;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;padding:.1rem .5rem;margin-left:.4rem}
 .tabs{margin:.3rem 0 1rem}.tabs .tab{display:inline-block;padding:.25rem .7rem;border:1px solid var(--line);border-radius:999px;margin-right:.4rem;font-size:.9rem;color:var(--soft);text-decoration:none}
@@ -66,31 +71,31 @@ select{background:#242830;border:1px solid var(--line);color:var(--ink);border-r
 .clist .cn{font-weight:700;min-width:1.2rem;text-align:right;font-variant-numeric:tabular-nums}
 .ct{font-weight:600;font-variant-numeric:tabular-nums}
 .cd{color:var(--soft);font-size:.9rem}
-</style></head><body><div class="wrap">
+</style></head><body>
+<div class="topbar"><div class="wrap">
 <p><a href="/">&larr; morfAnalytics</a></p>
 <h1>Météo <span id="vb" class="vb"></span></h1>
 <div class="tabs"><a class="tab" href="/meteohub">Analyses</a><span class="tab on">Graphiques</span></div>
 <p class="muted">Montre ce que font réellement les données dans le temps. Les analyses, elles, disent ce que ça signifie.</p>
-
 <div class="controls">
   <label>Afficher&nbsp;<select id="metric"></select></label>
   <label>Source&nbsp;<select id="source"></select></label>
   <div class="periods" id="periods"></div>
 </div>
-
+</div></div>
+<div class="wrap">
 <div id="charts"><p class="muted">Chargement&hellip;</p></div>
 </div>
 <script>
 "use strict";
 const LS="morfanalytics.graphs.";
-// [clé, libellé, unité, décimales, couleur (mode "Toutes"), bande morte croisement]
-// La bande morte (eps) évite de compter comme événements de simples oscillations
-// autour de l'égalité : on ne valide un croisement que si l'écart repart franchement
-// de l'autre côté (au-delà de eps, dans l'unité de la grandeur).
+// [clé, libellé, unité, décimales, couleur (mode "Toutes")]
+// La détection des événements (croisements, tendances, régimes) et sa bande morte
+// vivent côté serveur (MeteoEvents) : source commune avec la page Analyse.
 const METRICS=[
-  ["temp","Température","°C",1,"#e6a54e",0.2],
-  ["hum","Humidité","%",0,"#7ee0b8",1.0],
-  ["pres","Pression","hPa",1,"#c58bf2",0.3]
+  ["temp","Température","°C",1,"#e6a54e"],
+  ["hum","Humidité","%",0,"#7ee0b8"],
+  ["pres","Pression","hPa",1,"#c58bf2"]
 ];
 const METRIC_OPTS=METRICS.map(m=>[m[0],m[1]]).concat([["all","Toutes"]]);
 const SOURCES=[["out","Extérieur"],["in","Intérieur"],["both","Intérieur + Extérieur"]];
@@ -118,90 +123,68 @@ function minMax(vals){let mn=Infinity,mx=-Infinity;for(const v of vals){if(v!==n
 function nf(v,d){return (v===null||!isFinite(v))?"—":v.toFixed(d);}
 function fmtNum(v,d){return v.toLocaleString("fr-FR",{minimumFractionDigits:d,maximumFractionDigits:d});}
 
-// --- Croisements de séries comparables (même grandeur, même unité) -----------
-// D(t) = Extérieur(t) - Intérieur(t). Un croisement = changement de signe de D
-// entre deux mesures. Comme les deux séries sont sous-échantillonnées séparément,
-// on projette chacune sur une horloge commune (union des instants) par
-// interpolation linéaire, sans jamais inventer une valeur au travers d'un vrai
-// trou de mesure (au-delà du plancher de connexion). L'instant et la valeur du
-// croisement sont eux aussi interpolés : ce sont des estimations, pas des mesures.
-
-// Valeur interpolée d'une série à l'instant t ; null hors plage ou en travers
-// d'un silence du capteur (écart entre échantillons > gapMax).
-function interpAt(ts,vals,t,gapMax){
-  const n=ts.length; if(!n) return null;
-  if(t<ts[0]||t>ts[n-1]) return null;
-  let i=0; while(i<n-1 && ts[i+1]<t) i++;
-  if(ts[i]===t) return (vals[i]!==null&&vals[i]!==undefined)?vals[i]:null;
-  if(i>=n-1) return null;
-  const t0=ts[i],t1=ts[i+1],v0=vals[i],v1=vals[i+1];
-  if(v0===null||v0===undefined||v1===null||v1===undefined) return null;
-  if(t1-t0>gapMax) return null; // en travers d'un vrai trou : on n'invente pas
-  return v0+(v1-v0)*(t-t0)/(t1-t0);
+// --- Événements temporels (source commune : endpoint /meteohub/events) --------
+// Le calcul (croisements IN/OUT, changements de tendance, changements de régime)
+// vit en C++ (MeteoEvents) et est partagé avec la page Analyse : la page
+// Graphiques ne recalcule rien, elle consomme les événements et les matérialise.
+//   - Croisement : deux séries de MÊME grandeur (Int/Ext) deviennent égales ;
+//     instant et valeur interpolés entre les mesures encadrantes (estimation).
+//   - Changement de régime : plusieurs tendances basculent dans une fenêtre
+//     rapprochée, même entre grandeurs différentes (relation TEMPORELLE, jamais
+//     déduite d'une proximité graphique).
+const REGIME_COL="#9aa7ff";
+let EV={crossings:[],trend_changes:[],regime_changes:[]}; // dernier lot d'événements
+function metricColor(k){return metricDef(k)[4];}
+function fetchEvents(){
+  return fetch("/meteohub/events?hours="+S.hours)
+    .then(r=>r.json()).catch(()=>({crossings:[],trend_changes:[],regime_changes:[]}));
 }
 
-// Détecte les croisements entre la série extérieure (o) et intérieure (inn).
-// `eps` = bande morte : on ne valide un croisement que si D repart au-delà de eps
-// du côté opposé, ce qui écarte le bruit et les recroisements immédiats.
-// Retourne [{ts, value}] (instant et valeur estimés à l'égalité).
-function computeCrossings(o,inn,eps){
-  const goMax=Math.max((o.bucket>0?o.bucket:600)*2.5, CONNECT_MIN_S);
-  const giMax=Math.max((inn.bucket>0?inn.bucket:600)*2.5, CONNECT_MIN_S);
-  const tset=new Set();
-  o.ts.forEach((t,i)=>{if(o.vals[i]!==null&&o.vals[i]!==undefined)tset.add(t);});
-  inn.ts.forEach((t,i)=>{if(inn.vals[i]!==null&&inn.vals[i]!==undefined)tset.add(t);});
-  const T=[...tset].sort((a,b)=>a-b);
-  const cr=[];
-  // On suit le dernier point à écart NON nul (lT,lD,lA) : le changement de signe
-  // se lit entre deux tels points, ce qui reste correct même si une mesure tombe
-  // pile sur l'égalité (D=0) et évite de rater le croisement.
-  let sign=0, cand=null, lT=null, lD=null, lA=null;
-  for(const t of T){
-    const a=interpAt(o.ts,o.vals,t,goMax);
-    const b=interpAt(inn.ts,inn.vals,t,giMax);
-    if(a===null||b===null){lT=null;lD=null;lA=null;continue;} // trou : on ne franchit pas
-    const d=a-b;
-    if(d!==0){
-      if(lD!==null && lD*d<0){ // changement de signe entre deux points encadrants
-        const tc=lT+(t-lT)*lD/(lD-d);
-        const vc=lA+(a-lA)*(tc-lT)/(t-lT);
-        cand={ts:tc,value:vc};
-      }
-      lT=t;lD=d;lA=a;
-    }
-    if(Math.abs(d)>=eps){ // côté franchement établi : on tranche
-      const ns=d>0?1:-1;
-      if(ns!==sign && sign!==0 && cand) cr.push(cand);
-      if(ns!==sign) sign=ns;
-      cand=null; // oscillation sous eps oubliée : un nouveau croisement devra survenir
-    }
-  }
-  return cr;
+// Fusionne croisements (des grandeurs affichées) et changements de régime en une
+// timeline chronologique numérotée, partagée par les marqueurs et l'encart.
+// `showCross` : les deux courbes d'une grandeur sont tracées (source « both »).
+// `showRegime` : l'extérieur est visible (les régimes portent sur la météo).
+function assembleEvents(metricsShown, showCross, showRegime){
+  const list=[];
+  if(showCross) (EV.crossings||[]).forEach(c=>{ if(metricsShown.indexOf(c.metric)>=0)
+    list.push({kind:"cross",ts:c.ts,metric:c.metric,value:c.value,unit:c.unit,dec:c.dec,
+               metricName:c.metric_name,outRising:c.out_rising}); });
+  if(showRegime) (EV.regime_changes||[]).forEach(r=>list.push({kind:"regime",ts:r.ts,parts:r.parts||[]}));
+  list.sort((a,b)=>a.ts-b.ts);
+  list.forEach((e,i)=>{e.n=i+1;e.color=e.kind==="cross"?metricColor(e.metric):REGIME_COL;});
+  return list;
 }
 
-// Encart « Croisements détectés » listé chronologiquement sous le graphique.
-function crossingsBox(list){
-  const intro="Les croisements sont calculés uniquement entre séries représentant la même "+
-    "grandeur physique. L'heure et la valeur du croisement sont interpolées entre les mesures "+
-    "qui encadrent l'égalité.";
+// Encart « Événements détectés » listé chronologiquement sous le graphique.
+function eventsBox(list){
+  const intro="Les croisements comparent deux séries de même grandeur physique (Intérieur et "+
+    "Extérieur) : leur heure et leur valeur sont interpolées entre les mesures qui encadrent "+
+    "l'égalité (une estimation, pas une mesure). Les changements de régime signalent le "+
+    "basculement rapproché de plusieurs tendances, même entre grandeurs différentes.";
   if(!list.length){
-    return '<div class="cross"><h4>Croisements détectés</h4><p class="cintro">'+intro+'</p>'+
-      '<p class="muted">Aucun croisement sur la période affichée.</p></div>';
+    return '<div class="cross"><h4>Événements détectés</h4><p class="cintro">'+intro+'</p>'+
+      '<p class="muted">Aucun événement sur la période affichée.</p></div>';
   }
-  const rows=list.map(c=>'<li><span class="cn" style="color:'+c.color+'">'+c.n+'</span>'+
-    '<div class="cev"><div class="ct">'+fmtClock(c.ts)+' - '+c.metricName+'</div>'+
-    '<div class="cd">Extérieur rejoint Intérieur à '+fmtNum(c.value,c.dec)+' '+c.unit+'.</div>'+
-    '</div></li>').join("");
-  return '<div class="cross"><h4>Croisements détectés</h4><p class="cintro">'+intro+
+  const rows=list.map(e=>{
+    const cn='<span class="cn" style="color:'+e.color+'">'+e.n+'</span>';
+    if(e.kind==="cross"){
+      return '<li>'+cn+'<div class="cev"><div class="ct">'+fmtClock(e.ts)+' - Croisement de '+e.metricName+'</div>'+
+        '<div class="cd">Extérieur rejoint Intérieur à '+fmtNum(e.value,e.dec)+' '+e.unit+'.</div></div></li>';
+    }
+    const lines=(e.parts||[]).map(p=>p.metric_name+' : '+p.from+' → '+p.to+'.').join('<br>');
+    return '<li>'+cn+'<div class="cev"><div class="ct">'+fmtClock(e.ts)+' - Changement de régime</div>'+
+      '<div class="cd">'+lines+'</div></div></li>';
+  }).join("");
+  return '<div class="cross"><h4>Événements détectés</h4><p class="cintro">'+intro+
     '</p><ul class="clist">'+rows+'</ul></div>';
 }
 
 // Graphe SVG. `series` = [{ts,vals,color,width,opacity,bucket,smin,smax,label,unit,dec}].
 // `axes` = [{min,max,dec,side:'L'|'R',col}] : échelles de valeurs affichées à
 // gauche/droite (dynamiques). Chaque série est tracée avec SA propre [smin,smax].
-// `crossings` (optionnel) = [{ts,value,smin,smax,color,n}] : marqueurs des
-// croisements de séries comparables, chacun dessiné à SA propre échelle.
-function buildChart(series, axes, crossings){
+// `events` (optionnel) = timeline numérotée [{kind,ts,n,color,metric,value,parts}].
+// `scaleByMetric` = {metric:{smin,smax}} pour placer un croisement à SA hauteur.
+function buildChart(series, axes, events, scaleByMetric){
   const W=760,H=240,pT=12,pB=24;
   const lefts=axes.filter(a=>a.side==='L'), rights=axes.filter(a=>a.side==='R');
   const pL = lefts.length ? 48 : 16;
@@ -236,20 +219,32 @@ function buildChart(series, axes, crossings){
     let last=null;for(let i=s.ts.length-1;i>=0;i--){if(s.vals[i]!==null&&s.vals[i]!==undefined){last=[s.ts[i],s.vals[i]];break;}}
     if(last)paths+='<circle cx="'+X(last[0]).toFixed(1)+'" cy="'+Ys(s,last[1]).toFixed(1)+'" r="3" fill="'+s.color+'"'+op+'/>';});
 
-  // Marqueurs de croisement : guide vertical + losange à la valeur estimée, avec
-  // le numéro qui relie le marqueur à la ligne correspondante de l'encart.
+  // Marqueurs d'événements : croisement = guide vertical + losange à la valeur
+  // estimée ; changement de régime = ligne pleine hauteur en pointillés. Le numéro
+  // relie chaque marqueur à sa ligne dans l'encart « Événements détectés ».
   let marks="";
-  (crossings||[]).forEach(c=>{
-    if(c.ts<t0||c.ts>t1)return;
-    const x=X(c.ts);
-    const yv=pT+(H-pT-pB)*(1-(c.value-c.smin)/Math.max(1e-9,c.smax-c.smin));
-    const r=4.5;
-    marks+='<line x1="'+x.toFixed(1)+'" y1="'+pT+'" x2="'+x.toFixed(1)+'" y2="'+(H-pB)+
-      '" stroke="'+c.color+'" stroke-opacity="0.45" stroke-dasharray="3 3" stroke-width="1"/>';
-    marks+='<path d="M'+x.toFixed(1)+' '+(yv-r).toFixed(1)+' L'+(x+r).toFixed(1)+' '+yv.toFixed(1)+
-      ' L'+x.toFixed(1)+' '+(yv+r).toFixed(1)+' L'+(x-r).toFixed(1)+' '+yv.toFixed(1)+
-      ' Z" fill="'+c.color+'" stroke="#0e1013" stroke-width="1.2"/>';
-    marks+='<text class="cnum" x="'+(x+6).toFixed(1)+'" y="'+(yv-6).toFixed(1)+'" fill="'+c.color+'">'+c.n+'</text>';
+  (events||[]).forEach(e=>{
+    if(e.ts<t0||e.ts>t1)return;
+    const x=X(e.ts);
+    if(e.kind==="cross"){
+      const sc=(scaleByMetric||{})[e.metric];
+      marks+='<line x1="'+x.toFixed(1)+'" y1="'+pT+'" x2="'+x.toFixed(1)+'" y2="'+(H-pB)+
+        '" stroke="'+e.color+'" stroke-opacity="0.45" stroke-dasharray="3 3" stroke-width="1"/>';
+      if(sc){
+        const yv=pT+(H-pT-pB)*(1-(e.value-sc.smin)/Math.max(1e-9,sc.smax-sc.smin));
+        const r=4.5;
+        marks+='<path d="M'+x.toFixed(1)+' '+(yv-r).toFixed(1)+' L'+(x+r).toFixed(1)+' '+yv.toFixed(1)+
+          ' L'+x.toFixed(1)+' '+(yv+r).toFixed(1)+' L'+(x-r).toFixed(1)+' '+yv.toFixed(1)+
+          ' Z" fill="'+e.color+'" stroke="#0e1013" stroke-width="1.2"/>';
+        marks+='<text class="cnum" x="'+(x+6).toFixed(1)+'" y="'+(yv-6).toFixed(1)+'" fill="'+e.color+'">'+e.n+'</text>';
+      } else {
+        marks+='<text class="cnum" x="'+(x+4).toFixed(1)+'" y="'+(pT+11)+'" fill="'+e.color+'">'+e.n+'</text>';
+      }
+    } else { // changement de régime : repère temporel pleine hauteur
+      marks+='<line x1="'+x.toFixed(1)+'" y1="'+pT+'" x2="'+x.toFixed(1)+'" y2="'+(H-pB)+
+        '" stroke="'+e.color+'" stroke-opacity="0.6" stroke-dasharray="1 3" stroke-width="1.4"/>';
+      marks+='<text class="cnum" x="'+(x+4).toFixed(1)+'" y="'+(pT+11)+'" fill="'+e.color+'">'+e.n+'</text>';
+    }
   });
 
   // Contexte de survol : tout ce qu'il faut pour retrouver un point depuis la souris.
@@ -276,16 +271,13 @@ function renderSingle(byCtx){
   const axes=[{min:smin,max:smax,dec:md[3],side:'L',col:AXIS_MUTED},
               {min:smin,max:smax,dec:md[3],side:'R',col:AXIS_MUTED}];
   const legend=ctxs.map(c=>'<span class="k"><span class="sw" style="border-color:'+SRC_COL[c]+'"></span>'+srcLabel(c)+'</span>').join("");
-  // Croisements : seulement quand Intérieur ET Extérieur d'une même grandeur sont tracés.
-  let crossings=[];
-  if(S.source==="both"){
-    const o={ts:byCtx.out.ts||[],vals:byCtx.out.v||[],bucket:byCtx.out.bucket_s||0};
-    const inn={ts:byCtx.in.ts||[],vals:byCtx.in.v||[],bucket:byCtx.in.bucket_s||0};
-    crossings=computeCrossings(o,inn,md[5]).map((c,i)=>({ts:c.ts,value:c.value,smin,smax,
-      color:md[4],n:i+1,metricName:md[1],unit:md[2],dec:md[3]}));
-  }
-  const box = S.source==="both" ? crossingsBox(crossings) : "";
-  return '<div class="chart"><h3>'+md[1]+" ("+md[2]+")"+'</h3><div class="plot">'+buildChart(series,axes,crossings)+
+  // Croisements : seulement si Int ET Ext tracés. Régimes : dès que l'Ext est visible.
+  const showCross = S.source==="both";
+  const showRegime = (S.source==="out"||S.source==="both");
+  const scaleByMetric={}; scaleByMetric[S.metric]={smin,smax};
+  const events = assembleEvents([S.metric], showCross, showRegime);
+  const box = (showCross||showRegime) ? eventsBox(events) : "";
+  return '<div class="chart"><h3>'+md[1]+" ("+md[2]+")"+'</h3><div class="plot">'+buildChart(series,axes,events,scaleByMetric)+
     '<div class="tip" hidden></div></div><div class="legend">'+legend+'</div>'+noteFor()+'</div>'+box;
 }
 
@@ -293,13 +285,14 @@ function renderSingle(byCtx){
 // Chaque grandeur a son axe : température à gauche, humidité et pression à droite.
 function renderAll(data){
   const ctxs = S.source==="both" ? ["out","in"] : [S.source];
-  let series=[], axes=[], legend=[], rightCount=0, allCross=[];
+  let series=[], axes=[], legend=[], shownKeys=[]; const scaleByMetric={};
   METRICS.forEach((m,mi)=>{
     const key=m[0], col=m[4];
     let allv=[]; ctxs.forEach(c=>{allv=allv.concat((data[key][c].v||[]).filter(x=>x!==null&&x!==undefined));});
     let [mn,mx]=minMax(allv); if(!isFinite(mn))return;
     let pad=(mx-mn)*0.08; if(pad<(m[3]?0.5:1))pad=(m[3]?0.5:1); const smin=mn-pad, smax=mx+pad;
     axes.push({min:smin,max:smax,dec:m[3],side: mi===0?'L':'R',col:col});
+    scaleByMetric[key]={smin,smax}; shownKeys.push(key);
     ctxs.forEach(c=>{const inner=(c==="in");
       series.push({ts:data[key][c].ts||[],vals:data[key][c].v||[],color:col,
         width:inner?1.4:2.2,opacity:inner?0.55:1,bucket:data[key][c].bucket_s||0,smin,smax,
@@ -308,21 +301,13 @@ function renderAll(data){
     ctxs.forEach(c=>{const inner=(c==="in");
       legend.push('<span class="k"><span class="sw" style="border-color:'+col+';opacity:'+(inner?0.55:1)+';border-top-width:'+(inner?2:3)+'px"></span>'+
         m[1]+(S.source==="both"?" "+(inner?"(int)":"(ext)"):"")+(c===ctxs[ctxs.length-1]?' · '+range:'')+'</span>');});
-    // Croisements de CETTE grandeur (à son échelle), seulement si int + ext présents.
-    if(S.source==="both"){
-      const o={ts:data[key].out.ts||[],vals:data[key].out.v||[],bucket:data[key].out.bucket_s||0};
-      const inn={ts:data[key].in.ts||[],vals:data[key].in.v||[],bucket:data[key].in.bucket_s||0};
-      computeCrossings(o,inn,m[5]).forEach(c=>allCross.push({ts:c.ts,value:c.value,smin,smax,
-        color:col,metricName:m[1],unit:m[2],dec:m[3]}));
-    }
   });
-  // Timeline unifiée : tous les croisements dans l'ordre, une numérotation commune
-  // partagée entre les marqueurs du graphe et l'encart.
-  allCross.sort((a,b)=>a.ts-b.ts);
-  allCross.forEach((c,i)=>{c.n=i+1;});
+  const showCross = S.source==="both";
+  const showRegime = (S.source==="out"||S.source==="both");
+  const events = assembleEvents(shownKeys, showCross, showRegime);
   const title = S.source==="both" ? "Toutes les grandeurs (Intérieur + Extérieur)" : "Toutes les grandeurs ("+srcLabel(S.source)+")";
-  const body = series.length ? buildChart(series,axes,allCross) : '<div class="muted">Pas encore de mesure sur cette période.</div>';
-  const box = S.source==="both" ? crossingsBox(allCross) : "";
+  const body = series.length ? buildChart(series,axes,events,scaleByMetric) : '<div class="muted">Pas encore de mesure sur cette période.</div>';
+  const box = (series.length && (showCross||showRegime)) ? eventsBox(events) : "";
   return '<div class="chart"><h3>'+title+'</h3><div class="plot">'+body+'<div class="tip" hidden></div></div>'+
     '<div class="legend">'+legend.join("")+'</div>'+noteFor()+'</div>'+box;
 }
@@ -387,7 +372,9 @@ function draw(){
 
   const jobs=[];
   metrics.forEach(m=>ctxs.forEach(c=>jobs.push(fetchSeries(c,m).then(r=>({m,c,r})))));
-  Promise.all(jobs).then(list=>{
+  // Les événements (source commune) sont demandés en parallèle des séries.
+  Promise.all([Promise.all(jobs), fetchEvents()]).then(([list,ev])=>{
+    EV=ev||{crossings:[],trend_changes:[],regime_changes:[]};
     const data={};
     list.forEach(x=>{(data[x.m]=data[x.m]||{})[x.c]=x.r;});
     metrics.forEach(m=>{const d=data[m]=data[m]||{};["out","in"].forEach(c=>{if(!d[c])d[c]={ts:[],v:[],bucket_s:0};});});

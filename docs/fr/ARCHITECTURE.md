@@ -29,8 +29,8 @@ Service (façade : câble tout à partir d'une ServiceConfig)
 ├── ModuleRegistry     -> collectionne les IModule, agrège leur état
 │     └── IModule (interface, QObject)   ◀── POINT D'EXTENSION
 │            └── AnalyticsModule  (type « analytics » : collecte et analyses)
-├── HttpServer         -> API HTTP (GET /status /healthz /modules /analyses ;
-│                         POST /analyze)
+├── HttpServer         -> API HTTP (GET /status /healthz /modules /analyses
+│                         /meteohub/series /meteohub/events ; POST /analyze)
 └── morfbeacon::Heartbeat -> annonce UDP (découverte LAN)
         ▲ IMetricsProvider
         └── ModuleRegistry expose un résumé (nombre de modules, ...)
@@ -67,6 +67,21 @@ Serveur HTTP/1.1 minimal gérant **GET et POST** (lecture du corps via
 `Content-Length`). Il expose `GET /analyses` (analyses disponibles) et
 `POST /analyze`, ainsi que les routes de service `/status`, `/healthz` et
 `/modules`.
+
+### Moteur d'analyse et d'événements (pur)
+
+Deux briques PURES (pas d'état, pas de cache, pas de JSON), testables isolément :
+- `MeteoMath` : les formules météo (point de rosée, humidex, Zambretti…).
+- `MeteoEvents` : la **source commune** des événements temporels tirés des séries
+  (croisements Intérieur/Extérieur d'une même grandeur, changements de tendance,
+  changements de régime). Le même calcul alimente l'endpoint `/meteohub/events`
+  (consommé par la page Graphiques pour ses marqueurs et son encart) ET les
+  analyses de `MeteoAnalyses` (qui enrichissent leur texte : « changement de
+  tendance vers HH:MM », « dernier croisement… »). Écrit une fois, jamais
+  réimplémenté différemment d'un consommateur à l'autre.
+
+`MeteoAnalyses` enregistre le jeu d'analyses météo dans `AnalysisRegistry`
+(générique) ; `AnalyticsModule::eventsJson()` assemble le JSON des événements.
 
 ### `Service` (façade)
 

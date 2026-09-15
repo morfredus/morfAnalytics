@@ -87,6 +87,16 @@ public:
     QJsonObject seriesJson(const QString& ctx, const QString& metric,
                            qint64 from, qint64 to, int maxPoints) const;
 
+    // Événements temporels de la fenêtre [now-hours, now], calculés par la SOURCE
+    // COMMUNE (MeteoEvents) et partagés par les Graphiques (marqueurs + encart) et
+    // les analyses (enrichissement de leur texte) :
+    //   - croisements IN/OUT par grandeur (temp/hum/pres) : instant où les deux
+    //     valeurs deviennent égales (nécessite les deux caches) ;
+    //   - changements de tendance de chaque grandeur EXTÉRIEURE (météo) ;
+    //   - changements de régime : plusieurs changements de tendance rapprochés.
+    // Renvoie { hours, crossings:[...], trend_changes:[...], regime_changes:[...] }.
+    QJsonObject eventsJson(qint64 hours) const;
+
     // Nettoyage du CACHE — et de lui seul : la source de vérité (l'appareil)
     // n'est jamais touchée, le collecteur n'émettant que des GET.
     // `request` : {"action": "scan_faults" | "invalidate_faults"

@@ -6,6 +6,7 @@
 
 #include "morfanalytics/analysis/AnalysisRegistry.h"
 #include "morfanalytics/analysis/MeteoMath.h"
+#include "morfanalytics/analysis/MeteoEvents.h"
 #include "morfanalytics/data/SampleStore.h"
 #include "morfanalytics/data/ForecastStore.h"
 #include "morfanalytics/data/Series.h"
@@ -133,6 +134,75 @@ QJsonObject failure(const QString& reason) {
 double round1(double v) { return std::round(v * 10.0) / 10.0; }
 double round2(double v) { return std::round(v * 100.0) / 100.0; }
 
+// --- Enrichissement par les evenements (source COMMUNE : MeteoEvents) --------
+// Les analyses ne recalculent pas ces evenements a leur facon : elles appellent
+// exactement les memes fonctions que les Graphiques et la page /meteohub/events.
+
+QString metricNameFr(const QString& metric) {
+    if (metric == kTemp) return QStringLiteral("Température");
+    if (metric == kHum)  return QStringLiteral("Humidité");
+    if (metric == kPres) return QStringLiteral("Pression");
+    return metric;
+}
+
+// Ajoute le dernier changement de tendance d'une serie (le plus recent de la
+// fenetre) sous la cle "trend_shift" : { ts, from, to }.
+void addLastTrendShift(QJsonObject& o, const QString& metric, const Series& s) {
+    const QVector<double>* ch = s.channel(metric);
+    if (!ch) return;
+    const auto tc = meteo::detectTrendChanges(metric, s.timestamps(), *ch);
+    if (tc.isEmpty()) return;
+    const auto& last = tc.last();
+    QJsonObject j;
+    j["ts"]   = static_cast<double>(last.ts);
+    j["from"] = QString::fromUtf8(meteo::trendName(last.from));
+    j["to"]   = QString::fromUtf8(meteo::trendName(last.to));
+    o["trend_shift"] = j;
+}
+
+// Ajoute le dernier changement de regime (bascule rapprochee de >= 2 grandeurs)
+// sous la cle "regime_shift" : { ts, parts:[{metric_name, from, to}] }.
+void addLastRegimeShift(QJsonObject& o, const Series& s, const QStringList& metrics) {
+    QVector<meteo::TrendChange> all;
+    for (const QString& m : metrics) {
+        const QVector<double>* ch = s.channel(m);
+        if (ch) all += meteo::detectTrendChanges(m, s.timestamps(), *ch);
+    }
+    const auto rc = meteo::detectRegimeChanges(all);
+    if (rc.isEmpty()) return;
+    const auto& last = rc.last();
+    QJsonObject j;
+    j["ts"] = static_cast<double>(last.ts);
+    QJsonArray parts;
+    for (const auto& p : last.parts) {
+        QJsonObject pj;
+        pj["metric_name"] = metricNameFr(p.metric);
+        pj["from"] = QString::fromUtf8(meteo::trendName(p.from));
+        pj["to"]   = QString::fromUtf8(meteo::trendName(p.to));
+        parts.append(pj);
+    }
+    j["parts"] = parts;
+    o["regime_shift"] = j;
+}
+
+// Ajoute le dernier croisement IN/OUT d'une grandeur sous la cle "last_crossing"
+// : { ts, value, out_rising }.
+void addLastCrossing(QJsonObject& o, const QString& metric,
+                     const Series& outS, const Series& inS) {
+    const QVector<double>* oc = outS.channel(metric);
+    const QVector<double>* ic = inS.channel(metric);
+    if (!oc || !ic) return;
+    const auto cr = meteo::detectCrossings(metric, outS.timestamps(), *oc,
+                                           inS.timestamps(), *ic);
+    if (cr.isEmpty()) return;
+    const auto& last = cr.last();
+    QJsonObject j;
+    j["ts"]         = static_cast<double>(last.ts);
+    j["value"]      = round1(last.value);
+    j["out_rising"] = last.outRising;
+    o["last_crossing"] = j;
+}
+
 // Mediane d'un ensemble de valeurs (la copie est triee en place). Robuste aux
 // valeurs aberrantes, contrairement a la moyenne : c'est le socle des
 // statistiques de la vague 3 (anomalies par MAD, notamment).
@@ -225,6 +295,10 @@ QJsonObject analyzeHeatRisk(const AnalysisContext& ctx, const QJsonObject&) {
     o["humidity"]    = round1(h);
     o["humidex"]     = round1(hx);
     o["risk"]        = level;
+    // Bascule conjointe temperature/humidite sur 12 h : « rechauffement accompagne
+    // d'une baisse de l'humidite depuis environ HH:MM » (source commune).
+    const Series win = ctx.store->range(ctx.now - 12 * kHour, ctx.now);
+    addLastRegimeShift(o, win, {kTemp, kHum});
     o["note"] = QStringLiteral(
         "Indicateur local temperature-humidite. Il ne remplace pas une "
         "vigilance canicule officielle ni un avis medical.");
@@ -311,6 +385,8 @@ QJsonObject analyzePressureTrend(const AnalysisContext& ctx, const QJsonObject&)
                 "Chute de pression rapide : risque d'orage ou de coup de vent "
                 "dans les heures qui viennent.");
     }
+    // Dernier basculement de tendance barometrique sur la fenetre (source commune).
+    addLastTrendShift(o, kPres, series);
     return o;
 }
 
@@ -399,6 +475,9 @@ QJsonObject analyzeTempTrend(const AnalysisContext& ctx, const QJsonObject&) {
     else if (delta3h <= -0.5) label = QStringLiteral("refroidissement");
     else                      label = QStringLiteral("stable");
     o["tendency"] = label;
+    // Repere temporel : le dernier basculement de tendance sur la fenetre (source
+    // commune avec les Graphiques). Permet de dire « a change de regime vers HH:MM ».
+    addLastTrendShift(o, kTemp, series);
     o["note"] = QStringLiteral(
         "Variation sur 3 h pour la tendance ; l'écart à la même heure la veille "
         "distingue un changement de masse d'air du simple cycle jour/nuit.");
@@ -1350,6 +1429,9 @@ QJsonObject analyzeThermalBehaviour(const AnalysisContext& ctx, const QJsonObjec
         o["lag_hours"]   = bestLag;
         o["correlation"] = round2(bestR);
     }
+    // Croisement IN/OUT le plus recent : l'instant ou l'exterieur rejoint puis
+    // depasse (ou repasse sous) l'interieur, repere-cle de l'inertie thermique.
+    addLastCrossing(o, kTemp, outS, inS);
     o["note"] = QStringLiteral(
         "Relation intérieur/extérieur. L'amortissement compare l'amplitude "
         "intérieure à l'extérieure (plus il est faible, plus le bâtiment tamponne). "
@@ -1481,6 +1563,9 @@ QJsonObject analyzeIndoorInertiaModel(const AnalysisContext& ctx, const QJsonObj
     o["model_quality"] = r2 >= 0.75 ? QStringLiteral("modèle fiable")
                        : r2 >= 0.4  ? QStringLiteral("modèle indicatif")
                                     : QStringLiteral("modèle faible (autres facteurs dominants)");
+    // Dernier croisement IN/OUT : la transition de phase (Ext < In -> Ext = In ->
+    // Ext > In) sert de repere au decalage d'inertie.
+    addLastCrossing(o, kTemp, outS, inS);
     o["note"] = QStringLiteral(
         "Modèle d'inertie : la température intérieure est estimée à partir de "
         "l'extérieur décalé du retard d'inertie (T_in ≈ offset + gain × T_ext "

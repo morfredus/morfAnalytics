@@ -496,6 +496,29 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             const qint64 from = to - static_cast<qint64>(hours) * 3600;
             out = toJson(module->seriesJson(ctx, metric, from, to, 400));
         }
+    } else if (path == "/meteohub/events") {
+        // Événements temporels de la fenêtre affichée (croisements IN/OUT,
+        // changements de tendance et de régime). Source COMMUNE avec les analyses :
+        // même calcul (MeteoEvents), consommé ici par les Graphiques (marqueurs +
+        // encart) via un seul appel.
+        auto* module = m_registry
+            ? qobject_cast<AnalyticsModule*>(m_registry->firstOfType(QStringLiteral("analytics")))
+            : nullptr;
+        int hours = 24;
+        const int qm = rawPath.indexOf('?');
+        if (qm >= 0) {
+            const QUrlQuery q(QString::fromUtf8(rawPath.mid(qm + 1)));
+            const int h = q.queryItemValue(QStringLiteral("hours")).toInt();
+            if (h > 0) hours = h;
+        }
+        if (!module) {
+            out = toJson(QJsonObject{{"crossings", QJsonArray{}},
+                                     {"trend_changes", QJsonArray{}},
+                                     {"regime_changes", QJsonArray{}},
+                                     {"error", QStringLiteral("aucun module 'analytics' configuré")}});
+        } else {
+            out = toJson(module->eventsJson(hours));
+        }
     } else if (path == "/sitewatch") {
         const QJsonArray reports = siteWatchReports();
         reply(sock, 200, "OK", pages::SiteWatchPage::render(siteWatchPage(), reports), "text/html; charset=utf-8");
@@ -884,7 +907,11 @@ QByteArray HttpServer::landingPage() {
   body { margin: 0; padding: 2.5rem 1.25rem 5rem; background: var(--bg); color: var(--fg);
          font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.5; }
   .wrap { max-width: 72rem; margin: 0 auto; }
-  header.top { margin-bottom: 2rem; }
+  /* En-tete + filtres collants : les filtres (contexte, boutons) restent
+     accessibles quel que soit le defilement, et changer un filtre ne renvoie
+     plus en haut de la page. */
+  header.top { margin-bottom: 1.4rem; position: sticky; top: 0; z-index: 20;
+    background: var(--bg); border-bottom: 1px solid var(--line); padding-bottom: .6rem; }
   a.back { display: inline-block; margin-bottom: .6rem; color: var(--accent);
            text-decoration: none; font-size: .9rem; }
   a.back:hover { text-decoration: underline; }
@@ -1185,7 +1212,8 @@ QByteArray HttpServer::landingPage() {
 
   <footer>
     État détaillé au format JSON : <code>/status</code>, <code>/modules</code>,
-    <code>/analyses</code>, <code>/healthz</code>.
+    <code>/analyses</code>, <code>/meteohub/series</code>,
+    <code>/meteohub/events</code>, <code>/healthz</code>.
     Les mesures d'origine restent sur MeteoHub, seule source de vérité ;
     ce service travaille sur une copie en lecture seule.
   </footer>
@@ -1258,8 +1286,40 @@ const riskBadge = (level) => {
   return `<span class="badge ${cls}">${esc(level)}</span>`;
 };
 
-function notes(r) {
+// Date + heure compacte, sans ambiguite de jour (les fenetres d'analyse
+// s'etalent parfois sur plusieurs jours).
+const fmtEvent = (ts) => (!ts || ts <= 0) ? '' :
+  new Date(ts * 1000).toLocaleString('fr-FR',
+    { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+// Phrases d'evenements temporels (source commune MeteoEvents), injectees dans
+// tout bloc qui les porte : changement de tendance, changement de regime,
+// dernier croisement Interieur/Exterieur. C'est ce qui fait passer une analyse
+// de « voici la valeur » a « voici quand le comportement a change ».
+function eventLines(r) {
   let html = '';
+  if (r.trend_shift) {
+    const s = r.trend_shift;
+    html += `<p class="note">Changement de tendance vers ${fmtEvent(s.ts)} :
+      ${esc(s.from)} → ${esc(s.to)}.</p>`;
+  }
+  if (r.regime_shift) {
+    const s = r.regime_shift;
+    const parts = (s.parts || []).map((p) =>
+      `${esc(p.metric_name)} ${esc(p.from)} → ${esc(p.to)}`).join(', ');
+    html += `<p class="note">Changement de régime vers ${fmtEvent(s.ts)} : ${parts}.</p>`;
+  }
+  if (r.last_crossing) {
+    const c = r.last_crossing;
+    const sense = c.out_rising ? 'passe au-dessus de' : 'repasse sous';
+    html += `<p class="note">Dernier croisement vers ${fmtEvent(c.ts)} :
+      l'extérieur ${sense} l'intérieur à ${num(c.value, '°C')}.</p>`;
+  }
+  return html;
+}
+
+function notes(r) {
+  let html = eventLines(r);
   if (r.warning) html += `<p class="warning">${esc(r.warning)}</p>`;
   if (r.storm_note) html += `<p class="warning">${esc(r.storm_note)}</p>`;
   if (r.note) html += `<p class="note">${esc(r.note)}</p>`;

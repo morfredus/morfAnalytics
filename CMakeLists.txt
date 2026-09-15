@@ -78,6 +78,7 @@ add_library(morfAnalytics STATIC
     include/morfanalytics/publish/MeteoSyncPublisher.h
     src/analysis/AnalysisRegistry.cpp     # moteur d'analyse (generique)
     src/analysis/MeteoMath.cpp            # formules meteorologiques (pures)
+    src/analysis/MeteoEvents.cpp          # evenements temporels (croisements, tendances, regimes) - source commune
     src/analysis/MeteoAnalyses.cpp        # jeu d'analyses meteo
     include/morfanalytics/analysis/IAnalysis.h
     include/morfanalytics/analysis/AnalysisRegistry.h
@@ -158,6 +159,10 @@ if(MA_BUILD_TESTS)
     add_executable(analyses_test test/analyses_test.cpp)
     target_link_libraries(analyses_test PRIVATE morfAnalytics)
     add_test(NAME analyses COMMAND analyses_test)
+
+    add_executable(meteoevents_test test/meteoevents_test.cpp)
+    target_link_libraries(meteoevents_test PRIVATE morfAnalytics)
+    add_test(NAME meteoevents COMMAND meteoevents_test)
 
     add_executable(github_import_test test/github_import_test.cpp)
     target_link_libraries(github_import_test PRIVATE morfAnalytics)

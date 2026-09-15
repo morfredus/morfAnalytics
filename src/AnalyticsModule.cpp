@@ -12,7 +12,11 @@
 #include "morfanalytics/collect/MeteoHubCollector.h"
 #include "morfanalytics/collect/ForecastCollector.h"
 #include "morfanalytics/publish/MeteoSyncPublisher.h"
+#include "morfanalytics/analysis/MeteoEvents.h"
 
+#include <QJsonArray>
+#include <algorithm>
+#include <cmath>
 #include <QTimer>
 #include <QDateTime>
 #include <QDir>
@@ -261,6 +265,104 @@ QJsonObject AnalyticsModule::seriesJson(const QString& ctx, const QString& metri
     }
     o["ts"] = tsArr;
     o["v"]  = vArr;
+    return o;
+}
+
+QJsonObject AnalyticsModule::eventsJson(qint64 hours) const {
+    QJsonObject o;
+    if (hours < 1) hours = 24;
+    o["hours"] = static_cast<double>(hours);
+    const qint64 now  = QDateTime::currentSecsSinceEpoch();
+    const qint64 from = now - hours * 3600;
+
+    // Métadonnées d'affichage par grandeur : le calcul, lui, est dans MeteoEvents.
+    struct M { const char* key; const char* name; const char* unit; int dec; };
+    static const M metrics[3] = {
+        {"temp", "Température", "°C", 1},
+        {"hum",  "Humidité",   "%",  0},
+        {"pres", "Pression",   "hPa", 1},
+    };
+    auto nameOf = [](const QString& k) -> QString {
+        for (const M& m : metrics) if (k == QLatin1String(m.key)) return QString::fromUtf8(m.name);
+        return k;
+    };
+    auto roundTo = [](double v, int dec) {
+        const double p = std::pow(10.0, dec);
+        return std::round(v * p) / p;
+    };
+
+    const SampleStore* out = m_storeOut ? m_storeOut.get() : nullptr;
+    const SampleStore* in  = m_store ? m_store.get() : nullptr;
+    const Series outS = (out && out->isOpen()) ? out->range(from, now) : Series();
+    const Series inS  = (in  && in->isOpen())  ? in->range(from, now)  : Series();
+
+    // Croisements IN/OUT (nécessitent les deux caches), triés chronologiquement.
+    QVector<QPair<qint64, QJsonObject>> crossPairs;
+    QVector<meteo::TrendChange> allTrend;
+    QJsonArray trendChanges;
+
+    for (const M& m : metrics) {
+        const QString key = QString::fromLatin1(m.key);
+        const QVector<double>* oCh = outS.channel(key);
+        const QVector<double>* iCh = inS.channel(key);
+        if (oCh && iCh && !outS.isEmpty() && !inS.isEmpty()) {
+            const auto cr = meteo::detectCrossings(key, outS.timestamps(), *oCh,
+                                                   inS.timestamps(), *iCh);
+            for (const auto& c : cr) {
+                QJsonObject j;
+                j["metric"]      = key;
+                j["metric_name"] = QString::fromUtf8(m.name);
+                j["unit"]        = QString::fromUtf8(m.unit);
+                j["dec"]         = m.dec;
+                j["ts"]          = static_cast<double>(c.ts);
+                j["value"]       = roundTo(c.value, m.dec);
+                j["out_rising"]  = c.outRising;
+                crossPairs.push_back({c.ts, j});
+            }
+        }
+        // Changements de tendance sur l'EXTÉRIEUR (la météo).
+        if (oCh && !outS.isEmpty()) {
+            const auto tc = meteo::detectTrendChanges(key, outS.timestamps(), *oCh);
+            for (const auto& t : tc) {
+                allTrend.push_back(t);
+                QJsonObject j;
+                j["metric"]      = key;
+                j["metric_name"] = QString::fromUtf8(m.name);
+                j["ts"]          = static_cast<double>(t.ts);
+                j["from"]        = QString::fromUtf8(meteo::trendName(t.from));
+                j["to"]          = QString::fromUtf8(meteo::trendName(t.to));
+                trendChanges.append(j);
+            }
+        }
+    }
+    std::stable_sort(crossPairs.begin(), crossPairs.end(),
+                     [](const QPair<qint64, QJsonObject>& a, const QPair<qint64, QJsonObject>& b) {
+                         return a.first < b.first;
+                     });
+    QJsonArray crossings;
+    for (const auto& p : crossPairs) crossings.append(p.second);
+
+    // Changements de régime : plusieurs changements de tendance rapprochés.
+    QJsonArray regimeChanges;
+    for (const auto& rc : meteo::detectRegimeChanges(allTrend)) {
+        QJsonObject j;
+        j["ts"] = static_cast<double>(rc.ts);
+        QJsonArray parts;
+        for (const auto& part : rc.parts) {
+            QJsonObject pj;
+            pj["metric"]      = part.metric;
+            pj["metric_name"] = nameOf(part.metric);
+            pj["from"]        = QString::fromUtf8(meteo::trendName(part.from));
+            pj["to"]          = QString::fromUtf8(meteo::trendName(part.to));
+            parts.append(pj);
+        }
+        j["parts"] = parts;
+        regimeChanges.append(j);
+    }
+
+    o["crossings"]      = crossings;
+    o["trend_changes"]  = trendChanges;
+    o["regime_changes"] = regimeChanges;
     return o;
 }
 

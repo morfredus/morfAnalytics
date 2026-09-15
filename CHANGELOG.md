@@ -3,6 +3,45 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.54.0] - 2026-09-15
+
+### Added
+
+- **Temporal events as reusable analytical objects (shared source).** A new pure
+  module `MeteoEvents` (same doctrine as `MeteoMath`: pure functions, no state, no
+  JSON) is now the SINGLE source that computes three families of events, consumed
+  identically by the Graphs page, the Analyse page and the new
+  `GET /meteohub/events` endpoint:
+  - **Value crossings** between the same quantity Indoor vs Outdoor (temperature,
+    humidity, pressure): the instant the two become equal, with interpolated time
+    and value and the crossing *sense* (outdoor rising above / falling below).
+  - **Trend changes** of each outdoor quantity (rising / flat / falling), detected
+    on hourly means with short segments merged, so noise is not turned into events.
+  - **Regime changes**: several trend changes clustered in time, even across
+    different quantities (a temporal relation, never inferred from graphical
+    proximity).
+- **Graphs: "Événements détectés" panel and markers.** The former crossings box is
+  now an events timeline listing crossings and regime changes chronologically.
+  Crossings are drawn as diamonds at the estimated value; regime changes as
+  full-height guides; each marker's number links it to the list. The Graphs page no
+  longer computes crossings in the browser: it consumes `/meteohub/events`, so the
+  calculation is written once and shared with the analyses.
+- **Analyse: blocks enriched with events.** "Tendance de température" and "Tendance
+  barométrique" now state the last trend change ("changement de tendance vers
+  HH:MM : baisse → hausse"); "Chaleur et humidex" states the last combined
+  temperature/humidity regime change; "Comportement thermique du bâtiment" and
+  "Modèle d'inertie intérieure" state the last Indoor/Outdoor temperature crossing
+  (groundwork for thermal-inertia work).
+- **Sticky Météo header and filters (both tabs).** The header and filter bar of the
+  Météo pages (Graphs and Analyse) stay pinned while scrolling, so the filters are
+  reachable anywhere on the page and changing one no longer jumps back to the top.
+
+### Changed
+
+- Crossings are now computed server-side (C++ `MeteoEvents`) instead of in the
+  browser, gaining the crossing sense and a single shared implementation. The em
+  dash of the original spec examples is replaced by "-" per the punctuation rule.
+
 ## [0.53.0] - 2026-09-15
 
 ### Added
