@@ -273,7 +273,15 @@ QJsonObject AnalyticsModule::eventsJson(qint64 hours) const {
     if (hours < 1) hours = 24;
     o["hours"] = static_cast<double>(hours);
     const qint64 now  = QDateTime::currentSecsSinceEpoch();
-    const qint64 from = now - hours * 3600;
+    // Fenêtre AFFICHÉE (ce que montre le graphe) vs fenêtre d'ANALYSE. La détection
+    // de tendance a besoin de quelques heures de contexte AVANT un basculement pour
+    // l'établir ; sans marge, un même événement apparaît en 12 h mais pas en 6 h
+    // (sa tendance amont tombe hors cadre). On calcule donc sur une fenêtre élargie
+    // d'une marge de contexte, puis on ne renvoie QUE les événements tombant dans la
+    // fenêtre affichée : le résultat devient stable quel que soit le zoom.
+    const qint64 displayFrom  = now - hours * 3600;
+    const qint64 kLead        = 6 * 3600; // marge de contexte amont (assez pour établir une tendance)
+    const qint64 analysisFrom = displayFrom - kLead;
 
     // Métadonnées d'affichage par grandeur : le calcul, lui, est dans MeteoEvents.
     struct M { const char* key; const char* name; const char* unit; int dec; };
@@ -293,8 +301,8 @@ QJsonObject AnalyticsModule::eventsJson(qint64 hours) const {
 
     const SampleStore* out = m_storeOut ? m_storeOut.get() : nullptr;
     const SampleStore* in  = m_store ? m_store.get() : nullptr;
-    const Series outS = (out && out->isOpen()) ? out->range(from, now) : Series();
-    const Series inS  = (in  && in->isOpen())  ? in->range(from, now)  : Series();
+    const Series outS = (out && out->isOpen()) ? out->range(analysisFrom, now) : Series();
+    const Series inS  = (in  && in->isOpen())  ? in->range(analysisFrom, now)  : Series();
 
     // Croisements IN/OUT (nécessitent les deux caches), triés chronologiquement.
     QVector<QPair<qint64, QJsonObject>> crossPairs;
@@ -309,6 +317,7 @@ QJsonObject AnalyticsModule::eventsJson(qint64 hours) const {
             const auto cr = meteo::detectCrossings(key, outS.timestamps(), *oCh,
                                                    inS.timestamps(), *iCh);
             for (const auto& c : cr) {
+                if (c.ts < displayFrom) continue; // calculé sur la marge, affiché dans la fenêtre
                 QJsonObject j;
                 j["metric"]      = key;
                 j["metric_name"] = QString::fromUtf8(m.name);
@@ -324,7 +333,8 @@ QJsonObject AnalyticsModule::eventsJson(qint64 hours) const {
         if (oCh && !outS.isEmpty()) {
             const auto tc = meteo::detectTrendChanges(key, outS.timestamps(), *oCh);
             for (const auto& t : tc) {
-                allTrend.push_back(t);
+                allTrend.push_back(t); // tout garder : contexte du regroupement en régimes
+                if (t.ts < displayFrom) continue; // n'exposer que la fenêtre affichée
                 QJsonObject j;
                 j["metric"]      = key;
                 j["metric_name"] = QString::fromUtf8(m.name);
@@ -345,6 +355,7 @@ QJsonObject AnalyticsModule::eventsJson(qint64 hours) const {
     // Changements de régime : plusieurs changements de tendance rapprochés.
     QJsonArray regimeChanges;
     for (const auto& rc : meteo::detectRegimeChanges(allTrend)) {
+        if (rc.ts < displayFrom) continue; // regroupé avec le contexte, affiché dans la fenêtre
         QJsonObject j;
         j["ts"] = static_cast<double>(rc.ts);
         QJsonArray parts;

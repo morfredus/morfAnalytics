@@ -3,6 +3,18 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.55.1] - 2026-09-15
+
+### Fixed
+
+- **Events were zoom-dependent.** A regime/trend change could appear on the 12 h
+  view but not on 6 h, because trend detection ran only on the displayed window and
+  a change near the window's start lacked the prior context needed to establish its
+  trend. `/meteohub/events` now detects on an analysis window padded with a
+  context margin (6 h) before the displayed window, and returns only the events
+  falling inside the displayed window, so the same real event shows consistently
+  across zoom levels. Crossings are filtered the same way.
+
 ## [0.55.0] - 2026-09-15
 
 ### Changed
