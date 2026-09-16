@@ -3,6 +3,18 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.55.2] - 2026-09-16
+
+### Fixed
+
+- **Data-completeness now infers the real cadence instead of assuming 1 sample per
+  minute.** The météo probe moved from 1 measurement/min (1440/day) to 1 every
+  5 min (288/day), so a full day of 221 samples was wrongly shown as 15 % complete
+  instead of ~77 %. `analyzeDataQuality` now derives the expected count per day
+  from the **median interval** between consecutive samples (86400 / cadence),
+  robust to gaps and to any future cadence change; the note states the detected
+  cadence. Exposes `cadence_minutes`.
+
 ## [0.55.1] - 2026-09-15
 
 ### Fixed

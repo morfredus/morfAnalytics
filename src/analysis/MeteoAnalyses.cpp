@@ -899,8 +899,27 @@ QJsonObject analyzeDataQuality(const AnalysisContext& ctx, const QJsonObject& pa
     if (days.isEmpty())
         return failure(QStringLiteral("aucune donnée exploitable"));
 
-    // MeteoHub enregistre une mesure par minute, soit 1440 par journee pleine.
-    constexpr int kExpectedPerDay = 1440;
+    // Nombre de mesures attendues par jour, INFERE des donnees et non fige : la
+    // sonde est passee de 1 mesure/min (1440/j) a 1 toutes les 5 min (288/j), et
+    // la cadence pourra encore changer. On la deduit du delta MEDIAN entre mesures
+    // consecutives (robuste aux trous), puis attendues/j = 86400 / cadence.
+    const QVector<qint64>& tsv = series.timestamps();
+    qint64 medianSec = 60;                       // repli prudent : cadence 1 min
+    if (tsv.size() >= 10) {
+        QVector<qint64> deltas;
+        deltas.reserve(tsv.size());
+        for (int i = 1; i < tsv.size(); ++i) {
+            const qint64 dt = tsv[i] - tsv[i - 1];
+            if (dt > 0) deltas.append(dt);
+        }
+        if (!deltas.isEmpty()) {
+            std::sort(deltas.begin(), deltas.end());
+            medianSec = deltas[deltas.size() / 2];
+        }
+    }
+    if (medianSec <= 0) medianSec = 60;
+    const int expectedPerDay = qBound(1, static_cast<int>(qRound(86400.0 / medianSec)), 86400);
+
     int completeDays = 0, partialDays = 0;
     QJsonArray gaps;
 
@@ -913,7 +932,7 @@ QJsonObject analyzeDataQuality(const AnalysisContext& ctx, const QJsonObject& pa
     for (const DayAggregate& d : days) {
         if (d.date == firstDay || d.date == lastDay)
             continue;
-        const double ratio = static_cast<double>(d.tCount) / kExpectedPerDay;
+        const double ratio = static_cast<double>(d.tCount) / expectedPerDay;
         if (ratio >= 0.95) completeDays++;
         else {
             partialDays++;
@@ -932,13 +951,16 @@ QJsonObject analyzeDataQuality(const AnalysisContext& ctx, const QJsonObject& pa
     o["complete_days"]  = completeDays;
     o["partial_days"]   = partialDays;
     o["incomplete"]     = gaps;
-    o["expected_per_day"] = kExpectedPerDay;
+    o["expected_per_day"] = expectedPerDay;
+    const int cadenceMin = qMax(1, static_cast<int>(qRound(medianSec / 60.0)));
+    o["cadence_minutes"] = cadenceMin;
     o["note"] = QStringLiteral(
-        "Une journée est dite complète au-delà de 95 % des 1440 mesures "
-        "attendues. Les journées de début et de fin de fenêtre sont exclues, "
-        "étant tronquées par la fenêtre elle-même. Une journée partielle n'est "
-        "pas une anomalie : coupure, carte SD absente ou capteur en défaut "
-        "suffisent à l'expliquer.");
+        "Une journée est dite complète au-delà de 95 % des %1 mesures attendues "
+        "(cadence détectée : ~%2 min entre deux mesures). Les journées de début et "
+        "de fin de fenêtre sont exclues, étant tronquées par la fenêtre elle-même. "
+        "Une journée partielle n'est pas une anomalie : coupure, carte SD absente "
+        "ou capteur en défaut suffisent à l'expliquer.")
+        .arg(expectedPerDay).arg(cadenceMin);
     return o;
 }
 
