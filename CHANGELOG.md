@@ -3,7 +3,35 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
-## [0.55.2] - 2026-09-16
+## [0.56.0] - 2026-09-21
+
+### Added
+
+- **Forecast reliability, read over several time windows.** The "forecast vs
+  observed" card grew from a single-window snapshot into a proper follow-up of
+  forecast quality. `analyzeForecastVsObserved` now reports, over 3/7/14/30-day
+  sliding windows (overridable via `params["windows"]`), per temperature type
+  (min/max): signed bias, mean absolute error (MAE), RMSE, and a 0..100
+  reliability index derived from the MAE. Each window states the days compared,
+  the date span and the coverage; the card also carries a reference headline and
+  an evolution table across windows.
+- **Reliability index and qualitative labels, honest and documented.** New pure,
+  isolated-testable module `ForecastQuality` holds the whole quality maths:
+  `accumulate` (bias/MAE/RMSE, non-finite errors ignored, never counted as zero),
+  a linear-and-clamped `reliabilityIndex` (`100 * max(0, 1 - mae/maxMae)`, chosen
+  to be trivial to explain rather than mathematically fancy), and a prudent
+  `reliabilityLabel` with centralised MAE thresholds. The MAE in °C stays the
+  reference indicator; the /100 index is only a re-reading of it, never a
+  probability of a correct forecast. A window under three compared days is
+  reported as "insufficient data" instead of an invented value.
+
+### Changed
+
+- **The card now has a dedicated renderer** with a clear hierarchy: MAE brought
+  forward, index kept secondary, values grouped by category (period, max, min,
+  quality), explicit units, an evolution table and collapsible details (last day
+  compared, RMSE). Robust to missing forecasts, incomplete observations and
+  implausible temperatures (guarded, not silently averaged in).
 
 ### Fixed
 

@@ -35,6 +35,18 @@ une barre en haut de page :
   les filtres restent **collants** en haut de la page : accessibles quel que soit le
   défilement, et changer un filtre ne renvoie plus tout en haut.
 
+  La carte **Prévu vs observé** va plus loin qu'une photo du dernier jour : elle
+  suit la qualité des prévisions sur plusieurs fenêtres (3, 7, 14 et 30 jours).
+  Pour chaque fenêtre et chaque type de température (min/max), elle donne le biais
+  (écart moyen signé), l'**erreur absolue moyenne (MAE) en °C** - l'indicateur de
+  référence - la RMSE, et un **indice de fiabilité sur 100** qui n'est qu'une
+  relecture de la MAE (jamais une probabilité de prévision correcte). En dessous de
+  trois journées complètes comparées, la carte affiche « Données insuffisantes »
+  plutôt qu'une valeur inventée. Un tableau d'évolution compare les fenêtres entre
+  elles ; les détails (dernier jour comparé, RMSE) sont regroupés dans des blocs
+  dépliables. La formule de l'indice et les seuils qualitatifs vivent, documentés,
+  dans `ForecastQuality` (fonctions pures, testées isolément).
+
 - **Graphiques** - « montre-moi ce qui s'est réellement passé » : l'évolution des
   grandeurs dans le temps. Les grandeurs à afficher se choisissent par **cases à
   cocher** (sélection libre : une seule, un couple température + humidité, humidité +

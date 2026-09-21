@@ -983,6 +983,13 @@ QByteArray HttpServer::landingPage() {
   .progress { height: .45rem; margin-top: .5rem; border-radius: 999px;
               overflow: hidden; background: color-mix(in srgb, var(--muted) 18%, transparent); }
   .progress span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+  /* Prévu vs observé : en-tête de fiabilité. La MAE (référence) est mise en
+     avant ; l'indice sur 100 reste secondaire (couleur atténuée, plus petit). */
+  .fc-headline { margin-bottom: .4rem; }
+  .fc-headline .fc-mae { margin: .55rem 0 .15rem; font-size: 1.05rem; }
+  .fc-headline .fc-index { margin: 0; color: var(--muted); font-size: .92rem; }
+  .fc-detail h4 { margin: 1.1rem 0 .35rem; font-size: .95rem; }
+  .fc-detail h4:first-child { margin-top: .6rem; }
   details.maintenance { margin-top: 2.5rem; }
   details.maintenance > summary { cursor: pointer; color: var(--muted); font-size: .8rem;
                                   text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
@@ -1252,13 +1259,10 @@ const FIELD_LABELS = {
   fit_r2: 'Qualité du modèle (R²)', rmse: 'Erreur type (RMSE °C)',
   mae: 'Erreur moyenne (MAE °C)', predicted_indoor: 'Intérieur prédit',
   residual: 'Écart réel / modèle', model_quality: 'Fiabilité du modèle',
-  // Prévu vs observé (forecast_vs_observed)
-  days_evaluated: 'Jours comparés', forecasts_in_cache: 'Prévisions en cache',
-  tmin_bias: 'Biais T° min (obs − prévu)', tmin_mae: 'Erreur moyenne T° min',
-  tmax_bias: 'Biais T° max (obs − prévu)', tmax_mae: 'Erreur moyenne T° max',
-  last_day: 'Dernier jour comparé', last_forecast_min: 'Prévu min (dernier jour)',
-  last_forecast_max: 'Prévu max (dernier jour)', last_observed_min: 'Observé min (dernier jour)',
-  last_observed_max: 'Observé max (dernier jour)', last_forecast_desc: 'Prévision (dernier jour)'
+  // Prévu vs observé (forecast_vs_observed) : rendu dédié (renderer), ces libellés
+  // ne servent que de repli. Les indicateurs détaillés vivent désormais par
+  // fenêtre (windows[]) et par type de température (tmin/tmax).
+  forecasts_in_cache: 'Prévisions en cache', incomplete_days: 'Jours incomplets'
 };
 
 const humanLabel = (key) => FIELD_LABELS[key] || key
@@ -1580,6 +1584,97 @@ const RENDERERS = {
       ['Amplitude moyenne', num(r.amplitude, '°C')],
       ['Fenêtre', `${r.days_counted} jours`]
     ]) + notes(r);
+  },
+
+  // Prévu vs observé : la MAE en °C est l'indicateur de référence (mise en avant),
+  // l'indice sur 100 n'en est qu'une relecture (secondaire). On regroupe par
+  // catégories (période, T° max, T° min, qualité) et on montre l'évolution de la
+  // fiabilité par fenêtre, sans jamais afficher d'indice sur trop peu de jours.
+  forecast_vs_observed: (r) => {
+    const h = r.headline || {};
+    const windows = r.windows || [];
+    const fmtC = (v) => (v === undefined || v === null) ? '-' : `${v} °C`;
+    const qualityClass = (q) => q === 'Fiabilité élevée' ? 'ok'
+      : q === 'Fiabilité correcte' ? 'ok'
+      : q === 'Fiabilité variable' ? 'warn'
+      : q === 'Fiabilité faible' ? 'bad' : 'warn';
+
+    // En-tête : qualité + erreur moyenne (référence) + indice (secondaire).
+    let head;
+    if (h.sufficient) {
+      const n = h.evaluated || 0;
+      head = `<div class="fc-headline">
+        <span class="badge ${qualityClass(h.quality)}">${esc(h.quality)}</span>
+        <p class="fc-mae">Erreur moyenne : <b>${num(h.mae, '°C')}</b></p>
+        <p class="fc-index">Fiabilité historique estimée : ${h.index}/100</p>
+        <p class="note">Analyse basée sur ${n} journée${n > 1 ? 's' : ''} complète${n > 1 ? 's' : ''}
+          (fenêtre de ${h.window_days} jours). L'indice est calculé à partir des écarts entre les
+          prévisions archivées et les observations réelles ; il ne constitue pas une garantie pour
+          les prévisions futures.</p>
+      </div>`;
+    } else {
+      const n = h.evaluated || 0;
+      head = `<div class="fc-headline"><span class="badge warn">Données insuffisantes</span>
+        <p class="note">Données insuffisantes pour calculer un indice de fiabilité${
+          n ? ` (${n} journée${n > 1 ? 's' : ''} comparée${n > 1 ? 's' : ''}, il en faut au moins 3)` : ''}.</p></div>`;
+    }
+
+    // Détail groupé de la fenêtre de référence : T° max puis T° min.
+    const ref = windows.find((w) => w.days_requested === h.window_days);
+    let detail = '';
+    if (ref) {
+      const period = dl([
+        ['Jours comparés', ref.evaluated],
+        ['Période', (ref.date_from && ref.date_to)
+          ? `du ${fmtDay(ref.date_from)} au ${fmtDay(ref.date_to)}` : null],
+        ['Couverture', ref.coverage_pct !== undefined ? `${ref.coverage_pct} %` : null]
+      ]);
+      const tempTable = (t, label) => {
+        if (!t || t.mae === undefined) return '';
+        return `<h4>${label}</h4>` + dl([
+          ['Prévision moyenne', fmtC(t.forecast_mean)],
+          ['Observation moyenne', fmtC(t.observed_mean)],
+          ['Biais moyen (obs − prévu)', signed(t.bias, '°C')],
+          ['Erreur absolue moyenne (MAE)', fmtC(t.mae)]
+        ]);
+      };
+      detail = `<div class="fc-detail"><h4>Période analysée</h4>${period}` +
+        tempTable(ref.tmax, 'Température maximale') +
+        tempTable(ref.tmin, 'Température minimale') + `</div>`;
+    }
+
+    // Évolution de la fiabilité : une ligne par fenêtre (3/7/14/30 jours).
+    const evoRows = windows.map((w) => {
+      const ov = w.overall || {};
+      const mae = ov.mae === undefined ? '—' : num(ov.mae, '°C');
+      const idx = ov.index === undefined ? '—' : `${ov.index}/100`;
+      const used = w.evaluated === 0 ? 'aucune donnée'
+        : `${w.evaluated} j${w.coverage_pct !== undefined ? ` (${w.coverage_pct} %)` : ''}`;
+      return `<tr><td>${w.days_requested} jours</td><td>${mae}</td><td>${idx}</td>
+        <td>${esc(ov.quality || '—')}</td><td>${used}</td></tr>`;
+    }).join('');
+    const evo = `<details class="analysis-detail" open><summary>Évolution de la fiabilité</summary>
+      <div class="scroll"><table>
+        <thead><tr><th>Fenêtre</th><th>Erreur (MAE)</th><th>Indice</th><th>Lecture</th><th>Jours utilisés</th></tr></thead>
+        <tbody>${evoRows}</tbody></table></div>
+      <p class="note">L'erreur moyenne (MAE) en °C est la référence ; l'indice sur 100 n'en est
+        qu'une relecture. Une comparaison entre fenêtres reste descriptive : un faible nombre de
+        jours ne permet pas de conclure à une tendance.</p></details>`;
+
+    // Dernier jour comparé (repère concret, détail dépliable).
+    let last = '';
+    if (r.last_day) {
+      const k = String(r.last_day);
+      const iso = `${k.slice(0, 4)}-${k.slice(4, 6)}-${k.slice(6, 8)}`;
+      last = `<details class="analysis-detail"><summary>Dernier jour comparé</summary>` + dl([
+        ['Date', fmtDay(iso)],
+        ['Prévu (min / max)', `${fmtC(r.last_forecast_min)} / ${fmtC(r.last_forecast_max)}`],
+        ['Observé (min / max)', `${fmtC(r.last_observed_min)} / ${fmtC(r.last_observed_max)}`]
+      ]) + (r.last_forecast_desc ? `<p class="note">Prévision annoncée : ${esc(r.last_forecast_desc)}</p>` : '') +
+        `</details>`;
+    }
+
+    return head + detail + evo + last + notes(r);
   },
 
   data_quality: (r) => {

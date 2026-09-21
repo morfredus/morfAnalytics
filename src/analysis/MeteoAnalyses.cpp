@@ -6,6 +6,7 @@
 
 #include "morfanalytics/analysis/AnalysisRegistry.h"
 #include "morfanalytics/analysis/MeteoMath.h"
+#include "morfanalytics/analysis/ForecastQuality.h"
 #include "morfanalytics/analysis/MeteoEvents.h"
 #include "morfanalytics/data/SampleStore.h"
 #include "morfanalytics/data/ForecastStore.h"
@@ -1656,57 +1657,177 @@ QJsonObject analyzeIndoorComfort(const AnalysisContext& ctx, const QJsonObject&)
     return o;
 }
 
-// Prévu vs observé (étape 9) : compare, jour par jour, la prévision « day-ahead »
-// archivée (émise la veille) aux mesures OUT réellement observées ce jour-là.
-// Source primaire = OUT (les observations) ; les prévisions viennent du cache
-// dédié ctx.forecastStore. On mesure le biais et l'erreur moyenne sur les
-// températures min/max. Contexte Out ; sans repli croisé.
+// Prévu vs observé (étape 9, enrichie) : compare, jour par jour, la prévision
+// « day-ahead » archivée (émise la veille) aux mesures OUT réellement observées
+// ce jour-là, puis résume la qualité des prévisions sur PLUSIEURS fenêtres
+// glissantes (3/7/14/30 jours). Source primaire = OUT (les observations) ; les
+// prévisions viennent du cache dédié ctx.forecastStore.
+//
+// On mesure, par fenêtre et par type de température (min/max) : le biais (écart
+// moyen signé), la MAE (erreur absolue moyenne, l'indicateur de RÉFÉRENCE), la
+// RMSE, et un indice de fiabilité 0..100 DÉRIVÉ de la MAE (voir ForecastQuality,
+// où vivent la formule et les seuils). L'indice n'est qu'une relecture de la MAE :
+// jamais une probabilité de prévision correcte. Contexte Out ; sans repli croisé.
+
+// Une comparaison d'un jour cible : la prévision archivée face aux extrêmes
+// réellement observés. Calculée une seule fois sur la plus large fenêtre, puis
+// filtrée par date pour chaque fenêtre (évite de relire le cache à répétition).
+struct DayCompare {
+    quint32 day = 0;     // jour cible AAAAMMJJ
+    double  fcMin = 0, fcMax = 0;   // prévu
+    double  obsMin = 0, obsMax = 0; // observé
+    double  eMin = 0, eMax = 0;     // écart = observé - prévu
+};
+
+// Une température min/max n'a de sens physique que dans une plage raisonnable.
+// Au-delà, c'est une valeur aberrante (capteur, parasite) qu'on écarte plutôt
+// que de laisser polluer les extrêmes du jour.
+static bool plausibleTemp(double v) {
+    return std::isfinite(v) && v > -60.0 && v < 60.0;
+}
+
+// AAAAMMJJ -> "YYYY-MM-DD" (ISO), pour que l'interface formate la date elle-même.
+static QString dayKeyToIso(quint32 key) {
+    if (key == 0) return QString();
+    const int y = int(key / 10000), m = int((key / 100) % 100), d = int(key % 100);
+    return QDate(y, m, d).toString(Qt::ISODate);
+}
+
+// Construit le résumé JSON d'une fenêtre de `days` jours se terminant à `dayTo`,
+// à partir des comparaisons déjà calculées (`all`).
+static QJsonObject buildForecastWindow(int days, const QVector<DayCompare>& all,
+                                       quint32 dayFrom, quint32 dayTo) {
+    std::vector<double> eMin, eMax, eAll;
+    double fcMinSum = 0, obsMinSum = 0, fcMaxSum = 0, obsMaxSum = 0;
+    int evaluated = 0;
+    quint32 first = 0, last = 0;
+    for (const DayCompare& dc : all) {
+        if (dc.day < dayFrom || dc.day > dayTo) continue; // clés AAAAMMJJ : ordre = date
+        eMin.push_back(dc.eMin);
+        eMax.push_back(dc.eMax);
+        eAll.push_back(dc.eMin);
+        eAll.push_back(dc.eMax);
+        fcMinSum += dc.fcMin; obsMinSum += dc.obsMin;
+        fcMaxSum += dc.fcMax; obsMaxSum += dc.obsMax;
+        if (first == 0 || dc.day < first) first = dc.day;
+        if (dc.day > last) last = dc.day;
+        ++evaluated;
+    }
+
+    QJsonObject w;
+    w["days_requested"] = days;
+    w["evaluated"]      = evaluated;
+    // Couverture : part des jours de la fenêtre pour lesquels une comparaison a
+    // pu être faite. En dessous de 100 %, des jours manquent (pas de prévision
+    // archivée, ou observations incomplètes) : la lecture doit rester prudente.
+    w["coverage_pct"]   = int(std::round(100.0 * evaluated / std::max(1, days)));
+    w["date_from"]      = dayKeyToIso(first);
+    w["date_to"]        = dayKeyToIso(last);
+
+    const bool sufficient = evaluated >= forecastq::kMinDaysForIndex;
+    w["sufficient"] = sufficient;
+
+    const forecastq::ErrorStats sMin = forecastq::accumulate(eMin);
+    const forecastq::ErrorStats sMax = forecastq::accumulate(eMax);
+    const forecastq::ErrorStats sAll = forecastq::accumulate(eAll);
+
+    auto tempBlock = [&](const forecastq::ErrorStats& s, double fcSum, double obsSum) {
+        QJsonObject t;
+        if (s.valid()) {
+            t["forecast_mean"] = round1(fcSum / s.count);
+            t["observed_mean"] = round1(obsSum / s.count);
+            t["bias"] = round1(s.bias);   // signé : + = observé plus chaud que prévu
+            t["mae"]  = round1(s.mae);    // indicateur de référence
+            t["rmse"] = round1(s.rmse);   // secondaire : pèse les gros écarts
+            if (sufficient)
+                t["index"] = forecastq::reliabilityIndex(s.mae);
+        }
+        return t;
+    };
+
+    if (evaluated > 0) {
+        w["tmin"] = tempBlock(sMin, fcMinSum, obsMinSum);
+        w["tmax"] = tempBlock(sMax, fcMaxSum, obsMaxSum);
+        QJsonObject overall;
+        overall["mae"]     = round1(sAll.mae);
+        overall["rmse"]    = round1(sAll.rmse);
+        overall["quality"] = forecastq::reliabilityLabel(sAll.mae, evaluated);
+        if (sufficient)
+            overall["index"] = forecastq::reliabilityIndex(sAll.mae);
+        w["overall"] = overall;
+    } else {
+        // Aucune comparaison : état explicite, aucune valeur inventée.
+        QJsonObject overall;
+        overall["quality"] = QStringLiteral("Données insuffisantes");
+        w["overall"] = overall;
+    }
+    return w;
+}
+
 QJsonObject analyzeForecastVsObserved(const AnalysisContext& ctx, const QJsonObject& params) {
     if (!ctx.forecastStore)
         return failure(QStringLiteral("collecte des prévisions inactive (aucun cache prévisions)"));
     if (!ctx.store || !ctx.store->isOpen())
         return failure(QStringLiteral("données extérieures (OUT) indisponibles"));
 
-    int days = params.value(QStringLiteral("days")).toInt(14);
-    if (days < 2)  days = 2;
-    if (days > 60) days = 60;
+    // Fenêtres glissantes, de la plus courte à la plus longue. Surchargeables
+    // (params["windows"]) pour les tests, sinon les paliers de lecture usuels.
+    QVector<int> windows;
+    const QJsonArray reqW = params.value(QStringLiteral("windows")).toArray();
+    if (!reqW.isEmpty()) {
+        for (const QJsonValue& v : reqW) {
+            const int d = v.toInt();
+            if (d >= 2 && d <= 90) windows.push_back(d);
+        }
+    }
+    if (windows.isEmpty())
+        windows = {3, 7, 14, 30};
+    std::sort(windows.begin(), windows.end());
+    const int widest = windows.last();
 
     auto dayKeyOf = [](qint64 ts) -> quint32 {
         const QDate d = QDateTime::fromSecsSinceEpoch(ts).date();
         return static_cast<quint32>(d.year() * 10000 + d.month() * 100 + d.day());
     };
-    const quint32 dayTo   = dayKeyOf(ctx.now);
-    const quint32 dayFrom = dayKeyOf(ctx.now - static_cast<qint64>(days) * 86400);
+    const quint32 dayTo = dayKeyOf(ctx.now);
 
-    const QVector<ForecastEntry> forecasts = ctx.forecastStore->range(dayFrom, dayTo);
+    // On lit le cache une seule fois, sur la plus large fenêtre. Une fenêtre de N
+    // jours = aujourd'hui et les N-1 jours précédents, d'où le (widest - 1).
+    const quint32 widestFrom = dayKeyOf(ctx.now - static_cast<qint64>(widest - 1) * 86400);
+    const QVector<ForecastEntry> forecasts = ctx.forecastStore->range(widestFrom, dayTo);
     if (forecasts.isEmpty())
         return failure(QStringLiteral("aucune prévision archivée sur la fenêtre"));
 
-    int evaluated = 0;
-    double sumBiasMin = 0, sumAbsMin = 0, sumBiasMax = 0, sumAbsMax = 0;
-    // Détail du dernier jour évalué (le plus récent avec prévision ET observation).
+    // Comparaisons jour par jour, calculées une seule fois.
+    QVector<DayCompare> compares;
+    int incompleteObs = 0;  // jours prévus mais pas (encore) assez observés
     quint32 lastDay = 0;
     double lastFcMin = 0, lastFcMax = 0, lastObsMin = 0, lastObsMax = 0;
     QString lastDesc;
 
     for (const ForecastEntry& fc : forecasts) {
+        if (!plausibleTemp(fc.tempMin) || !plausibleTemp(fc.tempMax))
+            continue;  // prévision aberrante : on ne compare pas contre du bruit
         // Observations OUT de ce jour cible (même découpage AAAAMMJJ que l'appareil).
         const Series obs = ctx.store->rangeForDay(fc.targetDay);
         const QVector<double>* obsT = obs.channel(kTemp);
-        if (!obsT) continue;
+        if (!obsT) { incompleteObs++; continue; }
         double obsMin = 1e9, obsMax = -1e9; int obsN = 0;
-        for (double v : *obsT) if (Series::isValid(v)) {
+        for (double v : *obsT) if (Series::isValid(v) && plausibleTemp(v)) {
             if (v < obsMin) obsMin = v;
             if (v > obsMax) obsMax = v;
             obsN++;
         }
-        if (obsN < 3) continue; // journée pas (encore) assez observée
+        if (obsN < 3) { incompleteObs++; continue; } // journée pas (encore) assez observée
 
-        const double eMin = obsMin - fc.tempMin; // >0 : observé plus chaud que prévu
-        const double eMax = obsMax - fc.tempMax;
-        sumBiasMin += eMin; sumAbsMin += std::abs(eMin);
-        sumBiasMax += eMax; sumAbsMax += std::abs(eMax);
-        evaluated++;
+        DayCompare dc;
+        dc.day = fc.targetDay;
+        dc.fcMin = fc.tempMin; dc.fcMax = fc.tempMax;
+        dc.obsMin = obsMin;    dc.obsMax = obsMax;
+        dc.eMin = obsMin - fc.tempMin; // >0 : observé plus chaud que prévu
+        dc.eMax = obsMax - fc.tempMax;
+        compares.push_back(dc);
+
         if (fc.targetDay >= lastDay) {
             lastDay = fc.targetDay;
             lastFcMin = fc.tempMin; lastFcMax = fc.tempMax;
@@ -1715,18 +1836,49 @@ QJsonObject analyzeForecastVsObserved(const AnalysisContext& ctx, const QJsonObj
         }
     }
 
-    if (evaluated == 0)
+    if (compares.isEmpty())
         return failure(QStringLiteral(
             "prévisions archivées mais aucun jour encore observé pour comparer "
             "(laisser passer au moins une journée complète)"));
 
     QJsonObject o;
-    o["days_evaluated"]     = evaluated;
     o["forecasts_in_cache"] = forecasts.size();
-    o["tmin_bias"] = round1(sumBiasMin / evaluated); // signé : + = observé plus chaud
-    o["tmin_mae"]  = round1(sumAbsMin / evaluated);
-    o["tmax_bias"] = round1(sumBiasMax / evaluated);
-    o["tmax_mae"]  = round1(sumAbsMax / evaluated);
+    o["incomplete_days"]    = incompleteObs;
+
+    // Résumé par fenêtre (l'évolution de la fiabilité dans le temps se lit en
+    // parcourant ce tableau, de la plus courte à la plus large).
+    QJsonArray windowsJson;
+    QJsonObject reference;  // la plus large fenêtre SUFFISANTE : le titre du cartouche
+    int referenceDays = 0;
+    for (int days : windows) {
+        const quint32 from = dayKeyOf(ctx.now - static_cast<qint64>(days - 1) * 86400);
+        const QJsonObject w = buildForecastWindow(days, compares, from, dayTo);
+        windowsJson.append(w);
+        if (w.value("sufficient").toBool()) {
+            reference = w;
+            referenceDays = days;
+        }
+    }
+    o["windows"] = windowsJson;
+
+    // En-tête : indice + MAE + qualité de la fenêtre de référence. Si AUCUNE
+    // fenêtre n'atteint le minimum de jours, on l'annonce sans inventer d'indice.
+    QJsonObject headline;
+    if (referenceDays > 0) {
+        const QJsonObject ov = reference.value("overall").toObject();
+        headline["sufficient"]  = true;
+        headline["window_days"] = referenceDays;
+        headline["evaluated"]   = reference.value("evaluated").toInt();
+        headline["mae"]         = ov.value("mae").toDouble();
+        headline["index"]       = ov.value("index").toInt();
+        headline["quality"]     = ov.value("quality").toString();
+    } else {
+        headline["sufficient"] = false;
+        headline["evaluated"]  = compares.size();
+        headline["quality"]    = QStringLiteral("Données insuffisantes");
+    }
+    o["headline"] = headline;
+
     if (lastDay > 0) {
         o["last_day"]          = static_cast<double>(lastDay);
         o["last_forecast_min"] = round1(lastFcMin);
@@ -1736,11 +1888,14 @@ QJsonObject analyzeForecastVsObserved(const AnalysisContext& ctx, const QJsonObj
         if (!lastDesc.isEmpty())
             o["last_forecast_desc"] = lastDesc;
     }
+
     o["note"] = QStringLiteral(
         "Prévu vs observé : compare la prévision archivée la veille (day-ahead) aux "
-        "mesures extérieures réellement relevées. Le biais est l'écart moyen signé "
-        "(positif = observé plus chaud que prévu) ; le MAE est l'erreur absolue "
-        "moyenne sur la fenêtre. Nécessite au moins une journée complète observée.");
+        "mesures extérieures réellement relevées. La MAE (erreur absolue moyenne, en "
+        "°C) est l'indicateur de référence ; le biais est l'écart moyen signé "
+        "(positif = observé plus chaud que prévu). L'indice sur 100 n'est qu'une "
+        "relecture de la MAE sur l'historique observé, jamais une garantie pour les "
+        "prévisions à venir.");
     return o;
 }
 
