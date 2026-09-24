@@ -52,8 +52,13 @@ une barre en haut de page :
   cocher** (sélection libre : une seule, un couple température + humidité, humidité +
   pression, ou les trois). Une seule cochée donne la vue mono (Intérieur/Extérieur en
   deux couleurs) ; plusieurs se superposent, chacune avec son axe et sa couleur.
-  Source **Intérieur / Extérieur / les deux** sur le même axe de temps, période de
-  6 h à 30 j. Échelles de valeurs à
+  Source **Intérieur / Extérieur / les deux** sur le même axe de temps. Période
+  **glissante** (6 h, 12 h, 24 h, 3 j, 7 j, 30 j, fin = maintenant) ou **libre** : le
+  bouton « Période libre » ouvre deux champs jour + heure (pas de 5 min, cadence de
+  la sonde) pour revenir consulter un moment passé ; bornes arrondies à 5 min,
+  étendue d'un an au plus, période mémorisée par le navigateur. Les endpoints
+  `/meteohub/series` et `/meteohub/events` acceptent `from`/`to` (secondes epoch)
+  en plus de `hours`. Échelles de valeurs à
   gauche et à droite (dynamiques), infobulle au survol donnant la valeur de chaque
   courbe à l'instant pointé. Les points sont reliés (une coupure = un vrai silence du
   capteur, jamais un simple espacement de cadence). En-tête et filtres **collants**,

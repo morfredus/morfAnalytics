@@ -24,6 +24,8 @@ namespace morfanalytics::pages {
 //   - Échelles de valeurs à GAUCHE et à DROITE (dynamiques).
 //   - Survol : ligne-guide + infobulle donnant, à l'instant pointé, la valeur de
 //     chaque courbe.
+//   - Période : glissante (6 h ... 30 j, fin = maintenant) ou LIBRE (jour + heure
+//     de début et de fin, pas de 5 min) pour revenir consulter un moment passé.
 //
 // Page autonome (SVG côté navigateur, sans CDN), données via /meteohub/series
 // et /meteohub/events (croisements, tendances, régimes : source commune).
@@ -57,6 +59,13 @@ select{background:#242830;border:1px solid var(--line);color:var(--ink);border-r
 .periods{display:flex;gap:.3rem;flex-wrap:wrap}
 .pbtn{background:#242830;border:1px solid var(--line);color:var(--soft);border-radius:8px;padding:.3rem .7rem;cursor:pointer;font-size:.85rem}
 .pbtn:hover{border-color:var(--accent);color:var(--ink)}.pbtn.on{background:#2a3350;border-color:var(--accent);color:#fff}
+/* Période libre : deux champs jour + heure (pas de 5 min), repliés tant que
+   l'on reste sur les périodes glissantes. */
+.custom{display:flex;flex-wrap:wrap;gap:.5rem .8rem;align-items:center;width:100%;margin-top:-.3rem}
+.custom[hidden]{display:none}
+.custom input{background:#242830;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.25rem .45rem;font-size:.85rem;color-scheme:dark}
+.custom .err{color:var(--warn);font-size:.82rem}
+.rangelbl{color:var(--muted);font-size:.85rem;font-variant-numeric:tabular-nums}
 .chart{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.9rem 1.1rem;margin:1rem 0}
 .chart h3{margin:0 0 .1rem;font-size:1.05rem}
 .plot{position:relative;margin-top:.5rem}
@@ -91,6 +100,14 @@ select{background:#242830;border:1px solid var(--line);color:var(--ink);border-r
   <span class="metricsel"><span class="mslabel">Afficher</span><span id="metricsel"></span></span>
   <label>Source&nbsp;<select id="source"></select></label>
   <div class="periods" id="periods"></div>
+  <div class="custom" id="custom" hidden>
+    <label>Du&nbsp;<input type="datetime-local" id="cfrom" step="300"></label>
+    <label>au&nbsp;<input type="datetime-local" id="cto" step="300"></label>
+    <button class="pbtn" id="capply" type="button">Afficher</button>
+    <button class="pbtn" id="cnow" type="button" title="Termine la période à l'instant présent">Jusqu'à maintenant</button>
+    <span class="err" id="cerr"></span>
+  </div>
+  <span class="rangelbl" id="rangelbl"></span>
 </div>
 </div></div>
 <div class="wrap">
@@ -110,6 +127,10 @@ const METRICS=[
 const METRIC_KEYS=METRICS.map(m=>m[0]);
 const SOURCES=[["out","Extérieur"],["in","Intérieur"],["both","Intérieur + Extérieur"]];
 const PERIODS=[["6 h",6],["12 h",12],["24 h",24],["3 j",72],["7 j",168],["30 j",720]];
+// Période libre : bornes jour + heure alignées sur 5 min (la cadence de la sonde),
+// au plus un an (même plafond que le serveur).
+const STEP_S=300;
+const MAX_SPAN_S=366*86400;
 // Mono-grandeur : IN et OUT en deux couleurs distinctes (jamais de pointillés).
 const SRC_COL={out:"#6f9bff",in:"#e6a54e"};
 // Cadence ~5 min (10 au boot) : plancher de connexion des points.
@@ -129,10 +150,17 @@ function loadMetrics(){
   if(old&&METRIC_KEYS.indexOf(old)>=0) return [old];
   return ["temp"];
 }
+// Période libre mémorisée (une consultation passée reste affichée au rechargement).
+function loadRange(){
+  try{const r=JSON.parse(localStorage.getItem(LS+"range")||"null");
+    if(r&&r.from>0&&r.to-r.from>=300)return {from:+r.from,to:+r.to};}catch(e){}
+  return null;
+}
 let S={
   metrics:loadMetrics(),  // sous-ensemble de METRIC_KEYS, dans l'ordre de METRICS
   source:localStorage.getItem(LS+"source")||"out",
-  hours:+(localStorage.getItem(LS+"hours")||24)
+  hours:+(localStorage.getItem(LS+"hours")||24),
+  range:loadRange()   // null = période glissante ; sinon {from,to} en secondes epoch
 };
 let G=null; // géométrie + séries du graphe courant, pour le survol
 
@@ -157,9 +185,14 @@ function fmtNum(v,d){return v.toLocaleString("fr-FR",{minimumFractionDigits:d,ma
 //     déduite d'une proximité graphique).
 const REGIME_COL="#9aa7ff";
 let EV={crossings:[],trend_changes:[],regime_changes:[]}; // dernier lot d'événements
+// Paramètres de fenêtre communs aux deux endpoints : bornes explicites en période
+// libre, sinon durée glissante (le serveur ancre alors la fin sur « maintenant »).
+function windowQuery(){
+  return S.range ? "from="+S.range.from+"&to="+S.range.to : "hours="+S.hours;
+}
 function metricColor(k){return metricDef(k)[4];}
 function fetchEvents(){
-  return fetch("/meteohub/events?hours="+S.hours)
+  return fetch("/meteohub/events?"+windowQuery())
     .then(r=>r.json()).catch(()=>({crossings:[],trend_changes:[],regime_changes:[]}));
 }
 
@@ -278,7 +311,7 @@ function buildChart(series, axes, events, scaleByMetric){
 }
 
 function fetchSeries(ctx, metric){
-  return fetch("/meteohub/series?ctx="+ctx+"&metric="+metric+"&hours="+S.hours)
+  return fetch("/meteohub/series?ctx="+ctx+"&metric="+metric+"&"+windowQuery())
     .then(r=>r.json()).catch(()=>({ts:[],v:[],bucket_s:0}));
 }
 
@@ -421,7 +454,47 @@ function renderMetricSel(){
 }
 renderMetricSel();
 $("#source").innerHTML=SOURCES.map(s=>'<option value="'+s[0]+'"'+(s[0]===S.source?" selected":"")+'>'+s[1]+'</option>').join("");
-$("#periods").innerHTML=PERIODS.map(p=>'<button class="pbtn'+(p[1]===S.hours?" on":"")+'" data-h="'+p[1]+'">'+p[0]+'</button>').join("");
+$("#periods").innerHTML=PERIODS.map(p=>'<button class="pbtn" data-h="'+p[1]+'">'+p[0]+'</button>').join("")+
+  '<button class="pbtn" data-h="custom">Période libre</button>';
+
+// --- Période libre (jour + heure, pas de 5 min) ------------------------------
+// Les champs datetime-local travaillent en heure LOCALE sans fuseau
+// ("2026-09-24T14:35") : conversion explicite dans les deux sens, jamais via
+// toISOString() qui repasserait en UTC et décalerait l'affichage.
+function floor5(ts){return Math.floor(ts/STEP_S)*STEP_S;}
+function toLocalInput(ts){const d=new Date(ts*1000);const p=n=>String(n).padStart(2,"0");
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"T"+p(d.getHours())+":"+p(d.getMinutes());}
+function fromLocalInput(v){if(!v)return NaN;const d=new Date(v);return isNaN(d)?NaN:Math.floor(d.getTime()/1000);}
+function fmtRange(r){const o={weekday:"short",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"};
+  return new Date(r.from*1000).toLocaleString("fr-FR",o)+" → "+new Date(r.to*1000).toLocaleString("fr-FR",o);}
+
+// Pré-remplit les champs : la période libre en cours, sinon la fenêtre glissante
+// affichée (on part de ce que l'on voit pour l'ajuster).
+function fillCustom(){
+  const now=floor5(Date.now()/1000)+STEP_S;
+  const r=S.range||{from:floor5(now-S.hours*3600),to:now};
+  $("#cfrom").value=toLocalInput(r.from); $("#cto").value=toLocalInput(r.to);
+  $("#cfrom").max=$("#cto").max=toLocalInput(now);
+  $("#cerr").textContent="";
+}
+function syncPeriodUI(){
+  document.querySelectorAll("#periods .pbtn").forEach(x=>x.classList.toggle("on",
+    S.range ? x.dataset.h==="custom" : +x.dataset.h===S.hours));
+  $("#rangelbl").textContent = S.range ? "Période affichée : "+fmtRange(S.range) : "";
+}
+function applyCustom(){
+  const f=fromLocalInput($("#cfrom").value), t=fromLocalInput($("#cto").value);
+  const err=$("#cerr");
+  if(!isFinite(f)||!isFinite(t)){err.textContent="Renseignez le jour et l'heure de début et de fin.";return;}
+  const from=floor5(f), to=floor5(t);
+  if(to-from<STEP_S){err.textContent="La fin doit être au moins 5 min après le début.";return;}
+  if(to-from>MAX_SPAN_S){err.textContent="La période est limitée à un an.";return;}
+  err.textContent="";
+  S.range={from,to}; localStorage.setItem(LS+"range",JSON.stringify(S.range));
+  syncPeriodUI(); draw();
+}
+if(S.range){ $("#custom").hidden=false; fillCustom(); }
+syncPeriodUI();
 
 $("#metricsel").addEventListener("change",e=>{
   const cb=e.target.closest("input[data-m]"); if(!cb)return;
@@ -433,13 +506,25 @@ $("#metricsel").addEventListener("change",e=>{
 });
 $("#source").addEventListener("change",e=>{S.source=e.target.value;localStorage.setItem(LS+"source",S.source);draw();});
 $("#periods").addEventListener("click",e=>{const b=e.target.closest(".pbtn");if(!b)return;
-  S.hours=+b.dataset.h;localStorage.setItem(LS+"hours",S.hours);
-  document.querySelectorAll(".pbtn").forEach(x=>x.classList.toggle("on",+x.dataset.h===S.hours));draw();});
+  if(b.dataset.h==="custom"){
+    // Ouvre (ou referme) le choix des bornes ; rien n'est redessiné avant « Afficher ».
+    const c=$("#custom"); c.hidden=!c.hidden; if(!c.hidden) fillCustom();
+    return;
+  }
+  // Retour à une période glissante : la période libre est oubliée.
+  S.hours=+b.dataset.h; S.range=null;
+  localStorage.setItem(LS+"hours",S.hours); localStorage.removeItem(LS+"range");
+  $("#custom").hidden=true; syncPeriodUI(); draw();});
+$("#capply").addEventListener("click",applyCustom);
+$("#custom").addEventListener("keydown",e=>{if(e.key==="Enter")applyCustom();});
+$("#cnow").addEventListener("click",()=>{$("#cto").value=toLocalInput(floor5(Date.now()/1000)+STEP_S);applyCustom();});
 
 fetch("/status").then(r=>r.json()).then(s=>{const b=$("#vb");if(b)b.textContent=s.version?"v"+s.version:"";}).catch(()=>{});
 
 draw();
-setInterval(draw, 60000);
+// Rafraîchissement : utile tant que la fenêtre touche le présent. Une période
+// libre entièrement passée ne bouge plus, inutile de la recharger chaque minute.
+setInterval(()=>{ if(!S.range || S.range.to>Date.now()/1000-STEP_S) draw(); }, 60000);
 </script>
 </body></html>)PAGE";
     return QByteArray(kPage);

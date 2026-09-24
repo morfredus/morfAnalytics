@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.56.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.57.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -238,7 +238,11 @@ fenêtre des normales), `heating_base` / `cooling_base` (degrés-jours), `ctx`
 
 Au-delà des analyses, un onglet **Graphiques** (`/meteohub/graphs`) trace les
 séries dans le temps - température, humidité, pression, source intérieur /
-extérieur / les deux - en complément visuel des analyses.
+extérieur / les deux - en complément visuel des analyses. La fenêtre est soit
+glissante (6 h à 30 j, jusqu'à maintenant), soit libre : le bouton « Période
+libre » fixe un jour + heure de début et de fin, au pas de 5 min, pour revenir sur
+un moment passé. `/meteohub/series` et `/meteohub/events` acceptent `from`/`to`
+(secondes epoch) en plus de `hours`.
 
 Une analyse qui manque d'historique ne renvoie pas d'erreur HTTP : elle répond
 `ok: false` avec la raison et la profondeur requise. Le service a bien répondu ;

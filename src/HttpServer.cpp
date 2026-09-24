@@ -85,6 +85,36 @@ QByteArray canonicalPath(QByteArray rawPath) {
         rawPath.chop(1);
     return rawPath;
 }
+
+// Fenêtre temporelle demandée par l'onglet Graphiques, en secondes epoch.
+// Deux formes acceptées :
+//   - `from` + `to` : période de consultation choisie librement (jour + heure) ;
+//   - `hours`       : période glissante [maintenant - hours, maintenant] (défaut 24 h).
+// Une période libre invalide (vide, inversée, plus courte que 5 min) retombe sur la
+// forme glissante plutôt que de renvoyer une erreur : le graphe reste lisible.
+// L'étendue est plafonnée à un an pour borner la lecture du cache sur le Pi.
+void resolveWindow(const QByteArray& rawPath, qint64* from, qint64* to) {
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    int hours = 24;
+    qint64 f = 0, t = 0;
+    const int qm = rawPath.indexOf('?');
+    if (qm >= 0) {
+        const QUrlQuery q(QString::fromUtf8(rawPath.mid(qm + 1)));
+        const int h = q.queryItemValue(QStringLiteral("hours")).toInt();
+        if (h > 0) hours = h;
+        f = q.queryItemValue(QStringLiteral("from")).toLongLong();
+        t = q.queryItemValue(QStringLiteral("to")).toLongLong();
+    }
+    constexpr qint64 kMinSpan = 5 * 60;
+    constexpr qint64 kMaxSpan = 366LL * 24 * 3600;
+    if (f > 0 && t - f >= kMinSpan) {
+        *to = t;
+        *from = (t - f > kMaxSpan) ? t - kMaxSpan : f;
+        return;
+    }
+    *to = now;
+    *from = now - static_cast<qint64>(hours) * 3600;
+}
 } // namespace
 
 HttpServer::HttpServer(ServiceConfig config, ModuleRegistry* registry, QObject* parent)
@@ -477,23 +507,20 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             ? qobject_cast<AnalyticsModule*>(m_registry->firstOfType(QStringLiteral("analytics")))
             : nullptr;
         QString ctx = QStringLiteral("out"), metric = QStringLiteral("temp");
-        int hours = 24;
         const int qm = rawPath.indexOf('?');
         if (qm >= 0) {
             const QUrlQuery q(QString::fromUtf8(rawPath.mid(qm + 1)));
             const QString c = q.queryItemValue(QStringLiteral("ctx"));
             const QString m = q.queryItemValue(QStringLiteral("metric"));
-            const int h = q.queryItemValue(QStringLiteral("hours")).toInt();
             if (c == QLatin1String("in") || c == QLatin1String("out")) ctx = c;
             if (m == QLatin1String("temp") || m == QLatin1String("hum") || m == QLatin1String("pres")) metric = m;
-            if (h > 0) hours = h;
         }
+        qint64 from = 0, to = 0;
+        resolveWindow(rawPath, &from, &to);
         if (!module) {
             out = toJson(QJsonObject{{"ts", QJsonArray{}}, {"v", QJsonArray{}},
                                      {"error", QStringLiteral("aucun module 'analytics' configuré")}});
         } else {
-            const qint64 to = QDateTime::currentSecsSinceEpoch();
-            const qint64 from = to - static_cast<qint64>(hours) * 3600;
             out = toJson(module->seriesJson(ctx, metric, from, to, 400));
         }
     } else if (path == "/meteohub/events") {
@@ -504,20 +531,15 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         auto* module = m_registry
             ? qobject_cast<AnalyticsModule*>(m_registry->firstOfType(QStringLiteral("analytics")))
             : nullptr;
-        int hours = 24;
-        const int qm = rawPath.indexOf('?');
-        if (qm >= 0) {
-            const QUrlQuery q(QString::fromUtf8(rawPath.mid(qm + 1)));
-            const int h = q.queryItemValue(QStringLiteral("hours")).toInt();
-            if (h > 0) hours = h;
-        }
+        qint64 from = 0, to = 0;
+        resolveWindow(rawPath, &from, &to);
         if (!module) {
             out = toJson(QJsonObject{{"crossings", QJsonArray{}},
                                      {"trend_changes", QJsonArray{}},
                                      {"regime_changes", QJsonArray{}},
                                      {"error", QStringLiteral("aucun module 'analytics' configuré")}});
         } else {
-            out = toJson(module->eventsJson(hours));
+            out = toJson(module->eventsJson(from, to));
         }
     } else if (path == "/sitewatch") {
         const QJsonArray reports = siteWatchReports();

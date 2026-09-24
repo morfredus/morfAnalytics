@@ -81,7 +81,9 @@ Deux briques PURES (pas d'état, pas de cache, pas de JSON), testables isolémen
   réimplémenté différemment d'un consommateur à l'autre.
 
 `MeteoAnalyses` enregistre le jeu d'analyses météo dans `AnalysisRegistry`
-(générique) ; `AnalyticsModule::eventsJson()` assemble le JSON des événements.
+(générique) ; `AnalyticsModule::eventsJson(from, to)` assemble le JSON des événements
+de la fenêtre `[from, to]` (glissante ou période libre), calculés avec une marge de
+contexte amont de 6 h mais jamais au-delà de `to`.
 
 ### `Service` (façade)
 

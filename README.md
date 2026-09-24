@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.56.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.57.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -189,7 +189,10 @@ Optional parameters: `days` (window depth), `window_days` (normals half-window),
 
 Beyond the analyses, a **Graphiques** tab (`/meteohub/graphs`) plots the series
 over time - temperature, humidity, pressure, source indoor / outdoor / both - as
-the visual counterpart to the analyses.
+the visual counterpart to the analyses. The window is either sliding (6 h to
+30 d, ending now) or free: a "Période libre" button picks a start and end day +
+time, in 5-minute steps, to look back at a past moment. `/meteohub/series` and
+`/meteohub/events` accept `from`/`to` (epoch seconds) as well as `hours`.
 
 An analysis short of history does not return an HTTP error: it answers
 `ok: false` with the reason and the required depth. The service did answer; it is

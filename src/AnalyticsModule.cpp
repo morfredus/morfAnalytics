@@ -268,18 +268,25 @@ QJsonObject AnalyticsModule::seriesJson(const QString& ctx, const QString& metri
     return o;
 }
 
-QJsonObject AnalyticsModule::eventsJson(qint64 hours) const {
+QJsonObject AnalyticsModule::eventsJson(qint64 from, qint64 to) const {
     QJsonObject o;
-    if (hours < 1) hours = 24;
-    o["hours"] = static_cast<double>(hours);
-    const qint64 now  = QDateTime::currentSecsSinceEpoch();
+    if (to <= from) {
+        to = QDateTime::currentSecsSinceEpoch();
+        from = to - 24 * 3600;
+    }
+    o["from"]  = static_cast<double>(from);
+    o["to"]    = static_cast<double>(to);
+    o["hours"] = static_cast<double>(to - from) / 3600.0;
     // Fenêtre AFFICHÉE (ce que montre le graphe) vs fenêtre d'ANALYSE. La détection
     // de tendance a besoin de quelques heures de contexte AVANT un basculement pour
     // l'établir ; sans marge, un même événement apparaît en 12 h mais pas en 6 h
     // (sa tendance amont tombe hors cadre). On calcule donc sur une fenêtre élargie
     // d'une marge de contexte, puis on ne renvoie QUE les événements tombant dans la
     // fenêtre affichée : le résultat devient stable quel que soit le zoom.
-    const qint64 displayFrom  = now - hours * 3600;
+    // La borne haute n'est plus forcément « maintenant » : une période consultée
+    // dans le passé s'arrête à `to`, sans lire ni exposer ce qui suit.
+    const qint64 now          = to;
+    const qint64 displayFrom  = from;
     const qint64 kLead        = 6 * 3600; // marge de contexte amont (assez pour établir une tendance)
     const qint64 analysisFrom = displayFrom - kLead;
 

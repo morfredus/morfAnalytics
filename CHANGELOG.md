@@ -3,6 +3,23 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.57.0] - 2026-09-24
+
+### Added
+
+- **Free consultation period on the weather Graphs page.** Besides the sliding
+  periods (6 h to 30 d, ending now), a "Période libre" button opens two
+  day + time fields with a 5-minute step to look back at any past moment. Bounds
+  are floored to 5 minutes, the span is capped at one year, a reversed or too
+  short range is rejected with a plain message, and the chosen period is
+  remembered by the browser. A fully past period is no longer reloaded every
+  minute.
+- `/meteohub/series` and `/meteohub/events` accept explicit `from`/`to` bounds
+  (epoch seconds) in addition to `hours`; an invalid pair falls back to the
+  sliding window. `eventsJson` now takes `(from, to)` and reports both bounds;
+  event detection still uses its upstream context margin, and never reads past
+  `to`.
+
 ## [0.56.0] - 2026-09-21
 
 ### Added
