@@ -80,6 +80,18 @@ Deux briques PURES (pas d'état, pas de cache, pas de JSON), testables isolémen
   tendance vers HH:MM », « dernier croisement… »). Écrit une fois, jamais
   réimplémenté différemment d'un consommateur à l'autre.
 
+- `MeteoQuality` : la **qualification** des mesures, jamais leur destruction.
+  Trois motifs cumulables : hors bornes physiques, pic isolé (le point s'écarte de
+  ses deux voisins proches, dans le même sens, au-delà d'un seuil, alors qu'ils
+  s'accordent entre eux : un aller-retour, pas une transition), période exclue par
+  une annotation « sonde hors conditions » (extérieur seulement). Seuils prudents
+  centralisés dans `QualityRules`. Elle est posée sur les deux caches comme
+  **qualificateur de lecture** (`SampleStore::setQualifier`) : `range()` et
+  `rangeForDay()` lisent une fenêtre élargie de 30 min, qualifient (points écartés
+  -> NaN), puis recadrent ; `rangeRaw()` rend la donnée brute. Toutes les analyses
+  et `MeteoEvents` voient ainsi des séries qualifiées sans rien changer à leur
+  code ; `seriesJson` renvoie en plus la liste des points écartés (`suspects`).
+
 `MeteoAnalyses` enregistre le jeu d'analyses météo dans `AnalysisRegistry`
 (générique) ; `AnalyticsModule::eventsJson(from, to)` assemble le JSON des événements
 de la fenêtre `[from, to]` (glissante ou période libre), calculés avec une marge de

@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.57.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.58.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -193,6 +193,15 @@ the visual counterpart to the analyses. The window is either sliding (6 h to
 30 d, ending now) or free: a "Période libre" button picks a start and end day +
 time, in 5-minute steps, to look back at a past moment. `/meteohub/series` and
 `/meteohub/events` accept `from`/`to` (epoch seconds) as well as `hours`.
+
+**Measurement quality (0.58.0).** Measurements are never modified in the cache:
+they are **qualified on read**. A point outside physical bounds, an isolated
+spike (off from both neighbours, same direction, then back) or an outdoor
+measurement taken during a period annotated "sonde hors conditions" (probe
+brought indoors, on the bench) is kept out of the analyses and event detection.
+The Graphs tab shows it as a grey cross, with its reason on hover and a summary
+under the chart. Thresholds are cautious: better let a small artefact through
+than drop a real fast change.
 
 An analysis short of history does not return an HTTP error: it answers
 `ok: false` with the reason and the required depth. The service did answer; it is

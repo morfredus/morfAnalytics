@@ -26,6 +26,10 @@ namespace morfanalytics::pages {
 //     chaque courbe.
 //   - Période : glissante (6 h ... 30 j, fin = maintenant) ou LIBRE (jour + heure
 //     de début et de fin, pas de 5 min) pour revenir consulter un moment passé.
+//   - Qualité : les points écartés par MeteoQuality (pic isolé, hors bornes,
+//     période annotée « sonde hors conditions ») ne font pas partie des courbes
+//     ni des échelles ; ils sont montrés en croix grises, motif au survol, avec
+//     un bilan sous le graphique. Rien n'est effacé : c'est la donnée brute.
 //
 // Page autonome (SVG côté navigateur, sans CDN), données via /meteohub/series
 // et /meteohub/events (croisements, tendances, régimes : source commune).
@@ -66,6 +70,8 @@ select{background:#242830;border:1px solid var(--line);color:var(--ink);border-r
 .custom input{background:#242830;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.25rem .45rem;font-size:.85rem;color-scheme:dark}
 .custom .err{color:var(--warn);font-size:.82rem}
 .rangelbl{color:var(--muted);font-size:.85rem;font-variant-numeric:tabular-nums}
+.qual{color:var(--muted);font-size:.82rem;margin-top:.35rem}
+.qual b{color:var(--soft);font-weight:600}
 .chart{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.9rem 1.1rem;margin:1rem 0}
 .chart h3{margin:0 0 .1rem;font-size:1.05rem}
 .plot{position:relative;margin-top:.5rem}
@@ -99,6 +105,7 @@ select{background:#242830;border:1px solid var(--line);color:var(--ink);border-r
 <div class="controls">
   <span class="metricsel"><span class="mslabel">Afficher</span><span id="metricsel"></span></span>
   <label>Source&nbsp;<select id="source"></select></label>
+  <label class="mk" title="Points écartés des analyses (pic isolé, hors bornes, sonde hors conditions)"><input type="checkbox" id="showsusp"> Points écartés</label>
   <div class="periods" id="periods"></div>
   <div class="custom" id="custom" hidden>
     <label>Du&nbsp;<input type="datetime-local" id="cfrom" step="300"></label>
@@ -160,8 +167,11 @@ let S={
   metrics:loadMetrics(),  // sous-ensemble de METRIC_KEYS, dans l'ordre de METRICS
   source:localStorage.getItem(LS+"source")||"out",
   hours:+(localStorage.getItem(LS+"hours")||24),
-  range:loadRange()   // null = période glissante ; sinon {from,to} en secondes epoch
+  range:loadRange(),   // null = période glissante ; sinon {from,to} en secondes epoch
+  showSuspects:localStorage.getItem(LS+"susp")!=="0"  // croix grises (défaut : visibles)
 };
+// Motifs de qualification (MeteoQuality) -> libellés.
+const QUAL_LABEL={pic:"pic isolé",bornes:"hors bornes",exclusion:"sonde hors conditions"};
 let G=null; // géométrie + séries du graphe courant, pour le survol
 
 const $=s=>document.querySelector(s);
@@ -275,6 +285,24 @@ function buildChart(series, axes, events, scaleByMetric){
     let last=null;for(let i=s.ts.length-1;i>=0;i--){if(s.vals[i]!==null&&s.vals[i]!==undefined){last=[s.ts[i],s.vals[i]];break;}}
     if(last)paths+='<circle cx="'+X(last[0]).toFixed(1)+'" cy="'+Ys(s,last[1]).toFixed(1)+'" r="3" fill="'+s.color+'"'+op+'/>';});
 
+  // Points écartés par la qualification : croix grises, à leur valeur d'origine
+  // (ramenée dans le cadre si elle sort de l'échelle, qui ne les prend pas en
+  // compte). Motif au survol (infobulle native du SVG).
+  let susp="";
+  if(S.showSuspects){
+    series.forEach(s=>{(s.suspects||[]).forEach(p=>{
+      const t=p[0],v=p[1],why=QUAL_LABEL[p[2]]||p[2];
+      if(t<t0||t>t1)return;
+      const x=X(t);let y=Ys(s,v);
+      y=Math.max(pT+3,Math.min(H-pB-3,y));
+      susp+='<g stroke="#8a929e" stroke-width="1.6"><title>'+fmtFull(t)+' · '+s.label+' '+
+        v.toFixed(s.dec)+' '+s.unit+' écarté : '+why+'</title>'+
+        '<line x1="'+(x-3.5).toFixed(1)+'" y1="'+(y-3.5).toFixed(1)+'" x2="'+(x+3.5).toFixed(1)+'" y2="'+(y+3.5).toFixed(1)+'"/>'+
+        '<line x1="'+(x-3.5).toFixed(1)+'" y1="'+(y+3.5).toFixed(1)+'" x2="'+(x+3.5).toFixed(1)+'" y2="'+(y-3.5).toFixed(1)+'"/>'+
+        '<rect x="'+(x-5).toFixed(1)+'" y="'+(y-5).toFixed(1)+'" width="10" height="10" fill="transparent" stroke="none"/></g>';
+    });});
+  }
+
   // Marqueurs d'événements : croisement = guide vertical + losange à la valeur
   // estimée ; changement de régime = ligne pleine hauteur en pointillés. Le numéro
   // relie chaque marqueur à sa ligne dans l'encart « Événements détectés ».
@@ -307,7 +335,7 @@ function buildChart(series, axes, events, scaleByMetric){
   G={W,H,pL,pR,pT,pB,t0,t1,series};
 
   return '<svg id="gsvg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img">'+
-    grid+labels+paths+marks+'<g id="hoverg"></g>'+xt0+xt1+'</svg>';
+    grid+labels+paths+susp+marks+'<g id="hoverg"></g>'+xt0+xt1+'</svg>';
 }
 
 function fetchSeries(ctx, metric){
@@ -323,7 +351,8 @@ function renderSingle(byCtx, key){
   let [mn,mx]=minMax(allv); if(!isFinite(mn)){mn=0;mx=1;}
   let pad=(mx-mn)*0.08; if(pad<(md[3]?0.5:1))pad=(md[3]?0.5:1); const smin=mn-pad, smax=mx+pad;
   const series=ctxs.map(c=>({ts:byCtx[c].ts||[],vals:byCtx[c].v||[],color:SRC_COL[c],width:2,
-    bucket:byCtx[c].bucket_s||0,smin,smax,label:srcLabel(c),unit:md[2],dec:md[3]}));
+    bucket:byCtx[c].bucket_s||0,smin,smax,label:srcLabel(c),unit:md[2],dec:md[3],
+    suspects:byCtx[c].suspects||[]}));
   const axes=[{min:smin,max:smax,dec:md[3],side:'L',col:AXIS_MUTED},
               {min:smin,max:smax,dec:md[3],side:'R',col:AXIS_MUTED}];
   const legend=ctxs.map(c=>'<span class="k"><span class="sw" style="border-color:'+SRC_COL[c]+'"></span>'+srcLabel(c)+'</span>').join("");
@@ -334,7 +363,7 @@ function renderSingle(byCtx, key){
   const events = assembleEvents([key], showCross, showRegime);
   const box = (showCross||showRegime) ? eventsBox(events) : "";
   return '<div class="chart"><h3>'+md[1]+" ("+md[2]+")"+'</h3><div class="plot">'+buildChart(series,axes,events,scaleByMetric)+
-    '<div class="tip" hidden></div></div><div class="legend">'+legend+'</div>'+noteFor(false)+'</div>'+box;
+    '<div class="tip" hidden></div></div><div class="legend">'+legend+'</div>'+qualityLine(series)+noteFor(false)+'</div>'+box;
 }
 
 // Vue MULTI-GRANDEURS : un seul graphe, les grandeurs SÉLECTIONNÉES superposées
@@ -353,7 +382,8 @@ function renderAll(data, metrics){
     ctxs.forEach(c=>{const inner=(c==="in");
       series.push({ts:data[key][c].ts||[],vals:data[key][c].v||[],color:col,
         width:inner?1.4:2.2,opacity:inner?0.55:1,bucket:data[key][c].bucket_s||0,smin,smax,
-        label:m[1]+(S.source==="both"?(inner?" (int)":" (ext)"):""),unit:m[2],dec:m[3]});});
+        label:m[1]+(S.source==="both"?(inner?" (int)":" (ext)"):""),unit:m[2],dec:m[3],
+        suspects:data[key][c].suspects||[]});});
     const range=nf(mn,m[3])+"–"+nf(mx,m[3])+" "+m[2];
     ctxs.forEach(c=>{const inner=(c==="in");
       legend.push('<span class="k"><span class="sw" style="border-color:'+col+';opacity:'+(inner?0.55:1)+';border-top-width:'+(inner?2:3)+'px"></span>'+
@@ -367,7 +397,18 @@ function renderAll(data, metrics){
   const body = series.length ? buildChart(series,axes,events,scaleByMetric) : '<div class="muted">Pas encore de mesure sur cette période.</div>';
   const box = (series.length && (showCross||showRegime)) ? eventsBox(events) : "";
   return '<div class="chart"><h3>'+title+'</h3><div class="plot">'+body+'<div class="tip" hidden></div></div>'+
-    '<div class="legend">'+legend.join("")+'</div>'+noteFor(true)+'</div>'+box;
+    '<div class="legend">'+legend.join("")+'</div>'+qualityLine(series)+noteFor(true)+'</div>'+box;
+}
+
+// Bilan qualité de la période : points écartés par motif (toutes courbes).
+function qualityLine(series){
+  const n={pic:0,bornes:0,exclusion:0};let total=0;
+  series.forEach(s=>(s.suspects||[]).forEach(p=>{total++;n[p[2]]=(n[p[2]]||0)+1;}));
+  if(!total) return '<p class="qual">Qualité : aucun point écarté sur la période.</p>';
+  const parts=Object.keys(n).filter(k=>n[k]).map(k=>n[k]+' '+(QUAL_LABEL[k]||k));
+  return '<p class="qual">Qualité : <b>'+total+' point'+(total>1?'s':'')+' écarté'+(total>1?'s':'')+
+    '</b> des courbes et des analyses ('+parts.join(', ')+'). Données brutes conservées'+
+    (S.showSuspects?' ; croix grises sur le graphique.':'.')+'</p>';
 }
 
 function noteFor(multi){
@@ -439,7 +480,7 @@ function draw(){
     EV=ev||{crossings:[],trend_changes:[],regime_changes:[]};
     const data={};
     list.forEach(x=>{(data[x.m]=data[x.m]||{})[x.c]=x.r;});
-    metrics.forEach(m=>{const d=data[m]=data[m]||{};["out","in"].forEach(c=>{if(!d[c])d[c]={ts:[],v:[],bucket_s:0};});});
+    metrics.forEach(m=>{const d=data[m]=data[m]||{};["out","in"].forEach(c=>{if(!d[c])d[c]={ts:[],v:[],bucket_s:0,suspects:[]};});});
     charts.innerHTML = (metrics.length===1) ? renderSingle(data[metrics[0]], metrics[0]) : renderAll(data, metrics);
     attachHover();
   });
@@ -505,6 +546,9 @@ $("#metricsel").addEventListener("change",e=>{
   draw();
 });
 $("#source").addEventListener("change",e=>{S.source=e.target.value;localStorage.setItem(LS+"source",S.source);draw();});
+$("#showsusp").checked=S.showSuspects;
+$("#showsusp").addEventListener("change",e=>{S.showSuspects=e.target.checked;
+  localStorage.setItem(LS+"susp",S.showSuspects?"1":"0");draw();});
 $("#periods").addEventListener("click",e=>{const b=e.target.closest(".pbtn");if(!b)return;
   if(b.dataset.h==="custom"){
     // Ouvre (ou referme) le choix des bornes ; rien n'est redessiné avant « Afficher ».

@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.57.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.58.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -243,6 +243,16 @@ glissante (6 h à 30 j, jusqu'à maintenant), soit libre : le bouton « Période
 libre » fixe un jour + heure de début et de fin, au pas de 5 min, pour revenir sur
 un moment passé. `/meteohub/series` et `/meteohub/events` acceptent `from`/`to`
 (secondes epoch) en plus de `hours`.
+
+**Qualité des mesures (0.58.0).** Les mesures ne sont jamais modifiées dans le
+cache : elles sont **qualifiées à la lecture**. Un point hors bornes physiques,
+un pic isolé (écart aux deux voisins, dans le même sens, qui revient ensuite) ou
+une mesure extérieure prise pendant une période annotée « sonde hors
+conditions » (sonde rentrée à l'intérieur, sur l'établi) est écarté des
+analyses et de la détection d'événements. Les Graphiques le montrent en croix
+grise, avec son motif au survol et un bilan sous la courbe. Seuils prudents :
+mieux vaut laisser passer un petit artefact que d'écarter une vraie variation
+rapide.
 
 Une analyse qui manque d'historique ne renvoie pas d'erreur HTTP : elle répond
 `ok: false` avec la raison et la profondeur requise. Le service a bien répondu ;

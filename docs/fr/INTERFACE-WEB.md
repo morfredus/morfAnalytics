@@ -63,6 +63,15 @@ une barre en haut de page :
   courbe à l'instant pointé. Les points sont reliés (une coupure = un vrai silence du
   capteur, jamais un simple espacement de cadence). En-tête et filtres **collants**,
   comme la page Analyse.
+  - **Qualité** (0.58.0) : les points écartés par `MeteoQuality` (pic isolé, hors
+    bornes, période annotée « sonde hors conditions ») ne participent ni aux
+    courbes, ni aux échelles, ni aux événements. Ils sont dessinés en **croix
+    grises** à leur valeur d'origine (ramenée dans le cadre si besoin), motif au
+    survol ; la case « Points écartés » les masque. Une ligne « Qualité : N points
+    écartés (… pic isolé, … sonde hors conditions) » résume la période affichée.
+    La donnée brute reste intacte. Pour écarter une période où la sonde n'était
+    pas dehors, ajouter une annotation de type « Sonde hors conditions » sur la
+    page Analyses : l'effet est immédiat.
   - **Événements détectés** : sous le graphique, un encart chronologique. Les
     événements sont calculés côté serveur par une **source commune** (`MeteoEvents`),
     partagée avec la page Analyse et l'endpoint `/meteohub/events` (jamais recalculés

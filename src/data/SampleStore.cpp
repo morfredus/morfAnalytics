@@ -311,6 +311,14 @@ bool SampleStore::purgeAll() {
 }
 
 Series SampleStore::range(qint64 fromTs, qint64 toTs) const {
+    if (!m_qualifier)
+        return rangeRaw(fromTs, toTs);
+    Series padded = rangeRaw(fromTs - kQualifyPadS, toTs + kQualifyPadS);
+    m_qualifier(padded);
+    return padded.slice(fromTs, toTs);
+}
+
+Series SampleStore::rangeRaw(qint64 fromTs, qint64 toTs) const {
     Series series(m_channels);
 
     QStringList cols;
@@ -340,7 +348,7 @@ Series SampleStore::range(qint64 fromTs, qint64 toTs) const {
     return series;
 }
 
-Series SampleStore::rangeForDay(quint32 dayKey) const {
+Series SampleStore::rangeForDayRaw(quint32 dayKey) const {
     Series series(m_channels);
     QStringList cols;
     for (const QString& ch : m_channels)
@@ -365,6 +373,20 @@ Series SampleStore::rangeForDay(quint32 dayKey) const {
         series.append(q.value(0).toLongLong(), values);
     }
     return series;
+}
+
+Series SampleStore::rangeForDay(quint32 dayKey) const {
+    Series day = rangeForDayRaw(dayKey);
+    if (!m_qualifier || day.isEmpty())
+        return day;
+    // Qualification sur la journee elargie (voisins des points de minuit), puis
+    // recadrage sur les bornes horaires de la journee telle que la source l'a
+    // decoupee.
+    const qint64 first = day.timestamps().first();
+    const qint64 last = day.timestamps().last();
+    Series padded = rangeRaw(first - kQualifyPadS, last + kQualifyPadS);
+    m_qualifier(padded);
+    return padded.slice(first, last);
 }
 
 qint64 SampleStore::count() const {

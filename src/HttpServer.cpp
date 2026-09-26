@@ -2091,7 +2091,8 @@ if (ctxOverrideEl) ctxOverrideEl.addEventListener('change', () => loadAnalyses()
 // mesurés. On les saisit ici et le service les conserve à part du cache.
 const TYPE_LABELS = {
   orage: 'Orage', pluie: 'Pluie', vent_fort: 'Vent fort', grele: 'Grêle',
-  neige: 'Neige', brouillard: 'Brouillard', gel: 'Gel', autre: 'Autre'
+  neige: 'Neige', brouillard: 'Brouillard', gel: 'Gel',
+  sonde_hors_conditions: 'Sonde hors conditions (mesures écartées)', autre: 'Autre'
 };
 const typeLabel = (t) => TYPE_LABELS[t] || t.replace(/_/g, ' ')
   .replace(/\b\w/g, (c) => c.toUpperCase());

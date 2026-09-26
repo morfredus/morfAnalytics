@@ -8,6 +8,7 @@
 #include "morfanalytics/IModule.h"
 #include "morfanalytics/analysis/AnalysisRegistry.h"
 #include "morfanalytics/data/AnnotationStore.h"
+#include "morfanalytics/analysis/MeteoQuality.h"
 #include <QString>
 #include <QJsonArray>
 #include <memory>
@@ -126,7 +127,13 @@ public:
     // Supprime une observation par id. Meme convention *code/*error.
     QJsonObject deleteAnnotation(const QString& id, int* code, QString* error);
 
+    // Type d'annotation qui ecarte les mesures EXTERIEURES de sa periode des
+    // analyses (sonde rentree a l'interieur, sur l'etabli, en test).
+    static constexpr const char* kExcludeAnnotationType = "sonde_hors_conditions";
+
 private:
+    QVector<meteo::TimeRange> outExclusions() const;
+
     void maintainCache();
 
     int     m_maintenanceMs;

@@ -58,6 +58,27 @@ public:
         return it == m_channels.constEnd() ? nullptr : &it.value();
     }
 
+    // Acces en ecriture a un canal (qualification : remplacer un point ecarte
+    // par NaN). La longueur ne doit pas changer : l'alignement sur l'axe de
+    // temps est l'invariant de toutes les analyses.
+    QVector<double>* mutableChannel(const QString& name) {
+        auto it = m_channels.find(name);
+        return it == m_channels.end() ? nullptr : &it.value();
+    }
+
+    // Sous-serie des echantillons de [fromTs, toTs] (axe de temps croissant).
+    Series slice(qint64 fromTs, qint64 toTs) const {
+        Series out(m_names);
+        int b = 0;
+        while (b < m_ts.size() && m_ts[b] < fromTs) ++b;
+        int e = b;
+        while (e < m_ts.size() && m_ts[e] <= toTs) ++e;
+        out.m_ts = m_ts.mid(b, e - b);
+        for (const QString& name : m_names)
+            out.m_channels[name] = m_channels.value(name).mid(b, e - b);
+        return out;
+    }
+
     // Ajoute un echantillon. Les canaux absents de `values` sont marques manquants,
     // ce qui garde toutes les colonnes exactement de la meme longueur que l'axe
     // de temps — invariant sur lequel s'appuient toutes les analyses.

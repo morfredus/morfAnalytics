@@ -10,6 +10,7 @@
 #include <QSqlDatabase>
 #include <QHash>
 #include "morfanalytics/data/Series.h"
+#include <functional>
 
 namespace morfanalytics {
 
@@ -107,15 +108,30 @@ public:
     // seule forme de suppression totale qui reste coherente avec la reprise.
     bool purgeAll();
 
+    // --- Qualification (lecture) ---------------------------------------------
+    // Fonction appliquee a chaque lecture d'analyse : elle remplace par NaN les
+    // points ecartes (bornes, pic isole, exclusion), SANS toucher au cache. Le
+    // store lit une fenetre elargie de kQualifyPadS de chaque cote, pour que les
+    // points au bord de la periode demandee aient leurs voisins, puis recadre.
+    using Qualifier = std::function<void(Series&)>;
+    void setQualifier(Qualifier q) { m_qualifier = std::move(q); }
+    static constexpr qint64 kQualifyPadS = 1800;
+
     // --- Lecture (analyses) --------------------------------------------------
-    // Toutes les mesures de [fromTs, toTs] triees par horodatage croissant.
+    // Toutes les mesures de [fromTs, toTs] triees par horodatage croissant,
+    // QUALIFIEES (points ecartes = NaN) si un qualificateur est pose.
     Series range(qint64 fromTs, qint64 toTs) const;
+
+    // Donnee BRUTE de [fromTs, toTs], sans qualification (graphiques : montrer
+    // les points ecartes ; bilan qualite).
+    Series rangeRaw(qint64 fromTs, qint64 toTs) const;
 
     // Toutes les mesures d'UN jour (day_key = AAAAMMJJ), triees par ts croissant.
     // Selection par day_key (et non par bornes temporelles) : c'est la source qui
     // decoupe les journees, donc on s'aligne sur SON decoupage sans reconstruire
     // des bornes a partir d'un fuseau, ce qui serait fragile au changement d'heure.
     Series rangeForDay(quint32 dayKey) const;
+    Series rangeForDayRaw(quint32 dayKey) const;
 
     // Nombre total de mesures en cache, et bornes temporelles couvertes.
     qint64 count() const;
@@ -129,6 +145,7 @@ private:
     QString      m_connectionName;
     QString      m_lastError;
     QSqlDatabase m_db;
+    Qualifier    m_qualifier;
 };
 
 } // namespace morfanalytics

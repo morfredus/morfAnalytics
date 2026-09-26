@@ -61,6 +61,10 @@ QStringList AnnotationStore::knownTypes() {
         QStringLiteral("neige"),
         QStringLiteral("brouillard"),
         QStringLiteral("gel"),
+        // Pas une observation meteo : signale que la sonde exterieure n'etait pas
+        // en place. Ses mesures de la periode sont ecartees des analyses (jamais
+        // effacees). Voir AnalyticsModule::kExcludeAnnotationType.
+        QStringLiteral("sonde_hors_conditions"),
         QStringLiteral("autre"),
     };
 }

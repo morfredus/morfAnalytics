@@ -13,6 +13,7 @@
 #include "morfanalytics/collect/ForecastCollector.h"
 #include "morfanalytics/publish/MeteoSyncPublisher.h"
 #include "morfanalytics/analysis/MeteoEvents.h"
+#include "morfanalytics/analysis/MeteoQuality.h"
 
 #include <QJsonArray>
 #include <algorithm>
@@ -123,6 +124,16 @@ bool AnalyticsModule::start() {
         m_storeOut.reset();
     }
 
+    // Qualification des mesures a la LECTURE (analyses, evenements) : points hors
+    // bornes et pics isoles ecartes (NaN), cache jamais modifie. L'exterieur
+    // ecarte aussi les periodes annotees « sonde hors conditions » ; l'interieur,
+    // capte par le hub lui-meme, n'est concerne que par les regles automatiques.
+    // Les exclusions sont relues a chaque lecture : une annotation ajoutee agit
+    // aussitot, sans redemarrage ni recalcul du cache.
+    m_store->setQualifier([](Series& s) { meteo::applyQuality(s, {}); });
+    if (m_storeOut)
+        m_storeOut->setQualifier([this](Series& s) { meteo::applyQuality(s, outExclusions()); });
+
     // Cache des prévisions « day-ahead » archivées par l'appareil (étape 9).
     // Additif comme le cache OUT : un échec n'empêche pas le reste de tourner.
     const QString dbPathFc = QDir(dir).filePath(QStringLiteral("meteohub-forecast-cache.sqlite"));
@@ -219,6 +230,25 @@ QJsonArray AnalyticsModule::analysisCatalog() const {
     return m_analyses.catalogJson();
 }
 
+QVector<meteo::TimeRange> AnalyticsModule::outExclusions() const {
+    // Periodes annotees « sonde hors conditions » : la sonde exterieure n'etait
+    // pas en place (interieur, etabli, tests). Ses mesures y sont ecartees des
+    // analyses, jamais effacees.
+    QVector<meteo::TimeRange> out;
+    if (!m_annotations) return out;
+    for (const QJsonValue& v : m_annotations->all()) {
+        const QJsonObject a = v.toObject();
+        bool excl = false;
+        for (const QJsonValue& t : a.value(QStringLiteral("types")).toArray())
+            if (t.toString() == QLatin1String(kExcludeAnnotationType)) excl = true;
+        if (!excl) continue;
+        const qint64 from = static_cast<qint64>(a.value(QStringLiteral("start")).toDouble());
+        const qint64 to = static_cast<qint64>(a.value(QStringLiteral("end")).toDouble());
+        if (to >= from) out.push_back(meteo::TimeRange{from, to});
+    }
+    return out;
+}
+
 QJsonObject AnalyticsModule::seriesJson(const QString& ctx, const QString& metric,
                                         qint64 from, qint64 to, int maxPoints) const {
     QJsonObject o;
@@ -230,8 +260,23 @@ QJsonObject AnalyticsModule::seriesJson(const QString& ctx, const QString& metri
         (ctx == QLatin1String("in"))  ? m_store.get() :
         (ctx == QLatin1String("out")) ? (m_storeOut ? m_storeOut.get() : nullptr) : nullptr;
 
+    QJsonArray suspects;
     if (store && store->isOpen() && to > from) {
-        const Series s = store->range(from, to);
+        // Lecture BRUTE elargie, puis qualification ici meme : on garde ainsi, en
+        // plus de la serie propre, la liste des points ecartes a montrer sur le
+        // graphique (croix grises + motif). Meme regles que les analyses.
+        Series s = store->rangeRaw(from - SampleStore::kQualifyPadS, to + SampleStore::kQualifyPadS);
+        const bool isOut = (ctx == QLatin1String("out"));
+        const QVector<meteo::FlaggedPoint> flagged =
+            meteo::applyQuality(s, isOut ? outExclusions() : QVector<meteo::TimeRange>());
+        for (const meteo::FlaggedPoint& f : flagged) {
+            if (f.channel != metric || f.ts < from || f.ts > to) continue;
+            if (suspects.size() >= 500) break; // borne : le graphique n'en a pas besoin de plus
+            suspects.append(QJsonArray{static_cast<double>(f.ts),
+                                       qRound(f.value * 10.0) / 10.0,
+                                       QString::fromLatin1(meteo::qualityReasonCode(f.flags))});
+        }
+        s = s.slice(from, to);
         const QVector<double>* ch = s.channel(metric);
         const QVector<qint64>& ts = s.timestamps();
         if (ch && !ts.isEmpty()) {
@@ -265,6 +310,8 @@ QJsonObject AnalyticsModule::seriesJson(const QString& ctx, const QString& metri
     }
     o["ts"] = tsArr;
     o["v"]  = vArr;
+    // Points ecartes de la periode : [ts, valeur d'origine, motif].
+    o["suspects"] = suspects;
     return o;
 }
 

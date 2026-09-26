@@ -3,6 +3,40 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.58.0] - 2026-09-26
+
+### Added
+
+- **Measurement quality, qualified on read, never destroyed.** New pure module
+  `MeteoQuality` (host-tested, `meteoquality_test`): three cumulative reasons -
+  outside physical bounds, **isolated spike** (a point off from BOTH close
+  neighbours, same direction, beyond a threshold, while the neighbours agree with
+  each other: a round trip, not a transition; neighbours within 15 min so a gap
+  never makes a fake spike), and **manual exclusion** of outdoor measurements
+  during a period annotated `sonde_hors_conditions` (probe indoors, on the bench,
+  under test), which no automatic rule can tell apart from a real day where
+  indoor and outdoor look alike. Cautious thresholds (3 °C, 12 %, 1.5 hPa),
+  centralised in `QualityRules`.
+- `SampleStore::setQualifier`: both caches qualify on read. `range()` and
+  `rangeForDay()` read a 30-min padded window (edge points keep their
+  neighbours), set flagged points to NaN, then crop; `rangeRaw()` returns raw
+  data. Every analysis and `MeteoEvents` now works on qualified series without
+  any change to their code; the cache itself is never modified. Indoor gets the
+  automatic rules only; annotations only exclude outdoor data.
+- `/meteohub/series` returns `suspects` ([ts, original value, reason]) for the
+  window; the Graphs page draws them as grey crosses (reason on hover), a
+  "Points écartés" checkbox hides them, and a quality line summarises the period.
+- New annotation type `sonde_hors_conditions` ("Sonde hors conditions (mesures
+  écartées)"), effective immediately, no restart.
+
+### Checked on real data
+
+- On a copy of the Pi cache (22-26/09): 3 outdoor points flagged over 5 days,
+  none indoor - the bench probe frame mixed in at night (26/09 02:35) and the
+  +7 hPa spike at the 15:07 flash. An exclusion annotation on the evening
+  "probe indoors" slot drops the 26/09 crossings from 30 to 11. All 23 analyses
+  run on qualified data.
+
 ## [0.57.0] - 2026-09-24
 
 ### Added
