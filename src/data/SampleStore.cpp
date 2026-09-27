@@ -76,16 +76,19 @@ bool SampleStore::open() {
     const QString createSample =
         QStringLiteral("CREATE TABLE IF NOT EXISTS sample ("
                        "day_key INTEGER NOT NULL,"
+                       "gen     INTEGER NOT NULL DEFAULT 0,"
                        "idx     INTEGER NOT NULL,"
                        "ts      INTEGER NOT NULL,"
                        "%1,"
-                       "PRIMARY KEY (day_key, idx))")
+                       "PRIMARY KEY (day_key, gen, idx))")
             .arg(columns.join(QStringLiteral(",")));
 
     if (!q.exec(createSample)) {
         m_lastError = q.lastError().text();
         return false;
     }
+    if (!migrateToGenerations())
+        return false;
     // Les analyses interrogent presque toujours par plage temporelle.
     q.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS idx_sample_ts ON sample(ts)"));
 
@@ -95,6 +98,71 @@ bool SampleStore::open() {
                                "idx INTEGER NOT NULL,"
                                "updated_at INTEGER NOT NULL)"))) {
         m_lastError = q.lastError().text();
+        return false;
+    }
+    // Generation courante de chaque journee (voir DaySource).
+    if (!q.exec(QStringLiteral("CREATE TABLE IF NOT EXISTS day_source ("
+                               "day_key  INTEGER PRIMARY KEY,"
+                               "gen      INTEGER NOT NULL,"
+                               "first_ts INTEGER NOT NULL)"))) {
+        m_lastError = q.lastError().text();
+        return false;
+    }
+    // Journees deja en cache sans generation connue (cache anterieur a 0.59.0) :
+    // generation 0, identifiee par l'horodatage de son index 0. Sans index 0
+    // (lot interrompu), 0 = inconnu : le collecteur adoptera l'identifiant de la
+    // source au lieu d'y voir un fichier neuf.
+    q.exec(QStringLiteral("INSERT OR IGNORE INTO day_source (day_key, gen, first_ts) "
+                          "SELECT s.day_key, 0, COALESCE((SELECT z.ts FROM sample z "
+                          "WHERE z.day_key = s.day_key AND z.gen = 0 AND z.idx = 0), 0) "
+                          "FROM sample s GROUP BY s.day_key"));
+    return true;
+}
+
+bool SampleStore::migrateToGenerations() {
+    QSqlQuery q(m_db);
+    bool hasGen = false;
+    if (q.exec(QStringLiteral("PRAGMA table_info(sample)"))) {
+        while (q.next())
+            if (q.value(1).toString() == QLatin1String("gen"))
+                hasGen = true;
+    }
+    if (hasGen)
+        return true;
+
+    // SQLite ne sait pas modifier une cle primaire : table neuve, copie, bascule,
+    // le tout dans une transaction (un echec laisse l'ancien schema intact).
+    QStringList cols{QStringLiteral("day_key"), QStringLiteral("idx"), QStringLiteral("ts")};
+    QStringList defs;
+    for (const QString& ch : m_channels) {
+        cols << column(ch);
+        defs << (column(ch) + QStringLiteral(" REAL"));
+    }
+    const QString list = cols.join(QStringLiteral(","));
+    const QStringList steps{
+        QStringLiteral("CREATE TABLE sample_v2 (day_key INTEGER NOT NULL,"
+                       "gen INTEGER NOT NULL DEFAULT 0, idx INTEGER NOT NULL,"
+                       "ts INTEGER NOT NULL, %1, PRIMARY KEY (day_key, gen, idx))")
+            .arg(defs.join(QStringLiteral(","))),
+        QStringLiteral("INSERT INTO sample_v2 (%1, gen) SELECT %1, 0 FROM sample").arg(list),
+        QStringLiteral("DROP TABLE sample"),
+        QStringLiteral("ALTER TABLE sample_v2 RENAME TO sample"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_sample_ts ON sample(ts)"),
+    };
+    if (!m_db.transaction()) {
+        m_lastError = m_db.lastError().text();
+        return false;
+    }
+    for (const QString& sql : steps) {
+        if (!q.exec(sql)) {
+            m_lastError = QStringLiteral("migration generations : %1").arg(q.lastError().text());
+            m_db.rollback();
+            return false;
+        }
+    }
+    if (!m_db.commit()) {
+        m_lastError = m_db.lastError().text();
+        m_db.rollback();
         return false;
     }
     return true;
@@ -112,7 +180,7 @@ bool SampleStore::isOpen() const {
     return m_db.isOpen();
 }
 
-bool SampleStore::insertBatch(quint32 dayKey, quint32 firstIndex,
+bool SampleStore::insertBatch(quint32 dayKey, quint32 gen, quint32 firstIndex,
                               const QVector<qint64>& timestamps,
                               const QVector<QHash<QString, double>>& values) {
     if (timestamps.isEmpty())
@@ -122,8 +190,10 @@ bool SampleStore::insertBatch(quint32 dayKey, quint32 firstIndex,
         return false;
     }
 
-    QStringList cols{QStringLiteral("day_key"), QStringLiteral("idx"), QStringLiteral("ts")};
-    QStringList placeholders{QStringLiteral("?"), QStringLiteral("?"), QStringLiteral("?")};
+    QStringList cols{QStringLiteral("day_key"), QStringLiteral("gen"), QStringLiteral("idx"),
+                     QStringLiteral("ts")};
+    QStringList placeholders{QStringLiteral("?"), QStringLiteral("?"), QStringLiteral("?"),
+                             QStringLiteral("?")};
     for (const QString& ch : m_channels) {
         cols << column(ch);
         placeholders << QStringLiteral("?");
@@ -149,6 +219,7 @@ bool SampleStore::insertBatch(quint32 dayKey, quint32 firstIndex,
 
     for (int i = 0; i < timestamps.size(); ++i) {
         q.addBindValue(dayKey);
+        q.addBindValue(gen);
         q.addBindValue(firstIndex + static_cast<quint32>(i));
         q.addBindValue(static_cast<qlonglong>(timestamps[i]));
         for (const QString& ch : m_channels) {
@@ -175,14 +246,81 @@ bool SampleStore::insertBatch(quint32 dayKey, quint32 firstIndex,
     return true;
 }
 
-QHash<quint32, quint32> SampleStore::importedPerDay() const {
-    QHash<quint32, quint32> out;
+quint32 SampleStore::resumeIndex(quint32 dayKey, quint32 gen) const {
     QSqlQuery q(m_db);
     // MAX(idx)+1 et non COUNT(*) : si un lot a ete interrompu et qu'un trou
     // subsiste au milieu d'une journee, reprendre a COUNT(*) sauterait
     // definitivement les enregistrements manquants. MAX(idx)+1 garantit qu'on
     // redemande tout ce qui suit ; les doublons sont ignores a l'insertion.
-    if (q.exec(QStringLiteral("SELECT day_key, MAX(idx) + 1 FROM sample GROUP BY day_key"))) {
+    q.prepare(QStringLiteral("SELECT MAX(idx) + 1 FROM sample WHERE day_key = ? AND gen = ?"));
+    q.addBindValue(dayKey);
+    q.addBindValue(gen);
+    if (q.exec() && q.next() && !q.value(0).isNull())
+        return q.value(0).toUInt();
+    return 0;
+}
+
+DaySource SampleStore::daySource(quint32 dayKey) const {
+    DaySource d;
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("SELECT gen, first_ts FROM day_source WHERE day_key = ?"));
+    q.addBindValue(dayKey);
+    if (q.exec() && q.next()) {
+        d.known   = true;
+        d.gen     = q.value(0).toUInt();
+        d.firstTs = q.value(1).toLongLong();
+    }
+    return d;
+}
+
+bool SampleStore::setDaySource(quint32 dayKey, quint32 gen, qint64 firstTs) {
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("INSERT INTO day_source (day_key, gen, first_ts) VALUES (?, ?, ?) "
+                             "ON CONFLICT(day_key) DO UPDATE SET "
+                             "gen = excluded.gen, first_ts = excluded.first_ts"));
+    q.addBindValue(dayKey);
+    q.addBindValue(gen);
+    q.addBindValue(static_cast<qlonglong>(firstTs));
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+qint64 SampleStore::startNewGeneration(quint32 dayKey, qint64 newFirstTs) {
+    const DaySource cur = daySource(dayKey);
+    const quint32 gen = cur.known ? cur.gen + 1 : 0;
+    if (!m_db.transaction()) {
+        m_lastError = m_db.lastError().text();
+        return -1;
+    }
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("DELETE FROM sample WHERE day_key = ? AND gen < ? AND ts >= ?"));
+    q.addBindValue(dayKey);
+    q.addBindValue(gen);
+    q.addBindValue(static_cast<qlonglong>(newFirstTs));
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        m_db.rollback();
+        return -1;
+    }
+    if (!setDaySource(dayKey, gen, newFirstTs)) {
+        m_db.rollback();
+        return -1;
+    }
+    if (!m_db.commit()) {
+        m_lastError = m_db.lastError().text();
+        m_db.rollback();
+        return -1;
+    }
+    return gen;
+}
+
+QHash<quint32, quint32> SampleStore::samplesPerDay() const {
+    QHash<quint32, quint32> out;
+    QSqlQuery q(m_db);
+    if (q.exec(QStringLiteral("SELECT day_key, COUNT(*) FROM sample GROUP BY day_key"))) {
         while (q.next())
             out.insert(q.value(0).toUInt(), q.value(1).toUInt());
     }
@@ -301,6 +439,10 @@ bool SampleStore::purgeAll() {
         return false;
     }
     if (!q.exec(QStringLiteral("DELETE FROM sync_cursor"))) {
+        m_lastError = q.lastError().text();
+        return false;
+    }
+    if (!q.exec(QStringLiteral("DELETE FROM day_source"))) {
         m_lastError = q.lastError().text();
         return false;
     }

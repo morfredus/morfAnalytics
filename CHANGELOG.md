@@ -3,6 +3,36 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.59.0] - 2026-09-27
+
+### Fixed
+
+- **Measurements skipped when the hub starts a new file mid-day.** The collector
+  resumed each day at `MAX(idx)+1`, comparing only record counts. When the SD
+  card or the hub board is replaced during a day, MeteoHub restarts that day's
+  file at index 0, so its positions have nothing to do with the cached ones.
+  Seen on 2026-09-27 after the production/bench hub swap: indoor 02:35 -> 03:08
+  was never imported and the next records were stored as if they followed the
+  old file; outdoor stopped importing entirely (the cache held more records for
+  the day than the new file). The cache now tracks a **generation** per source
+  file: `first_ts` from `/api/history/days` (timestamp of record 0, stable while
+  a file grows) identifies it. When it changes, a new generation is read from
+  index 0, and rows of older generations dated at or after the new `first_ts`
+  (wrongly imported by position) are removed. Resume is `MAX(idx)+1` per (day,
+  generation). No change needed on MeteoHub.
+
+### Changed
+
+- Cache schema: `sample` primary key is now `(day_key, gen, idx)`, plus a
+  `day_source` table (current generation and `first_ts` per day). Existing
+  caches are migrated in place on start (generation 0, nothing re-downloaded);
+  the affected day is repaired on the next collection cycle.
+- The morfSync daily summary revision is now the per-day sample count
+  (`samplesPerDay`), which never decreases, instead of the resume position.
+- Collector status reports `generation_switches` (days whose source file
+  changed since start).
+- New host test `samplestore_generations_test` replaying the 2026-09-27 case.
+
 ## [0.58.0] - 2026-09-26
 
 ### Added

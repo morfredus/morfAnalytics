@@ -46,8 +46,25 @@ day_key`). Un compteur tenu à part pourrait se désynchroniser du cache réel ;
 contenu, lui, ne ment pas. Et `MAX(idx)+1` plutôt que `COUNT(*)` garantit qu'un
 lot interrompu en son milieu ne saute rien définitivement.
 
-La clé primaire `(day_key, idx)` rend enfin l'import **idempotent** : réimporter
-une plage connue ne crée aucun doublon.
+La clé primaire `(day_key, gen, idx)` rend enfin l'import **idempotent** :
+réimporter une plage connue ne crée aucun doublon.
+
+**Une position ne vaut que dans UN fichier (0.59.0).** « Ajout seul » est vrai
+pour un fichier, pas pour une journée : si la carte SD ou le hub change en cours
+de journée, la source repart d'un fichier du jour **neuf**, à l'index 0. Comparer
+les seuls nombres de mesures faisait alors sauter le début du nouveau fichier
+(constaté le 2026-09-27 après l'échange prod ↔ banc : 02:35 → 03:08 absents,
+et les mesures suivantes rangées à la suite de l'ancien fichier). Chaque fichier
+reçoit donc une **génération** (`gen`), identifiée par l'horodatage de son
+enregistrement 0 que la source publie dans `/api/history/days` (`first_ts` : il
+ne bouge pas quand le fichier grandit, il change avec un fichier neuf). Table
+`day_source` : génération courante et `first_ts` de chaque journée. Quand
+`first_ts` change, nouvelle génération lue depuis l'index 0 ; les lignes des
+générations précédentes datées à partir de ce nouveau `first_ts` sont retirées
+(importées à tort par position : un ancien fichier ne peut pas contenir de mesure
+postérieure à la première de celui qui le remplace). La reprise est
+`MAX(idx)+1` **par (jour, génération)**. Un cache antérieur est migré en place,
+en génération 0.
 
 ---
 

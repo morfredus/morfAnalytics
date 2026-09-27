@@ -28,7 +28,7 @@ class SampleStore;
 //
 // --- Identite et revision ----------------------------------------------------
 // Un jour = un enregistrement d'identite STABLE : id = "meteohub-<AAAAMMJJ>".
-// La revision est le NOMBRE D'ECHANTILLONS du jour (importedPerDay) : elle croit
+// La revision est le NOMBRE D'ECHANTILLONS du jour (samplesPerDay) : elle croit
 // quand la journee se remplit et ne change pas sinon. Republier un jour inchange
 // porte donc le meme (id, rev) -- le hub le reconnait et n'ecrit rien (idempotent,
 // docs/sync-contract.md 4.3). La consequence pratique : le suivi du dernier rev

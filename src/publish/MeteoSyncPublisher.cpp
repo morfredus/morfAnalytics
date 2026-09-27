@@ -86,7 +86,7 @@ int MeteoSyncPublisher::publish() {
 
     // Nombre d'echantillons par jour = revision de la synthese du jour. Un jour
     // dont le compte n'a pas bouge depuis le dernier envoi n'est pas republie.
-    const QHash<quint32, quint32> perDay = m_store->importedPerDay();
+    const QHash<quint32, quint32> perDay = m_store->samplesPerDay();
 
     QJsonArray changes;
     QVector<QPair<quint32, quint32>> pushed; // (day_key, rev) a valider si l'envoi reussit

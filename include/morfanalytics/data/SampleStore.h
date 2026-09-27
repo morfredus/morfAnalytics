@@ -22,6 +22,21 @@ struct Cursor {
     bool isNull() const { return dayKey == 0; }
 };
 
+// Fichier source d'une journee, tel que le cache le connait. Une journee peut
+// venir de PLUSIEURS fichiers successifs sur la source : changement de carte SD
+// ou de carte hub en cours de journee (echange prod <-> banc du 2026-09-27). Le
+// nouveau fichier repart a l'index 0 : ses positions n'ont rien a voir avec
+// celles de l'ancien. Chaque fichier recoit donc sa GENERATION, et les
+// positions ne se comparent qu'a l'interieur d'une meme generation.
+// `firstTs` (horodatage de l'enregistrement 0, publie par la source dans
+// /api/history/days) identifie le fichier : il ne change pas quand le fichier
+// grandit, il change quand la source repart d'un fichier neuf.
+struct DaySource {
+    bool    known   = false; // la journee a deja une generation en cache
+    quint32 gen     = 0;
+    qint64  firstTs = 0;     // 0 = inconnu (cache migre sans index 0 : a adopter)
+};
+
 // -----------------------------------------------------------------------------
 // SampleStore : le CACHE DE TRAVAIL local (SQLite), alimente par un collecteur.
 //
@@ -37,9 +52,10 @@ struct Cursor {
 // un recalage NTP peut faire RECULER l'horloge de l'ESP32. Un curseur temporel
 // sauterait alors des mesures ou en importerait deux fois.
 //
-// La cle primaire (day_key, idx) rend l'import IDEMPOTENT : re-demander une
+// La cle primaire (day_key, gen, idx) rend l'import IDEMPOTENT : re-demander une
 // plage deja importee ne cree aucun doublon. Le curseur peut donc etre perdu ou
-// remis a zero sans danger — au pire on relit, jamais on ne duplique.
+// remis a zero sans danger — au pire on relit, jamais on ne duplique. `gen`
+// distingue les fichiers successifs d'une meme journee (voir DaySource).
 //
 // --- Generique ---------------------------------------------------------------
 // Les canaux sont donnes a la construction ; la table est creee avec une colonne
@@ -63,20 +79,43 @@ public:
     // Les doublons sont ignores silencieusement (cf. idempotence ci-dessus).
     // Tout le lot passe dans UNE transaction : sur une carte SD ou une cle USB,
     // valider chaque insertion separement serait des ordres de grandeur plus lent.
-    bool insertBatch(quint32 dayKey, quint32 firstIndex,
+    bool insertBatch(quint32 dayKey, quint32 gen, quint32 firstIndex,
                      const QVector<qint64>& timestamps,
                      const QVector<QHash<QString, double>>& values);
+    // Generation 0 (tests, sources a fichier unique).
+    bool insertBatch(quint32 dayKey, quint32 firstIndex,
+                     const QVector<qint64>& timestamps,
+                     const QVector<QHash<QString, double>>& values) {
+        return insertBatch(dayKey, 0, firstIndex, timestamps, values);
+    }
 
-    // Nombre d'enregistrements deja importes pour chaque jour, soit MAX(idx)+1.
+    // Position de reprise dans le fichier (dayKey, gen) : MAX(idx)+1, 0 si rien.
     // Le cache est ainsi SON PROPRE curseur : la position de reprise se deduit
     // du contenu reellement present, pas d'un compteur tenu a part qui pourrait
     // se desynchroniser. Consequence utile : si un jour passe recoit une mesure
     // tardive (horloge de la source recalee en arriere), l'ecart avec le nombre
     // annonce par la source se voit immediatement et le trou est comble.
-    QHash<quint32, quint32> importedPerDay() const;
+    quint32 resumeIndex(quint32 dayKey, quint32 gen) const;
+
+    // Generation courante d'une journee (known = false si jamais vue).
+    DaySource daySource(quint32 dayKey) const;
+    // Enregistre la generation courante d'une journee et son identifiant.
+    bool setDaySource(quint32 dayKey, quint32 gen, qint64 firstTs);
+    // Passe la journee a une NOUVELLE generation (la source a repris un fichier
+    // neuf). Les lignes des generations precedentes datees a partir de
+    // `newFirstTs` sont retirees : elles ont ete importees a tort, par position,
+    // depuis le nouveau fichier (avant 0.59.0), et vont revenir dans la nouvelle
+    // generation. Un ancien fichier ne peut pas contenir de mesure posterieure a
+    // la premiere du fichier qui l'a remplace. Renvoie la nouvelle generation,
+    // ou -1 en cas d'erreur.
+    qint64 startNewGeneration(quint32 dayKey, qint64 newFirstTs);
+
+    // Nombre d'echantillons en cache pour chaque jour (toutes generations). Ne
+    // decroit jamais (hors purge) : sert de revision a la publication morfSync.
+    QHash<quint32, quint32> samplesPerDay() const;
 
     // Curseur explicite : conserve pour l'affichage d'etat et le diagnostic.
-    // La reprise, elle, s'appuie sur importedPerDay().
+    // La reprise, elle, s'appuie sur resumeIndex() et daySource().
     Cursor cursor(const QString& source) const;
     bool setCursor(const QString& source, const Cursor& c);
 
@@ -139,6 +178,9 @@ public:
 
 private:
     QString column(const QString& channel) const;
+    // Schema anterieur a 0.59.0 (cle (day_key, idx), sans generation) :
+    // migration en place vers (day_key, gen, idx), generation 0.
+    bool migrateToGenerations();
 
     QString      m_dbPath;
     QStringList  m_channels;

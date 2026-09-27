@@ -182,4 +182,8 @@ if(MA_BUILD_TESTS)
     add_executable(annotations_test test/annotations_test.cpp)
     target_link_libraries(annotations_test PRIVATE morfAnalytics)
     add_test(NAME annotations COMMAND annotations_test)
+
+    add_executable(samplestore_generations_test test/samplestore_generations_test.cpp)
+    target_link_libraries(samplestore_generations_test PRIVATE morfAnalytics)
+    add_test(NAME samplestore_generations COMMAND samplestore_generations_test)
 endif()

@@ -28,7 +28,9 @@ class SampleStore;
 //
 // Deroulement d'un cycle :
 //   1. GET /api/history/days      -> pour chaque jour, combien de mesures existent
-//   2. comparaison avec le cache  -> ce qui manque, jour par jour
+//   2. comparaison avec le cache  -> ce qui manque, jour par jour ET fichier par
+//      fichier : `first_ts` identifie le fichier servi pour chaque jour ; s'il
+//      change (carte SD ou hub remplace), nouvelle generation lue depuis 0
 //   3. GET /api/history/raw?day=&index=  -> uniquement les mesures manquantes
 //
 // Rien n'est jamais retelecharge : sur un cycle ou l'ESP32 n'a rien de neuf, le
@@ -76,10 +78,13 @@ private:
     qint64  m_lastSyncTs = 0;
     int     m_lastImported = 0;
 
-    // File des morceaux restant a telecharger : (jour, index de depart).
-    QQueue<QPair<quint32, quint32>> m_pending;
+    // File des morceaux restant a telecharger : (jour, generation, index de depart).
+    struct Chunk { quint32 day; quint32 gen; quint32 index; };
+    QQueue<Chunk> m_pending;
     quint32 m_currentDay = 0;
+    quint32 m_currentGen = 0;
     quint32 m_currentIndex = 0;
+    int     m_generationSwitches = 0;
 };
 
 } // namespace morfanalytics

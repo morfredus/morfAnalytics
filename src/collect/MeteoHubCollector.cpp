@@ -97,18 +97,39 @@ void MeteoHubCollector::onDaysReply(QNetworkReply* reply) {
     const QJsonObject root = QJsonDocument::fromJson(reply->readAll()).object();
     const QJsonArray days  = root.value(QStringLiteral("days")).toArray();
 
-    const QHash<quint32, quint32> imported = m_store->importedPerDay();
-
     for (const QJsonValue& v : days) {
         const QJsonObject d = v.toObject();
-        const auto dayKey = static_cast<quint32>(d.value(QStringLiteral("day")).toDouble());
-        const auto nrec   = static_cast<quint32>(d.value(QStringLiteral("nrec")).toDouble());
-        const quint32 have = imported.value(dayKey, 0);
+        const auto dayKey  = static_cast<quint32>(d.value(QStringLiteral("day")).toDouble());
+        const auto nrec    = static_cast<quint32>(d.value(QStringLiteral("nrec")).toDouble());
+        const auto firstTs = static_cast<qint64>(d.value(QStringLiteral("first_ts")).toDouble());
+
+        // Quel FICHIER la source sert-elle pour ce jour ? Son identifiant est
+        // l'horodatage de son enregistrement 0 (first_ts). S'il differe de celui
+        // du cache, la source est repartie d'un fichier neuf (carte SD ou hub
+        // remplace en cours de journee) : ses positions ne prolongent PAS celles
+        // du cache. Avant 0.59.0, la comparaison des seuls nombres de mesures
+        // sautait alors le debut du nouveau fichier (constate le 2026-09-27 :
+        // 02:35 -> 03:08 absents apres l'echange des hubs).
+        DaySource src = m_store->daySource(dayKey);
+        if (!src.known || src.firstTs == 0) {
+            // Journee neuve, ou cache migre sans index 0 : on adopte l'identifiant.
+            if (firstTs != 0)
+                m_store->setDaySource(dayKey, src.gen, firstTs);
+        } else if (firstTs != 0 && firstTs != src.firstTs) {
+            const qint64 gen = m_store->startNewGeneration(dayKey, firstTs);
+            if (gen < 0) {
+                finish(m_store->lastError());
+                return;
+            }
+            src.gen = static_cast<quint32>(gen);
+            m_generationSwitches++;
+        }
+        const quint32 have = m_store->resumeIndex(dayKey, src.gen);
 
         // Le seul cas ou l'on telecharge quoi que ce soit : la source annonce
-        // plus de mesures que le cache n'en detient pour ce jour.
+        // plus de mesures que le cache n'en detient pour ce fichier.
         if (nrec > have)
-            m_pending.enqueue(qMakePair(dayKey, have));
+            m_pending.enqueue(Chunk{dayKey, src.gen, have});
     }
 
     requestNextChunk();
@@ -120,9 +141,10 @@ void MeteoHubCollector::requestNextChunk() {
         return;
     }
 
-    const QPair<quint32, quint32> next = m_pending.dequeue();
-    m_currentDay   = next.first;
-    m_currentIndex = next.second;
+    const Chunk next = m_pending.dequeue();
+    m_currentDay   = next.day;
+    m_currentGen   = next.gen;
+    m_currentIndex = next.index;
 
     QUrl url(m_baseUrl + QStringLiteral("/api/history/raw"));
     QUrlQuery query;
@@ -184,7 +206,8 @@ void MeteoHubCollector::onChunkReply(QNetworkReply* reply) {
     }
 
     if (!timestamps.isEmpty()) {
-        if (!m_store->insertBatch(m_currentDay, m_currentIndex, timestamps, values)) {
+        if (!m_store->insertBatch(m_currentDay, m_currentGen, m_currentIndex, timestamps,
+                                  values)) {
             finish(m_store->lastError());
             return;
         }
@@ -197,7 +220,7 @@ void MeteoHubCollector::onChunkReply(QNetworkReply* reply) {
         // plutot que de boucler ici, pour ne pas monopoliser l'ESP32 ni la boucle
         // d'evenements pendant un rattrapage de plusieurs mois.
         if (nextIndex < total)
-            m_pending.enqueue(qMakePair(m_currentDay, nextIndex));
+            m_pending.enqueue(Chunk{m_currentDay, m_currentGen, nextIndex});
     }
 
     requestNextChunk();
@@ -219,6 +242,9 @@ QJsonObject MeteoHubCollector::statusJson() const {
     o["running"]       = m_running;
     o["last_sync_ts"]  = static_cast<double>(m_lastSyncTs);
     o["last_imported"] = m_lastImported;
+    // Journees dont la source a change de fichier depuis le demarrage (voir
+    // onDaysReply) : un compteur non nul trace un echange de carte ou de hub.
+    o["generation_switches"] = m_generationSwitches;
     o["ok"]            = m_lastError.isEmpty();
     if (!m_lastError.isEmpty())
         o["error"] = m_lastError;
