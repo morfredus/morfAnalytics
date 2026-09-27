@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.59.5-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.60.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -171,6 +171,14 @@ pages reçoivent uniquement les données nécessaires à leur rendu. Cette
 organisation permet d'ajouter de nouvelles sources d'analyse sans transformer
 `HttpServer` en fichier monolithique.
 
+Le thème (palette sombre par défaut, variante claire) et le bandeau de retour sont
+communs : `src/pages/Theme.cpp` les injecte dans chaque page à la place de trois
+marqueurs (`<!--theme-head-->`, `<!--theme-toggle-->`, `<!--nav-back-->`). Une page
+n'écrit aucune couleur en dur : elle emploie les variables CSS de la palette, et ses
+graphiques les lisent en JavaScript avec `mfaColor("--nom")`. Le choix du thème est
+mémorisé dans le navigateur ; détails dans
+[docs/fr/INTERFACE-WEB.md](docs/fr/INTERFACE-WEB.md).
+
 Consulter la page `http://<adresse-du-serveur>:8799/`, ou interroger une analyse
 directement :
 
@@ -277,7 +285,7 @@ composant) puisse s'en servir directement.
 |---|---|
 | `GET /healthz` · `GET /status` | Vivacité, et rapport riche du contrat morfSystem |
 | `GET /modules` · `GET /modules/<nom>` | Modules déclarés et leur état |
-| `GET /`, `/meteohub`, `/meteohub/graphs`, `/sitewatch`, `/photo`, `/monitor`, `/github` | Pages HTML |
+| `GET /`, `/meteohub`, `/meteohub/graphs`, `/sitewatch`, `/photo`, `/monitor`, `/github` | Pages HTML (thème sombre / clair commun, mémorisé par le navigateur ; `?back=<url>&back_label=<nom>` optionnel ajoute un retour vers l'application appelante) |
 | `GET /analyses` | Catalogue des analyses disponibles (la page se construit à partir de lui) |
 | `POST /analyze` | Lancer une analyse à la demande |
 | `GET /meteohub/series` · `GET /meteohub/events` | Séries sous-échantillonnées et événements temporels (croisements, tendances, régimes) de l'onglet Graphiques |

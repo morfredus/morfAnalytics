@@ -58,6 +58,7 @@ add_library(morfAnalytics STATIC
     src/pages/PhotoPage.cpp               # page de la specialisation Photo
     src/pages/MonitorPage.cpp             # page du domaine Monitor (historique machines)
     src/pages/GitHubPage.cpp              # page du domaine GitHub
+    src/pages/Theme.cpp                   # palette et bascule clair / sombre communes
     src/Service.cpp
     src/ModuleFactory.cpp
     src/StatePaths.cpp                    # racine d'etat commune (/var/lib via StateDirectory)
@@ -104,6 +105,7 @@ add_library(morfAnalytics STATIC
     include/morfanalytics/pages/PhotoPage.h
     include/morfanalytics/pages/MonitorPage.h
     include/morfanalytics/pages/GitHubPage.h
+    include/morfanalytics/pages/Theme.h
     include/morfanalytics/PhotoAnalyticsModule.h
     # Header liste explicitement : son Q_OBJECT doit etre traite par AUTOMOC
     # (il vit sous include/, hors du dossier de son .cpp).

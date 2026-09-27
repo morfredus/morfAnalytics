@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.59.5-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.60.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -225,7 +225,7 @@ component) can use them directly.
 |---|---|
 | `GET /healthz` · `GET /status` | Liveness, and the rich report of the morfSystem contract |
 | `GET /modules` · `GET /modules/<name>` | Declared modules and their state |
-| `GET /`, `/meteohub`, `/meteohub/graphs`, `/sitewatch`, `/photo`, `/monitor`, `/github` | HTML pages |
+| `GET /`, `/meteohub`, `/meteohub/graphs`, `/sitewatch`, `/photo`, `/monitor`, `/github` | HTML pages (shared dark / light theme, remembered by the browser; optional `?back=<url>&back_label=<name>` adds a return link to the calling app) |
 | `GET /analyses` | Catalogue of available analyses (the page builds itself from it) |
 | `POST /analyze` | Run an analysis on demand |
 | `GET /meteohub/series` · `GET /meteohub/events` | Down-sampled series and time events (crossings, trends, regimes) for the Graphs tab |

@@ -3,6 +3,34 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.60.0] - 2026-09-27
+
+### Added
+
+- **Shared dark / light theme on every page.** One palette (`src/pages/Theme.cpp`)
+  replaces the five copies the pages carried, one of which followed the OS setting:
+  the weather Analyses page showed white while every other page was dark, and the
+  portal had no style at all. Dark is the default; a sun / moon icon right after the
+  version switches to light. The choice is stored in the browser and applies to all
+  pages, set before first paint (no white flash). Charts read their colours from the
+  palette (`mfaColor("--name")`), with darker series colours in light mode so they
+  stay readable; switching reloads the page so every chart is redrawn.
+- **Uniform back navigation.** Every page (except the portal) starts with a return
+  link to morfAnalytics. The weather pages (Analyses and Graphs) also offer a return
+  to MeteoHub, the station they read, instead of MeteoHub only. Any web app opening
+  a page can pass `?back=<url>&back_label=<name>` to get a return link to itself,
+  kept for the visit (http/https only).
+- The GitHub page now shows the service version like the others.
+
+### Fixed
+
+- **Crash (segfault) when leaving the Photo page early.** `/photo/data` (and the
+  GitHub module) wait for the network in a nested event loop; if the browser closed
+  the connection meanwhile (page change), the socket was deleted inside that loop and
+  the final reply was written to freed memory. Reproduced reliably (open `/photo`,
+  change page within a second). A socket is now only deleted once its request has
+  been handled.
+
 ## [0.59.5] - 2026-09-27
 
 ### Changed

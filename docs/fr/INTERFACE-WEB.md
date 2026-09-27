@@ -8,6 +8,21 @@ morfAnalytics ne possède aucune donnée : il lit une **copie** de ce que les
 équipements et services du parc exposent (l'équipement reste la source de vérité),
 puis l'agrège, l'historise et la représente.
 
+## Thème et navigation, communs à toutes les pages
+
+Toutes les pages partagent la même palette. Le thème **sombre** est le défaut ;
+l'icône soleil / lune placée juste après la version, à côté du titre, bascule en
+thème **clair**. Le choix est mémorisé dans le navigateur et vaut pour toutes les
+pages de morfAnalytics.
+
+En tête de chaque page (sauf le portail), un bandeau ramène à **morfAnalytics**.
+Les pages Météo (Analyses et Graphiques) proposent en plus le retour vers
+**MeteoHub**, la station dont elles lisent les mesures. Une application Web qui
+ouvre une page de morfAnalytics peut ajouter `?back=<son adresse>&back_label=<son
+nom>` au lien : le retour vers elle apparaît et reste proposé pendant la visite.
+Une application de bureau (PhotoHub, SiteWatch) ouvre morfAnalytics dans le
+navigateur : fermer l'onglet suffit pour la retrouver.
+
 > Les captures ci-dessous utilisent des **données d'exemple anonymisées** :
 > valeurs, hôtes, dépôts et photothèque sont fictifs et ne servent qu'à illustrer
 > l'interface.

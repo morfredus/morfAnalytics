@@ -5,11 +5,12 @@ namespace morfanalytics::pages {
 QByteArray GitHubPage::render() {
     static const char* kPage = R"PAGE(<!doctype html><html lang="fr"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!--theme-head-->
 <title>morfAnalytics - GitHub</title>
 <style>
-:root{--bg:#15171b;--card:#1e2126;--line:#2c3037;--ink:#e7e9ec;--muted:#99a1ad;--accent:#6f9bff}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui,sans-serif;padding:1.5rem}
 .wrap{max-width:78rem;margin:auto}a{color:var(--accent)}.muted{color:var(--muted)}
+.vb{font-size:.8rem;font-weight:600;vertical-align:middle;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;padding:.1rem .5rem;margin-left:.4rem}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.8rem;margin:1rem 0}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.9rem}
 .tile .k{font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
@@ -18,12 +19,12 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{padding:.35rem .
 th{cursor:pointer;user-select:none;color:var(--muted)}th:hover{color:var(--ink)}
 .filters{display:flex;flex-wrap:wrap;gap:.7rem;align-items:end;margin:1rem 0}
 label{display:flex;flex-direction:column;gap:.2rem;font-size:.8rem;color:var(--muted)}
-select,input{background:#242830;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.3rem .5rem}
-button{background:#2a3344;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.4rem .8rem;cursor:pointer}
-.err{background:#3a1f24;border:1px solid #6b3038;padding:.8rem;border-radius:10px}
+select,input{background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.3rem .5rem}
+button{background:var(--btn);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.4rem .8rem;cursor:pointer}
+.err{background:var(--err);border:1px solid var(--err-line);padding:.8rem;border-radius:10px}
 </style></head><body><div class="wrap">
-<p><a href="/">&larr; morfAnalytics</a></p>
-<h1>Analyses GitHub</h1>
+<!--nav-back-->
+<h1>Analyses GitHub <span id="vb" class="vb"></span><!--theme-toggle--></h1>
 <p class="muted">Memoire des metriques publiees par SiteWatch. Les visiteurs uniques quotidiens ne s'additionnent pas.
 Les pages et referents sont un classement glissant de 14 jours, pas un historique journalier.
 Les relations avec une publication restent des correlations, jamais des causalites.</p>
@@ -124,6 +125,7 @@ async function load(){
   if(t("t-plat")) bindSort(t("t-plat"),[1]);
 }
 load().catch(err=>{document.getElementById("app").textContent=String(err);});
+fetch("/status").then(r=>r.json()).then(s=>{const b=document.getElementById("vb");if(b)b.textContent=s.version?"v"+s.version:"";}).catch(()=>{});
 </script></body></html>)PAGE";
     return QByteArray(kPage);
 }

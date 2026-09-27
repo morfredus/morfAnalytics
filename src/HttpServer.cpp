@@ -20,6 +20,7 @@
 #include "morfanalytics/MonitorModule.h"
 #include "morfanalytics/GitHubAnalyticsModule.h"
 #include "morfanalytics/pages/GitHubPage.h"
+#include "morfanalytics/pages/Theme.h"
 
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -278,7 +279,17 @@ void HttpServer::onNewConnection() {
     while (m_server->hasPendingConnections()) {
         QTcpSocket* sock = m_server->nextPendingConnection();
         connect(sock, &QTcpSocket::readyRead, this, [this, sock]() { onSocketReadyRead(sock); });
-        connect(sock, &QTcpSocket::disconnected, sock, &QObject::deleteLater);
+        // Destruction différée si une requête est EN COURS sur ce socket. Certaines
+        // routes attendent le réseau dans une boucle d'événements imbriquée
+        // (/photo/data interroge morfPhoto, le module GitHub son collecteur) : si le
+        // navigateur ferme la connexion pendant cette attente (changement de page),
+        // un deleteLater immédiat est exécuté DANS la boucle imbriquée, et la réponse
+        // finale s'écrit sur un socket libéré (segfault reproduit : ouvrir /photo puis
+        // changer de page). Le socket est alors détruit à la fin de la requête.
+        connect(sock, &QTcpSocket::disconnected, sock, [sock]() {
+            if (sock->property("busy").toBool()) sock->setProperty("closed", true);
+            else sock->deleteLater();
+        });
     }
 }
 
@@ -310,7 +321,11 @@ void HttpServer::onSocketReadyRead(QTcpSocket* sock) {
     const QByteArray body   = buf.mid(bodyStart, needed);
 
     sock->setProperty("buf", QByteArray());
+    sock->setProperty("busy", true);
     handleRequest(sock, method, path, body);
+    sock->setProperty("busy", false);
+    // Client parti pendant le traitement : la destruction avait été différée.
+    if (sock->property("closed").toBool()) sock->deleteLater();
 }
 
 void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
@@ -487,19 +502,19 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         code = 405; reason = "Method Not Allowed";
         out = "{\"error\":\"method not allowed\"}";
     } else if (path == "/" || path == "/index.html") {
-        reply(sock, 200, "OK", pages::PortalPage::render(siteWatchReports()), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", pages::Theme::apply(pages::PortalPage::render(siteWatchReports())), "text/html; charset=utf-8");
         return;
     } else if (path == "/meteohub") {
         // Page d'accueil : c'est la cible du lien "Analyse avancee" affiche par
         // MeteoHub quand il detecte ce service sur le reseau. Elle doit donc
         // repondre quelque chose d'utile des la premiere version, avant meme
         // que les analyses existent.
-        reply(sock, 200, "OK", pages::MeteoHubPage::render(landingPage()), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", pages::Theme::apply(pages::MeteoHubPage::render(landingPage())), "text/html; charset=utf-8");
         return;
     } else if (path == "/meteohub/graphs") {
         // Onglet Graphiques : « montrer ce que font les données » (complément visuel
         // des analyses). Page autonome, données via /meteohub/series.
-        reply(sock, 200, "OK", pages::MeteoGraphsPage::render(), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", pages::Theme::apply(pages::MeteoGraphsPage::render()), "text/html; charset=utf-8");
         return;
     } else if (path == "/meteohub/series") {
         // Série temporelle sous-échantillonnée pour l'onglet Graphiques.
@@ -543,7 +558,7 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         }
     } else if (path == "/sitewatch") {
         const QJsonArray reports = siteWatchReports();
-        reply(sock, 200, "OK", pages::SiteWatchPage::render(siteWatchPage(), reports), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", pages::Theme::apply(pages::SiteWatchPage::render(siteWatchPage(), reports)), "text/html; charset=utf-8");
         return;
     } else if (path == "/photo") {
         // Specialisation Photo : lit l'instantane du module (agregats de morfPhoto
@@ -553,7 +568,7 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             : nullptr;
         const QJsonObject snap = module ? module->snapshot() : QJsonObject{{"reachable", false},
             {"last_error", QStringLiteral("aucun module 'photo' configure")}};
-        reply(sock, 200, "OK", pages::PhotoPage::render(snap), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", pages::Theme::apply(pages::PhotoPage::render(snap)), "text/html; charset=utf-8");
         return;
     } else if (path == "/photo/sources") {
         // Postes morfPhoto connus (déclarés + découverts par beacon), pour que la page
@@ -595,7 +610,7 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
     } else if (path == "/monitor") {
         // Domaine Monitor : historique des machines. Page autonome qui récupère
         // ses données via /monitor/data.
-        reply(sock, 200, "OK", pages::MonitorPage::render(), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", pages::Theme::apply(pages::MonitorPage::render()), "text/html; charset=utf-8");
         return;
     } else if (path == "/monitor/data") {
         // Données de la page Monitor : machines connues + vue d'ensemble + séries
@@ -641,7 +656,7 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         else
             out = toJson(module->history(machine));
     } else if (path == "/github") {
-        reply(sock, 200, "OK", pages::GitHubPage::render(), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", pages::Theme::apply(pages::GitHubPage::render()), "text/html; charset=utf-8");
         return;
     } else if (path == "/github/data") {
         auto* module = m_registry
@@ -828,7 +843,7 @@ QByteArray HttpServer::siteWatchPage() const {
     };
 
     const QJsonArray reports = siteWatchReports();
-    QString page = QStringLiteral(R"HTML(<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="30"><title>morfAnalytics - SiteWatch</title><style>body{margin:0;background:#15171b;color:#e7e9ec;font:16px system-ui;padding:2rem}.wrap{max-width:70rem;margin:auto}.card{background:#1e2126;border:1px solid #2c3037;border-radius:12px;padding:1.25rem;margin:1rem 0}h1{margin:0}h2{font-size:1.05rem}.muted{color:#99a1ad}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:1rem}.number{font-size:2rem;font-weight:700}.vb{font-size:.8rem;font-weight:600;vertical-align:middle;color:#6f9bff;background:rgba(111,155,255,.12);border:1px solid rgba(111,155,255,.3);border-radius:999px;padding:.1rem .5rem;margin-left:.4rem}</style><body><div class="wrap"><p><a href="/" style="color:#6f9bff">← morfAnalytics</a></p><h1>Analyse des sites <span class="vb">v%1</span></h1><p class="muted">Synthèses reçues de SiteWatch · actualisation automatique toutes les 30 secondes.</p>)HTML").arg(morfanalytics::version());
+    QString page = QStringLiteral(R"HTML(<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="30"><!--theme-head--><title>morfAnalytics - SiteWatch</title><style>body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui;padding:2rem}.wrap{max-width:70rem;margin:auto}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1.25rem;margin:1rem 0}h1{margin:0}h2{font-size:1.05rem}.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:1rem}.number{font-size:2rem;font-weight:700}.vb{font-size:.8rem;font-weight:600;vertical-align:middle;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;padding:.1rem .5rem;margin-left:.4rem}</style><body><div class="wrap"><!--nav-back--><h1>Analyse des sites <span class="vb">v%1</span><!--theme-toggle--></h1><p class="muted">Synthèses reçues de SiteWatch · actualisation automatique toutes les 30 secondes.</p>)HTML").arg(morfanalytics::version());
     if (reports.isEmpty()) {
         page += QStringLiteral("<section class=\"card\">Aucune synthèse SiteWatch n'est encore enregistrée.</section>");
     }
@@ -868,7 +883,7 @@ QByteArray HttpServer::siteWatchPage() const {
             .arg(report.value(QStringLiteral("to")).toString().toHtmlEscaped());
         if (history.size() < 2) {
             const int progress = std::min(100, static_cast<int>(history.size()) * 50);
-            page += QStringLiteral("<section class=\"card\"><h2>Analyses approfondies · en apprentissage</h2><p>Une synthèse supplémentaire permettra de comparer l'activité dans le temps.</p><div style=\"background:#2c3037;border-radius:5px;height:8px\"><div style=\"background:#6f9bff;border-radius:5px;height:8px;width:%1%\"></div></div><p class=\"muted\">%2 synthèse sur 2 nécessaire pour les comparaisons.</p></section>")
+            page += QStringLiteral("<section class=\"card\"><h2>Analyses approfondies · en apprentissage</h2><p>Une synthèse supplémentaire permettra de comparer l'activité dans le temps.</p><div style=\"background:var(--line);border-radius:5px;height:8px\"><div style=\"background:var(--accent);border-radius:5px;height:8px;width:%1%\"></div></div><p class=\"muted\">%2 synthèse sur 2 nécessaire pour les comparaisons.</p></section>")
                 .arg(progress).arg(history.size());
         } else {
             const QJsonObject previousStats = history.at(1).toObject().value(QStringLiteral("stats")).toObject();
@@ -912,19 +927,9 @@ QByteArray HttpServer::landingPage() {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!--theme-head-->
 <title>morfAnalytics - Météo</title>
 <style>
-  :root {
-    color-scheme: light dark;
-    --bg: #f4f5f7; --fg: #1b1d21; --muted: #6b7280;
-    --card: #ffffff; --line: #e3e5e9;
-    --accent: #2f6fed; --warm: #e0662b; --cold: #2f7fd6;
-    --ok: #2e8b57; --warn: #d98324; --bad: #c8483a;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #15171b; --fg: #e7e9ec; --muted: #99a1ad;
-            --card: #1e2126; --line: #2c3037; --accent: #6f9bff; }
-  }
   * { box-sizing: border-box; }
   body { margin: 0; padding: 2.5rem 1.25rem 5rem; background: var(--bg); color: var(--fg);
          font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.5; }
@@ -934,9 +939,6 @@ QByteArray HttpServer::landingPage() {
      plus en haut de la page. */
   header.top { margin-bottom: 1.4rem; position: sticky; top: 0; z-index: 20;
     background: var(--bg); border-bottom: 1px solid var(--line); padding-bottom: .6rem; }
-  a.back { display: inline-block; margin-bottom: .6rem; color: var(--accent);
-           text-decoration: none; font-size: .9rem; }
-  a.back:hover { text-decoration: underline; }
   h1 { margin: 0 0 .2rem; font-size: 2rem; letter-spacing: -.025em; }
   .version-badge { font-size: .8rem; font-weight: 600; vertical-align: middle;
                    color: var(--accent);
@@ -990,8 +992,8 @@ QByteArray HttpServer::landingPage() {
   .badge.warn { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
   .badge.bad  { background: color-mix(in srgb, var(--bad) 18%, transparent);  color: var(--bad); }
   .badge.ctx-badge { font-size: .72rem; font-weight: 600; vertical-align: middle;
-           background: color-mix(in srgb, var(--accent, #4a90d9) 16%, transparent);
-           color: var(--accent, #4a90d9); }
+           background: color-mix(in srgb, var(--accent) 16%, transparent);
+           color: var(--accent); }
   .ctx-select { font-size: .85rem; display: inline-flex; align-items: center; gap: .3rem; }
   .ctx-select select { font: inherit; padding: .15rem .4rem; }
 
@@ -1100,11 +1102,11 @@ QByteArray HttpServer::landingPage() {
 <body>
 <div class="wrap">
   <header class="top">
-    <a id="backlink" class="back" href="#" hidden>&larr; Retour à MeteoHub</a>
-    <h1>Analyse de la météo <span id="version-badge" class="version-badge"></span></h1>
+    <!--nav-back-->
+    <h1>Analyse de la météo <span id="version-badge" class="version-badge"></span><!--theme-toggle--></h1>
     <p class="sub">Analyses avancées - <span id="hostline">…</span></p>
     <p class="tabs" style="margin:.2rem 0 .6rem">
-      <span class="tab on" style="display:inline-block;padding:.25rem .7rem;border:1px solid var(--accent);background:#2a3350;color:#fff;border-radius:999px;margin-right:.4rem;font-size:.9rem">Analyses</span>
+      <span class="tab on" style="display:inline-block;padding:.25rem .7rem;border:1px solid var(--accent);background:var(--sel);color:var(--sel-ink);border-radius:999px;margin-right:.4rem;font-size:.9rem">Analyses</span>
       <a class="tab" href="/meteohub/graphs" style="display:inline-block;padding:.25rem .7rem;border:1px solid var(--line);color:var(--soft);border-radius:999px;font-size:.9rem;text-decoration:none">Graphiques</a>
     </p>
     <div class="refresh-line">
@@ -1922,15 +1924,11 @@ async function loadStatus() {
     const col = mods.map((m) => m.status && m.status.collector).find((c) => c);
     const warn = document.getElementById('collecte-warn');
 
-    // Lien de retour vers la station. MeteoHub ouvre ce service dans le MEME
-    // onglet pour eviter d'en accumuler : sans ce lien, l'utilisateur n'aurait
-    // que le bouton « precedent » du navigateur pour revenir. L'adresse est
-    // celle de la source collectee - la seule que ce service connaisse.
-    const back = document.getElementById('backlink');
-    if (back && col && col.source) {
-      back.href = col.source;
-      back.hidden = false;
-    }
+    // Retour vers la station, en plus du retour vers morfAnalytics (bandeau
+    // commun). MeteoHub ouvre ce service dans le MEME onglet pour eviter d'en
+    // accumuler : sans ce lien, seul le bouton « precedent » ramenait a la
+    // station. L'adresse est celle de la source collectee.
+    if (col && col.source) mfaSetAppBack(col.source, 'MeteoHub');
     if (col) {
       document.getElementById('source').textContent = col.source || '?';
       document.getElementById('points').textContent =

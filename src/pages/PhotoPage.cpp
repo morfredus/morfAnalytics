@@ -35,9 +35,9 @@ namespace morfanalytics::pages {
 QByteArray PhotoPage::render(const QJsonObject& /*snapshot*/) {
     static const char* kPage = R"PAGE(<!doctype html><html lang="fr"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!--theme-head-->
 <title>morfAnalytics - Photo</title><style>
-:root{--bg:#15171b;--card:#1e2126;--line:#2c3037;--ink:#e7e9ec;--muted:#99a1ad;--soft:#c7cdd6;
---accent:#6f9bff;--accent2:#7ee0b8;--warn:#f0b866;--track:#242830;--a:#6f9bff;--b:#7ee0b8}
+:root{--a:var(--s-a);--b:var(--s-b)}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui,sans-serif;padding:1.5rem}
 .wrap{max-width:82rem;margin:auto}h1{margin:.2rem 0}h2{font-size:1.05rem;margin:1.4rem 0 .5rem}
 .muted{color:var(--muted)}a{color:var(--accent)}
@@ -49,29 +49,29 @@ QByteArray PhotoPage::render(const QJsonObject& /*snapshot*/) {
 .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(20rem,1fr));gap:1rem}
 .row{display:flex;align-items:center;gap:.6rem;margin:.2rem 0}
 .row.click{cursor:pointer;border-radius:6px;padding:.05rem .2rem}
-.row.click:hover{background:#232733}.row.on{background:#2a3350}
+.row.click:hover{background:var(--hover)}.row.on{background:var(--sel)}
 .lab{width:9rem;text-align:right;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.9rem}
 .bar{flex:1;background:var(--track);border-radius:6px;overflow:hidden}
 .bar i{display:block;height:.85rem;background:var(--accent)}
 .val{width:5.5rem;color:var(--muted);font-size:.85rem;text-align:right}
-.ex{width:1.6rem;text-align:center;cursor:pointer;color:#5a6472;font-weight:700;user-select:none}
+.ex{width:1.6rem;text-align:center;cursor:pointer;color:var(--faint);font-weight:700;user-select:none}
 .ex:hover{color:var(--warn)}.ex.excluded{color:var(--warn)}
 .fg{margin:.2rem 0}.fg b{color:var(--soft);font-size:.85rem;margin-right:.4rem}
-.chip{display:inline-block;background:#243050;border:1px solid #35507f;color:#cdd8f7;border-radius:999px;padding:.1rem .55rem;font-size:.82rem;cursor:pointer;margin:.15rem .2rem .15rem 0}
-.chip:hover{background:#2c3c66}.chip.excl{background:#3a2f1e;border-color:#6a5330;color:#f0d9b0}
-.btn{background:#242830;border:1px solid var(--line);color:var(--soft);border-radius:8px;padding:.3rem .7rem;cursor:pointer;font-size:.85rem;margin:.1rem .2rem 0 0}
+.chip{display:inline-block;background:var(--chip);border:1px solid var(--chip-line);color:var(--chip-ink);border-radius:999px;padding:.1rem .55rem;font-size:.82rem;cursor:pointer;margin:.15rem .2rem .15rem 0}
+.chip:hover{background:var(--chip-hover)}.chip.excl{background:var(--excl);border-color:var(--excl-line);color:var(--excl-ink)}
+.btn{background:var(--field);border:1px solid var(--line);color:var(--soft);border-radius:8px;padding:.3rem .7rem;cursor:pointer;font-size:.85rem;margin:.1rem .2rem 0 0}
 .btn:hover{border-color:var(--accent);color:var(--ink)}
 .denom{font-size:.78rem;color:var(--muted);margin:.1rem 0 .5rem}
 .mono{font-variant-numeric:tabular-nums}
-select,input[type=number]{background:#242830;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.25rem .4rem;font-size:.85rem}
+select,input[type=number]{background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.25rem .4rem;font-size:.85rem}
 .sources{margin:.3rem 0 .9rem;line-height:1.9}
 .srcchip{display:inline-block;margin:.1rem .3rem;padding:.15rem .5rem;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-size:.85rem;user-select:none}
-.srcchip.on{border-color:#4a90d9;background:#1c2c3a}
+.srcchip.on{border-color:var(--pick-line);background:var(--pick)}
 .srcchip.off{opacity:.55}
 .srcchip input{vertical-align:middle;margin-right:.35rem}
 .tabs{display:flex;gap:.4rem;margin:.2rem 0 1rem;border-bottom:1px solid var(--line)}
 .tab{padding:.45rem .9rem;border:1px solid var(--line);border-bottom:none;border-radius:8px 8px 0 0;background:transparent;color:var(--muted);cursor:pointer;font-size:.95rem}
-.tab.on{background:#1c2c3a;color:var(--ink);border-color:#4a90d9;font-weight:600}
+.tab.on{background:var(--pick);color:var(--ink);border-color:var(--pick-line);font-weight:600}
 .ownlist{max-height:min(60vh,26rem);overflow:auto;border:1px solid var(--line);border-radius:8px;padding:.4rem .6rem;margin:.5rem 0;columns:2;column-gap:1.4rem}
 .ownlist label{display:block;break-inside:avoid;padding:.12rem 0;cursor:pointer;font-size:.9rem}
 .ownlist input{vertical-align:middle;margin-right:.45rem}
@@ -81,7 +81,7 @@ select,input[type=number]{background:#242830;border:1px solid var(--line);color:
 .sec>summary::-webkit-details-marker{display:none}
 .sec>summary::before{content:"\25B8";display:inline-block;margin-right:.5rem;color:var(--muted)}
 .sec[open]>summary::before{content:"\25BE"}
-.sec>summary:hover{color:#4a90d9}
+.sec>summary:hover{color:var(--pick-line)}
 .secbody{padding:0 .9rem .8rem}
 .secbody h3{margin:.9rem 0 .3rem;font-size:1rem}
 input[type=number]{width:5.5rem}
@@ -95,8 +95,8 @@ th{color:var(--muted);font-weight:600}tr+tr td{border-top:1px solid var(--line)}
 .note{font-size:.78rem;color:var(--muted);margin:.3rem 0}
 .controls{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.5rem}
 </style></head><body><div class="wrap">
-<p><a href="/">&larr; morfAnalytics</a></p>
-<h1>Analyse de la phototh&egrave;que <span id="vb" class="vb"></span></h1>
+<!--nav-back-->
+<h1>Analyse de la phototh&egrave;que <span id="vb" class="vb"></span><!--theme-toggle--></h1>
 <p class="muted">Poser des questions au corpus&nbsp;: croiser boîtiers, focales, ISO, ouvertures,
 vitesses, périodes&hellip; La donnée reste souveraine dans morfPhoto ; ici on l'explore.</p>
 <div id="sources" class="sources"><span class="muted">Recherche des postes&hellip;</span></div>

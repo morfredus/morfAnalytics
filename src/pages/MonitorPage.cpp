@@ -23,18 +23,17 @@ namespace morfanalytics::pages {
 QByteArray MonitorPage::render() {
     static const char* kPage = R"PAGE(<!doctype html><html lang="fr"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!--theme-head-->
 <title>morfAnalytics - Machines</title><style>
-:root{--bg:#15171b;--card:#1e2126;--line:#2c3037;--ink:#e7e9ec;--muted:#99a1ad;--soft:#c7cdd6;
---accent:#6f9bff;--ok:#2e8b57;--warn:#e6a54e;--bad:#c8483a;--track:#242830}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui,sans-serif;padding:1.5rem}
 .wrap{max-width:82rem;margin:auto}h1{margin:.2rem 0}h2{font-size:1.05rem;margin:1.4rem 0 .5rem}
 .muted{color:var(--muted)}a{color:var(--accent)}
 .vb{font-size:.8rem;font-weight:600;vertical-align:middle;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;padding:.1rem .5rem;margin-left:.4rem}
 .controls{display:flex;flex-wrap:wrap;gap:.8rem 1.2rem;align-items:center;margin:1rem 0}
-select{background:#242830;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.3rem .5rem;font-size:.9rem}
+select{background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.3rem .5rem;font-size:.9rem}
 .periods{display:flex;gap:.3rem;flex-wrap:wrap}
-.pbtn{background:#242830;border:1px solid var(--line);color:var(--soft);border-radius:8px;padding:.3rem .7rem;cursor:pointer;font-size:.85rem}
-.pbtn:hover{border-color:var(--accent);color:var(--ink)}.pbtn.on{background:#2a3350;border-color:var(--accent);color:#fff}
+.pbtn{background:var(--field);border:1px solid var(--line);color:var(--soft);border-radius:8px;padding:.3rem .7rem;cursor:pointer;font-size:.85rem}
+.pbtn:hover{border-color:var(--accent);color:var(--ink)}.pbtn.on{background:var(--sel);border-color:var(--accent);color:var(--sel-ink)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.8rem;margin:1rem 0}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.9rem}
 .tile .k{font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
@@ -57,20 +56,20 @@ table.svc{width:100%;border-collapse:collapse;font-size:.86rem;min-width:32rem}
 table.svc th,table.svc td{padding:.3rem .55rem;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 table.svc th:first-child,table.svc td:first-child{text-align:left;font-variant-numeric:normal}
 table.svc thead th{color:var(--muted);border-bottom:1px solid var(--line);font-weight:600}
-table.svc tbody tr:nth-child(even){background:#1a1d22}
+table.svc tbody tr:nth-child(even){background:var(--zebra)}
 .evwrap{max-height:28rem;overflow:auto;padding:.2rem .3rem}
 .ev{display:flex;gap:.6rem;align-items:baseline;padding:.28rem .2rem;border-bottom:1px solid var(--line);font-size:.86rem}
 .ev:last-child{border-bottom:none}
 .ev .t{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:.8rem;min-width:5.2rem}
 .ev .s{color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .b{font-size:.72rem;font-weight:600;border-radius:999px;padding:.05rem .55rem;white-space:nowrap}
-.b-info{color:var(--soft);background:#242830;border:1px solid var(--line)}
-.b-warn{color:#f0c073;background:color-mix(in srgb,var(--warn) 15%,transparent);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent)}
-.b-bad{color:#f0a093;background:color-mix(in srgb,var(--bad) 16%,transparent);border:1px solid color-mix(in srgb,var(--bad) 40%,transparent)}
-.b-ok{color:#8fe0b0;background:color-mix(in srgb,var(--ok) 16%,transparent);border:1px solid color-mix(in srgb,var(--ok) 40%,transparent)}
+.b-info{color:var(--soft);background:var(--field);border:1px solid var(--line)}
+.b-warn{color:var(--b-warn);background:color-mix(in srgb,var(--warn) 15%,transparent);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent)}
+.b-bad{color:var(--b-bad);background:color-mix(in srgb,var(--bad) 16%,transparent);border:1px solid color-mix(in srgb,var(--bad) 40%,transparent)}
+.b-ok{color:var(--b-ok);background:color-mix(in srgb,var(--ok) 16%,transparent);border:1px solid color-mix(in srgb,var(--ok) 40%,transparent)}
 </style></head><body><div class="wrap">
-<p><a href="/">&larr; morfAnalytics</a></p>
-<h1>Analyse des machines <span id="vb" class="vb"></span></h1>
+<!--nav-back-->
+<h1>Analyse des machines <span id="vb" class="vb"></span><!--theme-toggle--></h1>
 <p class="muted">Historique du parc dans le temps, à partir des relevés de morfMonitor.
 morfMonitor dit &laquo;&nbsp;maintenant&nbsp;&raquo; ; ici on regarde comment la machine se comporte dans la dur&eacute;e.</p>
 
@@ -126,7 +125,7 @@ function lineChart(ts, vals, opt){
     labels+='<text class="ax" x="'+(pL-5)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end">'+val.toFixed(opt.dec||0)+(opt.unit||"")+'</text>';});
   const xt0='<text class="ax" x="'+pL+'" y="'+(H-6)+'">'+fmtClock(t0)+'</text>';
   const xt1='<text class="ax" x="'+(W-pR)+'" y="'+(H-6)+'" text-anchor="end">'+fmtClock(t1)+'</text>';
-  const col=opt.color||"#6f9bff";
+  const col=opt.color||mfaColor("--s-cpu");
   // dernier point connu, mis en evidence
   let last=null;for(let i=ts.length-1;i>=0;i--){if(vals[i]!==null&&vals[i]!==undefined){last=[ts[i],vals[i]];break;}}
   const dot=last?'<circle cx="'+X(last[0]).toFixed(1)+'" cy="'+Y(last[1]).toFixed(1)+'" r="3" fill="'+col+'"/>':"";
@@ -173,10 +172,10 @@ function render(data){
   function card(title,vals,cur,opt){
     return '<div class="chart"><span class="cur">'+cur+'</span><h3>'+title+'</h3>'+lineChart(ts,vals,opt)+'</div>';}
   html+='<h2>Dans le temps</h2>';
-  html+=card("CPU","cpu" in sr?sr.cpu:[], fmtNum(ov.cpu_percent,1)+" %", {max:100,unit:"%",color:"#6f9bff"});
-  html+=card("Mémoire","mem" in sr?sr.mem:[], fmtNum(ov.mem_percent,1)+" %", {max:100,unit:"%",color:"#7ee0b8"});
-  html+=card("Température CPU","temp" in sr?sr.temp:[], fmtNum(ov.temp_cpu,1)+" °C", {unit:"°",dec:0,color:"#e6a54e"});
-  html+=card("Charge (load 1 min)","load" in sr?sr.load:[], fmtNum(ov.load1,2), {dec:1,color:"#a487f2"});
+  html+=card("CPU","cpu" in sr?sr.cpu:[], fmtNum(ov.cpu_percent,1)+" %", {max:100,unit:"%",color:mfaColor("--s-cpu")});
+  html+=card("Mémoire","mem" in sr?sr.mem:[], fmtNum(ov.mem_percent,1)+" %", {max:100,unit:"%",color:mfaColor("--s-mem")});
+  html+=card("Température CPU","temp" in sr?sr.temp:[], fmtNum(ov.temp_cpu,1)+" °C", {unit:"°",dec:0,color:mfaColor("--s-temp")});
+  html+=card("Charge (load 1 min)","load" in sr?sr.load:[], fmtNum(ov.load1,2), {dec:1,color:mfaColor("--s-load")});
   if(sr.bucket_s)html+='<p class="muted" style="font-size:.8rem">Résolution&nbsp;: 1 point ≈ '+fmtDur(sr.bucket_s)+'. Les trous (source hors ligne) restent visibles, jamais comblés par des zéros.</p>';
 
   // Qui consomme quoi : consommation par service, agrégée sur la période.
@@ -194,8 +193,8 @@ function render(data){
     function bars(rows,val,mx,fmt,col){return rows.map(s=>{const v=val(s);const w=Math.max(1,100*v/mx);
       return '<div class="brow"><span class="blab">'+s.service+'</span><span class="bar"><i style="width:'+w.toFixed(0)+'%;background:'+col+'"></i></span><span class="bval">'+fmt(v)+'</span></div>';}).join("");}
     html+='<div class="cols2">'+
-      '<div class="chart"><h3>CPU</h3>'+(cpuTop.length?bars(cpuTop,s=>s.cpu_avg,cpuMax,v=>v.toFixed(1)+" %","#6f9bff"):'<span class="muted">-</span>')+'</div>'+
-      '<div class="chart"><h3>Mémoire</h3>'+(memTop.length?bars(memTop,s=>s.mem_avg,memMax,fmtBytes,"#7ee0b8"):'<span class="muted">-</span>')+'</div></div>';
+      '<div class="chart"><h3>CPU</h3>'+(cpuTop.length?bars(cpuTop,s=>s.cpu_avg,cpuMax,v=>v.toFixed(1)+" %",mfaColor("--s-cpu")):'<span class="muted">-</span>')+'</div>'+
+      '<div class="chart"><h3>Mémoire</h3>'+(memTop.length?bars(memTop,s=>s.mem_avg,memMax,fmtBytes,mfaColor("--s-mem")):'<span class="muted">-</span>')+'</div></div>';
     html+='<div class="chart tscroll"><table class="svc"><thead><tr><th>Service</th><th>CPU moy</th><th>CPU max</th><th>RAM moy</th><th>RAM max</th><th>relevés</th></tr></thead><tbody>'+
       svc.map(s=>'<tr><td>'+s.service+'</td><td>'+(s.cpu_avg==null?"-":s.cpu_avg.toFixed(1)+" %")+'</td><td>'+(s.cpu_max==null?"-":s.cpu_max.toFixed(1)+" %")+'</td><td>'+fmtBytes(s.mem_avg)+'</td><td>'+fmtBytes(s.mem_max)+'</td><td>'+fmtNum(s.samples)+'</td></tr>').join("")+
       '</tbody></table></div>';
@@ -276,8 +275,8 @@ function renderHistory(h){
     const dInc=days.map(d=>{let n=0;const sv=d.services||{};for(const k in sv)n+=(sv[k].incidents?sv[k].incidents.count:0);return n;});
     const dMin=days.map(d=>{let s=0;const sv=d.services||{};for(const k in sv)s+=(sv[k].incidents?(sv[k].incidents.downtime_seconds||0):0);return s/60;});
     html+='<h3>Tendance</h3>';
-    html+='<div class="chart"><span class="cur">'+dInc.reduce((a,b)=>a+b,0)+' au total</span><h3 style="font-size:.95rem;margin:0 0 .1rem">Incidents par jour</h3>'+lineChart(dts,dInc,{dec:0,color:"#e0836f"})+'</div>';
-    html+='<div class="chart"><h3 style="font-size:.95rem;margin:0 0 .1rem">Indisponibilité par jour</h3>'+lineChart(dts,dMin,{dec:0,unit:" min",color:"#e6a54e"})+'</div>';
+    html+='<div class="chart"><span class="cur">'+dInc.reduce((a,b)=>a+b,0)+' au total</span><h3 style="font-size:.95rem;margin:0 0 .1rem">Incidents par jour</h3>'+lineChart(dts,dInc,{dec:0,color:mfaColor("--s-inc")})+'</div>';
+    html+='<div class="chart"><h3 style="font-size:.95rem;margin:0 0 .1rem">Indisponibilité par jour</h3>'+lineChart(dts,dMin,{dec:0,unit:" min",color:mfaColor("--s-temp")})+'</div>';
   }
   // Trimestres (roll-up long, dérivé des jours côté morfMonitor).
   const qs=((h&&h.quarterly)||{}).periods||[];

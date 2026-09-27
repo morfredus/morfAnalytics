@@ -37,9 +37,8 @@ namespace morfanalytics::pages {
 QByteArray MeteoGraphsPage::render() {
     static const char* kPage = R"PAGE(<!doctype html><html lang="fr"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!--theme-head-->
 <title>morfAnalytics - Graphiques météo</title><style>
-:root{--bg:#15171b;--card:#1e2126;--line:#2c3037;--ink:#e7e9ec;--muted:#99a1ad;--soft:#c7cdd6;
---accent:#6f9bff;--ok:#2e8b57;--warn:#e6a54e;--bad:#c8483a;--track:#242830}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui,sans-serif;padding:1.5rem}
 .wrap{max-width:72rem;margin:auto}h1{margin:.2rem 0}
 /* En-tete + filtres collants : restent accessibles quel que soit le defilement,
@@ -50,24 +49,24 @@ QByteArray MeteoGraphsPage::render() {
 .muted{color:var(--muted)}a{color:var(--accent)}
 .vb{font-size:.8rem;font-weight:600;vertical-align:middle;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;padding:.1rem .5rem;margin-left:.4rem}
 .tabs{margin:.3rem 0 1rem}.tabs .tab{display:inline-block;padding:.25rem .7rem;border:1px solid var(--line);border-radius:999px;margin-right:.4rem;font-size:.9rem;color:var(--soft);text-decoration:none}
-.tabs .tab.on{background:#2a3350;border-color:var(--accent);color:#fff}
+.tabs .tab.on{background:var(--sel);border-color:var(--accent);color:var(--sel-ink)}
 .controls{display:flex;flex-wrap:wrap;gap:.8rem 1.2rem;align-items:center;margin:1rem 0}
 label{font-size:.9rem;color:var(--soft)}
-select{background:#242830;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.3rem .5rem;font-size:.9rem}
+select{background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.3rem .5rem;font-size:.9rem}
 .metricsel{display:inline-flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .metricsel .mslabel{font-size:.9rem;color:var(--soft)}
-.metricsel .mk{display:inline-flex;align-items:center;gap:.3rem;background:#242830;border:1px solid var(--line);border-radius:8px;padding:.25rem .55rem;font-size:.85rem;color:var(--soft);cursor:pointer}
+.metricsel .mk{display:inline-flex;align-items:center;gap:.3rem;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:.25rem .55rem;font-size:.85rem;color:var(--soft);cursor:pointer}
 .metricsel .mk:hover{border-color:var(--accent);color:var(--ink)}
 .metricsel .mk input{accent-color:var(--accent);margin:0}
-.metricsel .mk.on{background:#2a3350;border-color:var(--accent);color:#fff}
+.metricsel .mk.on{background:var(--sel);border-color:var(--accent);color:var(--sel-ink)}
 .periods{display:flex;gap:.3rem;flex-wrap:wrap}
-.pbtn{background:#242830;border:1px solid var(--line);color:var(--soft);border-radius:8px;padding:.3rem .7rem;cursor:pointer;font-size:.85rem}
-.pbtn:hover{border-color:var(--accent);color:var(--ink)}.pbtn.on{background:#2a3350;border-color:var(--accent);color:#fff}
+.pbtn{background:var(--field);border:1px solid var(--line);color:var(--soft);border-radius:8px;padding:.3rem .7rem;cursor:pointer;font-size:.85rem}
+.pbtn:hover{border-color:var(--accent);color:var(--ink)}.pbtn.on{background:var(--sel);border-color:var(--accent);color:var(--sel-ink)}
 /* Période libre : deux champs jour + heure (pas de 5 min), repliés tant que
    l'on reste sur les périodes glissantes. */
 .custom{display:flex;flex-wrap:wrap;gap:.5rem .8rem;align-items:center;width:100%;margin-top:-.3rem}
 .custom[hidden]{display:none}
-.custom input{background:#242830;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.25rem .45rem;font-size:.85rem;color-scheme:dark}
+.custom input{background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.25rem .45rem;font-size:.85rem}
 .custom .err{color:var(--warn);font-size:.82rem}
 .rangelbl{color:var(--muted);font-size:.85rem;font-variant-numeric:tabular-nums}
 .qual{color:var(--muted);font-size:.82rem;margin-top:.35rem}
@@ -81,7 +80,7 @@ select{background:#242830;border:1px solid var(--line);color:var(--ink);border-r
 .legend .k{display:inline-flex;align-items:center;gap:.4rem}
 .legend .sw{width:1.4rem;height:0;border-top:3px solid;display:inline-block}
 .note{color:var(--muted);font-size:.82rem;margin-top:.4rem}
-.tip{position:absolute;pointer-events:none;background:#0e1013;border:1px solid var(--line);border-radius:8px;padding:.4rem .55rem;font-size:.82rem;color:var(--ink);box-shadow:0 4px 14px rgba(0,0,0,.45);z-index:5;white-space:nowrap}
+.tip{position:absolute;pointer-events:none;background:var(--tip);border:1px solid var(--line);border-radius:8px;padding:.4rem .55rem;font-size:.82rem;color:var(--ink);box-shadow:0 4px 14px rgba(0,0,0,.45);z-index:5;white-space:nowrap}
 .tip .th{color:var(--muted);margin-bottom:.2rem;font-variant-numeric:tabular-nums}
 .tip .tr{display:flex;align-items:center;gap:.4rem;font-variant-numeric:tabular-nums}
 .tip .sw{width:.7rem;height:.7rem;border-radius:2px;display:inline-block}
@@ -98,8 +97,8 @@ select{background:#242830;border:1px solid var(--line);color:var(--ink);border-r
 .cd{color:var(--soft);font-size:.9rem}
 </style></head><body>
 <div class="topbar"><div class="wrap">
-<p><a href="/">&larr; morfAnalytics</a></p>
-<h1>Météo <span id="vb" class="vb"></span></h1>
+<!--nav-back-->
+<h1>Météo <span id="vb" class="vb"></span><!--theme-toggle--></h1>
 <div class="tabs"><a class="tab" href="/meteohub">Analyses</a><span class="tab on">Graphiques</span></div>
 <p class="muted">Montre ce que font réellement les données dans le temps. Les analyses, elles, disent ce que ça signifie.</p>
 <div class="controls">
@@ -127,9 +126,9 @@ const LS="morfanalytics.graphs.";
 // La détection des événements (croisements, tendances, régimes) et sa bande morte
 // vivent côté serveur (MeteoEvents) : source commune avec la page Analyse.
 const METRICS=[
-  ["temp","Température","°C",1,"#e6a54e"],
-  ["hum","Humidité","%",0,"#7ee0b8"],
-  ["pres","Pression","hPa",1,"#c58bf2"]
+  ["temp","Température","°C",1,mfaColor("--s-temp")],
+  ["hum","Humidité","%",0,mfaColor("--s-hum")],
+  ["pres","Pression","hPa",1,mfaColor("--s-pres")]
 ];
 const METRIC_KEYS=METRICS.map(m=>m[0]);
 const SOURCES=[["out","Extérieur"],["in","Intérieur"],["both","Intérieur + Extérieur"]];
@@ -139,10 +138,10 @@ const PERIODS=[["6 h",6],["12 h",12],["24 h",24],["3 j",72],["7 j",168],["30 j",
 const STEP_S=300;
 const MAX_SPAN_S=366*86400;
 // Mono-grandeur : IN et OUT en deux couleurs distinctes (jamais de pointillés).
-const SRC_COL={out:"#6f9bff",in:"#e6a54e"};
+const SRC_COL={out:mfaColor("--s-out"),in:mfaColor("--s-in")};
 // Cadence ~5 min (10 au boot) : plancher de connexion des points.
 const CONNECT_MIN_S=20*60;
-const AXIS_MUTED="#99a1ad";
+const AXIS_MUTED=mfaColor("--muted");
 
 // Grandeurs affichées : sélection LIBRE (cases à cocher). On peut afficher n'importe
 // quel sous-ensemble (une seule, un couple T+hum, hum+pression, les trois...).
@@ -193,7 +192,7 @@ function fmtNum(v,d){return v.toLocaleString("fr-FR",{minimumFractionDigits:d,ma
 //   - Changement de régime : plusieurs tendances basculent dans une fenêtre
 //     rapprochée, même entre grandeurs différentes (relation TEMPORELLE, jamais
 //     déduite d'une proximité graphique).
-const REGIME_COL="#9aa7ff";
+const REGIME_COL=mfaColor("--s-regime");
 let EV={crossings:[],trend_changes:[],regime_changes:[]}; // dernier lot d'événements
 // Paramètres de fenêtre communs aux deux endpoints : bornes explicites en période
 // libre, sinon durée glissante (le serveur ancre alors la fin sur « maintenant »).
@@ -295,7 +294,7 @@ function buildChart(series, axes, events, scaleByMetric){
       if(t<t0||t>t1)return;
       const x=X(t);let y=Ys(s,v);
       y=Math.max(pT+3,Math.min(H-pB-3,y));
-      susp+='<g stroke="#8a929e" stroke-width="1.6"><title>'+fmtFull(t)+' · '+s.label+' '+
+      susp+='<g stroke="'+mfaColor("--s-susp")+'" stroke-width="1.6"><title>'+fmtFull(t)+' · '+s.label+' '+
         v.toFixed(s.dec)+' '+s.unit+' écarté : '+why+'</title>'+
         '<line x1="'+(x-3.5).toFixed(1)+'" y1="'+(y-3.5).toFixed(1)+'" x2="'+(x+3.5).toFixed(1)+'" y2="'+(y+3.5).toFixed(1)+'"/>'+
         '<line x1="'+(x-3.5).toFixed(1)+'" y1="'+(y+3.5).toFixed(1)+'" x2="'+(x+3.5).toFixed(1)+'" y2="'+(y-3.5).toFixed(1)+'"/>'+
@@ -319,7 +318,7 @@ function buildChart(series, axes, events, scaleByMetric){
         const r=4.5;
         marks+='<path d="M'+x.toFixed(1)+' '+(yv-r).toFixed(1)+' L'+(x+r).toFixed(1)+' '+yv.toFixed(1)+
           ' L'+x.toFixed(1)+' '+(yv+r).toFixed(1)+' L'+(x-r).toFixed(1)+' '+yv.toFixed(1)+
-          ' Z" fill="'+e.color+'" stroke="#0e1013" stroke-width="1.2"/>';
+          ' Z" fill="'+e.color+'" stroke="'+mfaColor("--tip")+'" stroke-width="1.2"/>';
         marks+='<text class="cnum" x="'+(x+6).toFixed(1)+'" y="'+(yv-6).toFixed(1)+'" fill="'+e.color+'">'+e.n+'</text>';
       } else {
         marks+='<text class="cnum" x="'+(x+4).toFixed(1)+'" y="'+(pT+11)+'" fill="'+e.color+'">'+e.n+'</text>';
@@ -443,11 +442,11 @@ function attachHover(){
       const gapMax=Math.max((s.bucket>0?s.bucket:600)*2.5, CONNECT_MIN_S);
       if(bd>gapMax)return; // point trop loin (vrai trou) : on ne l'invente pas
       const px=X(s.ts[best]),py=Ys(s,s.vals[best]);
-      dots+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="3.6" fill="'+s.color+'" stroke="#0e1013" stroke-width="1.2"/>';
+      dots+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="3.6" fill="'+s.color+'" stroke="'+mfaColor("--tip")+'" stroke-width="1.2"/>';
       rows+='<div class="tr"><span class="sw" style="background:'+s.color+(s.opacity!==undefined?';opacity:'+s.opacity:'')+'"></span>'+
         s.label+' : <b>'+s.vals[best].toFixed(s.dec)+' '+s.unit+'</b></div>';});
     hg.innerHTML='<line x1="'+sx.toFixed(1)+'" y1="'+G.pT+'" x2="'+sx.toFixed(1)+'" y2="'+(G.H-G.pB)+
-      '" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1"/>'+dots;
+      '" stroke="'+mfaColor("--ink")+'" stroke-opacity="0.22" stroke-width="1"/>'+dots;
     if(!rows){tip.hidden=true;return;}
     tip.innerHTML='<div class="th">'+fmtFull(t)+'</div>'+rows;
     tip.hidden=false;
@@ -564,6 +563,8 @@ $("#custom").addEventListener("keydown",e=>{if(e.key==="Enter")applyCustom();});
 $("#cnow").addEventListener("click",()=>{$("#cto").value=toLocalInput(floor5(Date.now()/1000)+STEP_S);applyCustom();});
 
 fetch("/status").then(r=>r.json()).then(s=>{const b=$("#vb");if(b)b.textContent=s.version?"v"+s.version:"";}).catch(()=>{});
+// Domaine météo : retour possible vers la station collectée, en plus de morfAnalytics.
+mfaMeteoHubBack();
 
 draw();
 // Rafraîchissement : utile tant que la fenêtre touche le présent. Une période
