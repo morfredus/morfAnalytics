@@ -93,14 +93,14 @@ const PERIODS=[["1 h",3600],["6 h",21600],["24 h",86400],["7 j",604800],["30 j",
 let S={machine:localStorage.getItem(LS_M)||"", period:+(localStorage.getItem(LS_P)||86400)};
 
 const $=s=>document.querySelector(s);
-function fmtNum(v,d){return (v===null||v===undefined)?"—":(+v).toFixed(d===undefined?0:d);}
-function fmtBytes(b){if(b===null||b===undefined)return "—";const u=["o","Ko","Mo","Go","To"];let i=0;b=+b;while(b>=1024&&i<u.length-1){b/=1024;i++;}return b.toFixed(b<10&&i>0?1:0)+" "+u[i];}
-function fmtDur(s){if(s===null||s===undefined||s==="")return "—";s=Math.round(+s);if(!isFinite(s)||s<0)return "—";
+function fmtNum(v,d){return (v===null||v===undefined)?"-":(+v).toFixed(d===undefined?0:d);}
+function fmtBytes(b){if(b===null||b===undefined)return "-";const u=["o","Ko","Mo","Go","To"];let i=0;b=+b;while(b>=1024&&i<u.length-1){b/=1024;i++;}return b.toFixed(b<10&&i>0?1:0)+" "+u[i];}
+function fmtDur(s){if(s===null||s===undefined||s==="")return "-";s=Math.round(+s);if(!isFinite(s)||s<0)return "-";
   const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),sec=s%60;
   if(d>0)return d+" j "+h+" h";if(h>0)return h+" h "+m+" min";if(m>0)return sec?m+" min "+sec+" s":m+" min";return sec+" s";}
 function fmtClock(ts){const d=new Date(ts*1000);return d.toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});}
 function statusPill(s){const c=s==="success"?"var(--ok)":s==="failed"?"var(--bad)":"var(--muted)";
-  const t=s==="success"?"succès":s==="failed"?"échec":s==="cancelled"?"interrompu":(s||"—");
+  const t=s==="success"?"succès":s==="failed"?"échec":s==="cancelled"?"interrompu":(s||"-");
   return '<span class="dot" style="background:'+c+'"></span>'+t;}
 
 // Petit graphe en ligne (SVG), auto-echelle, trous preserves (les null coupent
@@ -165,7 +165,7 @@ function render(data){
     tile("Stockage", fmtNum(ov.disk_percent,1)+" %", "occupation /")+
     tile("Services actifs", fmtNum(ov.services_active), "systemd")+
     tile("Uptime", fmtDur(ov.uptime_s), "depuis le démarrage")+
-    tile("Dernier relevé", ov.ts?fmtClock(ov.ts):"—", "")+
+    tile("Dernier relevé", ov.ts?fmtClock(ov.ts):"-", "")+
     '</div>';
 
   // Graphiques temporels
@@ -194,10 +194,10 @@ function render(data){
     function bars(rows,val,mx,fmt,col){return rows.map(s=>{const v=val(s);const w=Math.max(1,100*v/mx);
       return '<div class="brow"><span class="blab">'+s.service+'</span><span class="bar"><i style="width:'+w.toFixed(0)+'%;background:'+col+'"></i></span><span class="bval">'+fmt(v)+'</span></div>';}).join("");}
     html+='<div class="cols2">'+
-      '<div class="chart"><h3>CPU</h3>'+(cpuTop.length?bars(cpuTop,s=>s.cpu_avg,cpuMax,v=>v.toFixed(1)+" %","#6f9bff"):'<span class="muted">—</span>')+'</div>'+
-      '<div class="chart"><h3>Mémoire</h3>'+(memTop.length?bars(memTop,s=>s.mem_avg,memMax,fmtBytes,"#7ee0b8"):'<span class="muted">—</span>')+'</div></div>';
+      '<div class="chart"><h3>CPU</h3>'+(cpuTop.length?bars(cpuTop,s=>s.cpu_avg,cpuMax,v=>v.toFixed(1)+" %","#6f9bff"):'<span class="muted">-</span>')+'</div>'+
+      '<div class="chart"><h3>Mémoire</h3>'+(memTop.length?bars(memTop,s=>s.mem_avg,memMax,fmtBytes,"#7ee0b8"):'<span class="muted">-</span>')+'</div></div>';
     html+='<div class="chart tscroll"><table class="svc"><thead><tr><th>Service</th><th>CPU moy</th><th>CPU max</th><th>RAM moy</th><th>RAM max</th><th>relevés</th></tr></thead><tbody>'+
-      svc.map(s=>'<tr><td>'+s.service+'</td><td>'+(s.cpu_avg==null?"—":s.cpu_avg.toFixed(1)+" %")+'</td><td>'+(s.cpu_max==null?"—":s.cpu_max.toFixed(1)+" %")+'</td><td>'+fmtBytes(s.mem_avg)+'</td><td>'+fmtBytes(s.mem_max)+'</td><td>'+fmtNum(s.samples)+'</td></tr>').join("")+
+      svc.map(s=>'<tr><td>'+s.service+'</td><td>'+(s.cpu_avg==null?"-":s.cpu_avg.toFixed(1)+" %")+'</td><td>'+(s.cpu_max==null?"-":s.cpu_max.toFixed(1)+" %")+'</td><td>'+fmtBytes(s.mem_avg)+'</td><td>'+fmtBytes(s.mem_max)+'</td><td>'+fmtNum(s.samples)+'</td></tr>').join("")+
       '</tbody></table></div>';
   }
 
@@ -222,7 +222,7 @@ function render(data){
     }
     if(acts.length){
       html+='<h3>Dernières activités</h3><div class="chart tscroll"><table class="svc"><thead><tr><th>Quand</th><th>Type</th><th>Projet</th><th>Durée</th><th>Résultat</th><th>CPU max</th><th>Temp max</th></tr></thead><tbody>'+
-        acts.map(a=>{const w=a.window||{};return '<tr><td>'+fmtClock(a.start_ts)+'</td><td>'+a.type+'</td><td>'+(a.project||"—")+'</td><td>'+fmtDur(a.duration_s)+'</td><td>'+statusPill(a.status)+'</td><td>'+(w.cpu_max==null?"—":w.cpu_max.toFixed(0)+" %")+'</td><td>'+(w.temp_max==null?"—":w.temp_max.toFixed(0)+" °C")+'</td></tr>';}).join("")+
+        acts.map(a=>{const w=a.window||{};return '<tr><td>'+fmtClock(a.start_ts)+'</td><td>'+a.type+'</td><td>'+(a.project||"-")+'</td><td>'+fmtDur(a.duration_s)+'</td><td>'+statusPill(a.status)+'</td><td>'+(w.cpu_max==null?"-":w.cpu_max.toFixed(0)+" %")+'</td><td>'+(w.temp_max==null?"-":w.temp_max.toFixed(0)+" °C")+'</td></tr>';}).join("")+
         '</tbody></table></div>';
     }
   }
@@ -241,7 +241,7 @@ const EV={
   service_first_seen:["découvert","b-info"], monitor_started:["morfMonitor démarré","b-info"],
   monitor_gap:["trou d’observation","b-warn"]};
 function evBadge(e){const m=EV[e]||[e,"b-info"];return '<span class="b '+m[1]+'">'+m[0]+'</span>';}
-function pct(v){return (v===null||v===undefined)?"—":(100*v).toFixed(v>0.999?3:2)+" %";}
+function pct(v){return (v===null||v===undefined)?"-":(100*v).toFixed(v>0.999?3:2)+" %";}
 
 function renderHistory(h){
   const box=$("#superv"); if(!box) return;
@@ -267,7 +267,7 @@ function renderHistory(h){
     html+='<h3>Aujourd’hui, par service</h3><div class="chart tscroll"><table class="svc"><thead><tr>'+
       '<th>Service</th><th>Incidents</th><th>crash</th><th>bloqué</th><th>silence</th><th>Indispo</th><th>Dispo</th></tr></thead><tbody>'+
       rows.map(function(e){const k=e[0],s=e[1],i=s.incidents||{},c=i.by_cause||{};
-        return '<tr><td>'+k+'</td><td>'+fmtNum(i.count)+'</td><td>'+fmtNum(c.crash)+'</td><td>'+fmtNum(c.stuck)+'</td><td>'+fmtNum(c.silent)+'</td><td>'+fmtDur(i.downtime_seconds)+'</td><td>'+(s.availability==null?"—":pct(s.availability))+'</td></tr>';}).join("")+
+        return '<tr><td>'+k+'</td><td>'+fmtNum(i.count)+'</td><td>'+fmtNum(c.crash)+'</td><td>'+fmtNum(c.stuck)+'</td><td>'+fmtNum(c.silent)+'</td><td>'+fmtDur(i.downtime_seconds)+'</td><td>'+(s.availability==null?"-":pct(s.availability))+'</td></tr>';}).join("")+
       '</tbody></table></div>';
   }
   // Tendance : graphes dérivés des jours (source de vérité permanente de morfMonitor).
@@ -284,7 +284,7 @@ function renderHistory(h){
   if(qs.length){
     html+='<h3>Trimestres</h3><div class="chart tscroll"><table class="svc"><thead><tr>'+
       '<th>Trimestre</th><th>Incidents</th><th>Crashs</th><th>Relances</th><th>Indispo</th><th>Dispo</th></tr></thead><tbody>'+
-      qs.map(function(p){const g=p.global||{};return '<tr><td>'+p.period+'</td><td>'+fmtNum(g.incidents)+'</td><td>'+fmtNum(g.crashes)+'</td><td>'+fmtNum(g.restarts)+'</td><td>'+fmtDur(g.downtime_seconds)+'</td><td>'+(g.availability==null?"—":pct(g.availability))+'</td></tr>';}).join("")+
+      qs.map(function(p){const g=p.global||{};return '<tr><td>'+p.period+'</td><td>'+fmtNum(g.incidents)+'</td><td>'+fmtNum(g.crashes)+'</td><td>'+fmtNum(g.restarts)+'</td><td>'+fmtDur(g.downtime_seconds)+'</td><td>'+(g.availability==null?"-":pct(g.availability))+'</td></tr>';}).join("")+
       '</tbody></table></div>';
   }
   html+='<h3>Chronologie (24 h)</h3>';

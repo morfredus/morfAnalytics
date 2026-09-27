@@ -181,7 +181,7 @@ function fmtClock(ts){const d=new Date(ts*1000);const sameDay=(new Date()*1-d)<8
   return d.toLocaleString("fr-FR",sameDay?{hour:"2-digit",minute:"2-digit"}:{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});}
 function fmtFull(ts){return new Date(ts*1000).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});}
 function minMax(vals){let mn=Infinity,mx=-Infinity;for(const v of vals){if(v!==null&&v!==undefined){if(v<mn)mn=v;if(v>mx)mx=v;}}return [mn,mx];}
-function nf(v,d){return (v===null||!isFinite(v))?"—":v.toFixed(d);}
+function nf(v,d){return (v===null||!isFinite(v))?"-":v.toFixed(d);}
 function fmtNum(v,d){return v.toLocaleString("fr-FR",{minimumFractionDigits:d,maximumFractionDigits:d});}
 
 // --- Événements temporels (source commune : endpoint /meteohub/events) --------

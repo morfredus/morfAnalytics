@@ -40,7 +40,7 @@ inline MeteoCtx meteoCtxFromName(const QString& s, MeteoCtx fallback) {
 
 // -----------------------------------------------------------------------------
 // Contexte fourni a une analyse. Les stores sont CONST : une analyse lit, elle
-// n'ecrit jamais — ni dans le cache, ni a plus forte raison sur l'appareil.
+// n'ecrit jamais - ni dans le cache, ni a plus forte raison sur l'appareil.
 //
 // `store` est la source PRIMAIRE, résolue par le registre selon le contexte
 // effectif de l'analyse (défaut intrinsèque ou surcharge params["ctx"]). Les
@@ -72,11 +72,11 @@ struct AnalysisContext {
 // IAnalysis : une analyse enfichable.
 //
 // Le moteur ne connait aucune analyse en particulier : il les execute par leur
-// identifiant. Les analyses meteo de ce depot ne sont qu'un jeu parmi d'autres —
+// identifiant. Les analyses meteo de ce depot ne sont qu'un jeu parmi d'autres -
 // un projet different enregistre les siennes sans toucher au moteur.
 //
 // Contrat de sortie : un resultat SYNTHETIQUE. Une analyse renvoie une tendance,
-// un score, un classement, une poignee de valeurs — jamais un flot de mesures.
+// un score, un classement, une poignee de valeurs - jamais un flot de mesures.
 // Rapatrier des milliers de points est le travail de l'API d'historique de
 // l'appareil, pas celui d'une analyse.
 // -----------------------------------------------------------------------------

@@ -67,7 +67,7 @@ bool Service::start() {
         pc.version             = morfanalytics::version();
         pc.instanceId          = m_config.instanceId;
         // Capacite annoncee : c'est par elle que MeteoHub reconnait un service
-        // d'analyse, et non par son nom — que l'utilisateur peut changer.
+        // d'analyse, et non par son nom - que l'utilisateur peut changer.
         // Renommer l'application n'interrompt donc pas l'integration.
         // `photo_analytics` : capacite specifique du domaine photo, pour que
         // PhotoHub decouvre morfAnalytics et propose un lien vers la page /photo.
@@ -78,7 +78,7 @@ bool Service::start() {
         // fillAnnouncedDetail, le meme qu'utilise /status. Declarer web_ui ajoute
         // automatiquement la capacite « web_ui » au heartbeat, de sorte qu'un
         // observateur propose un lien vers les analyses sans rien connaitre de
-        // morfAnalytics — comme MeteoHub le detecte deja, par capacite, jamais
+        // morfAnalytics - comme MeteoHub le detecte deja, par capacite, jamais
         // par nom.
         fillAnnouncedDetail(pc);
         pc.udpPort             = m_config.beaconUdpPort;

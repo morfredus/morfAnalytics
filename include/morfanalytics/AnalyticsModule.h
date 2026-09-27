@@ -29,7 +29,7 @@ class ForecastCollector;
 // Conformément à la vision d'architecture de morfSystem :
 //   - morfAnalytics ne possède JAMAIS la vérité des données : il travaille sur une
 //     COPIE locale (cache de travail) recopiée depuis l'appareil. La source de
-//     vérité reste MeteoHub. MeteoHub écrit, morfAnalytics lit — jamais l'inverse,
+//     vérité reste MeteoHub. MeteoHub écrit, morfAnalytics lit - jamais l'inverse,
 //     ce que garantit le collecteur, qui n'émet que des requêtes GET.
 //   - le cache est maintenu à jour en tâche de fond, en ne récupérant que les
 //     mesures non encore présentes sur le Raspberry Pi, mais les CALCULS LOURDS ne
@@ -99,7 +99,7 @@ public:
     // Renvoie { from, to, hours, crossings:[...], trend_changes:[...], regime_changes:[...] }.
     QJsonObject eventsJson(qint64 from, qint64 to) const;
 
-    // Nettoyage du CACHE — et de lui seul : la source de vérité (l'appareil)
+    // Nettoyage du CACHE - et de lui seul : la source de vérité (l'appareil)
     // n'est jamais touchée, le collecteur n'émettant que des GET.
     // `request` : {"action": "scan_faults" | "invalidate_faults"
     //              | "invalidate_range" (+ from_ts, to_ts, channels[])

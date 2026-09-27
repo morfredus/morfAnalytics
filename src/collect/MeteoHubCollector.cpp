@@ -186,7 +186,7 @@ void MeteoHubCollector::onChunkReply(QNetworkReply* reply) {
         // Filtre de plausibilite AVANT insertion : une valeur physiquement
         // impossible devient "manquante" au lieu de polluer les analyses. On
         // stocke tout de meme la ligne (avec des NULL) pour que la position de
-        // reprise reste exacte — la ligne existe bien sur l'appareil.
+        // reprise reste exacte - la ligne existe bien sur l'appareil.
         double temp = plausible(row.at(1).toDouble(), kTempMin, kTempMax);
         double hum  = plausible(row.at(2).toDouble(), kHumMin,  kHumMax);
         const double pres = plausible(row.at(3).toDouble(), kPresMin, kPresMax);

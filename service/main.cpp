@@ -1,5 +1,5 @@
 /*
- * morfAnalytics — demon de service
+ * morfAnalytics - demon de service
  * Copyright (C) 2026 morfredus
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
-        QStringLiteral("morfAnalytics — moteur d'analyse morfSystem "
+        QStringLiteral("morfAnalytics - moteur d'analyse morfSystem "
                        "(collecte incrementale, analyses a la demande)."));
     parser.addHelpOption();
     parser.addVersionOption();

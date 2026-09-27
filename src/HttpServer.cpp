@@ -1668,12 +1668,12 @@ const RENDERERS = {
     // Évolution de la fiabilité : une ligne par fenêtre (3/7/14/30 jours).
     const evoRows = windows.map((w) => {
       const ov = w.overall || {};
-      const mae = ov.mae === undefined ? '—' : num(ov.mae, '°C');
-      const idx = ov.index === undefined ? '—' : `${ov.index}/100`;
+      const mae = ov.mae === undefined ? '-' : num(ov.mae, '°C');
+      const idx = ov.index === undefined ? '-' : `${ov.index}/100`;
       const used = w.evaluated === 0 ? 'aucune donnée'
         : `${w.evaluated} j${w.coverage_pct !== undefined ? ` (${w.coverage_pct} %)` : ''}`;
       return `<tr><td>${w.days_requested} jours</td><td>${mae}</td><td>${idx}</td>
-        <td>${esc(ov.quality || '—')}</td><td>${used}</td></tr>`;
+        <td>${esc(ov.quality || '-')}</td><td>${used}</td></tr>`;
     }).join('');
     const evo = `<details class="analysis-detail" open><summary>Évolution de la fiabilité</summary>
       <div class="scroll"><table>

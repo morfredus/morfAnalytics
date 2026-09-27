@@ -46,7 +46,7 @@ int lastValidIndex(const QVector<double>& v) {
 }
 
 // Valeur d'un canal au plus pres d'un instant donne, dans une tolerance. Renvoie
-// NaN si aucune mesure valide n'est assez proche — la comparaison "il y a 3 h"
+// NaN si aucune mesure valide n'est assez proche - la comparaison "il y a 3 h"
 // n'a pas de sens si la mesure la plus proche date de la veille.
 double valueNear(const Series& series, const QVector<double>& channel,
                  qint64 target, qint64 tolerance) {
@@ -69,13 +69,8 @@ double valueNear(const Series& series, const QVector<double>& channel,
 
 struct DayAggregate {
     QDate  date;
-    double tMin = 0, tMax = 0, tSum = 0; int tCount = 0;
-    double hSum = 0; int hCount = 0;
-    double pSum = 0; int pCount = 0;
+    double tMin = 0, tMax = 0; int tCount = 0;
 
-    double tMean() const { return tCount ? tSum / tCount : std::nan(""); }
-    double hMean() const { return hCount ? hSum / hCount : std::nan(""); }
-    double pMean() const { return pCount ? pSum / pCount : std::nan(""); }
     // Moyenne journaliere au sens meteorologique : (min + max) / 2, et non la
     // moyenne de toutes les mesures. C'est la definition utilisee pour les
     // normales et les degres-jours, sur laquelle sont calibrees les references.
@@ -90,8 +85,6 @@ QVector<DayAggregate> aggregateByDay(const Series& series) {
 
     const QVector<qint64>& ts = series.timestamps();
     const QVector<double>* temp = series.channel(kTemp);
-    const QVector<double>* hum  = series.channel(kHum);
-    const QVector<double>* pres = series.channel(kPres);
 
     for (int i = 0; i < ts.size(); ++i) {
         const QDate date = QDateTime::fromSecsSinceEpoch(ts[i]).date();
@@ -102,11 +95,8 @@ QVector<DayAggregate> aggregateByDay(const Series& series) {
             const double v = (*temp)[i];
             if (day.tCount == 0) { day.tMin = v; day.tMax = v; }
             else { day.tMin = std::min(day.tMin, v); day.tMax = std::max(day.tMax, v); }
-            day.tSum += v;
             day.tCount++;
         }
-        if (hum && Series::isValid((*hum)[i]))  { day.hSum += (*hum)[i];  day.hCount++; }
-        if (pres && Series::isValid((*pres)[i])) { day.pSum += (*pres)[i]; day.pCount++; }
     }
 
     QVector<DayAggregate> out;
@@ -218,7 +208,7 @@ double median(std::vector<double> v) {
 }
 
 // ===========================================================================
-//  VAGUE 1 — derives instantanes et prevision locale
+//  VAGUE 1 - derives instantanes et prevision locale
 // ===========================================================================
 
 // Etat courant enrichi : ce que les capteurs ne mesurent pas directement mais
@@ -430,7 +420,7 @@ QJsonObject analyzeZambretti(const AnalysisContext& ctx, const QJsonObject&) {
         o["warning"] = QStringLiteral(
             "Altitude non renseignée (paramètre altitude_m) : Zambretti est "
             "calibré sur la pression ramenée au niveau de la mer. L'écart vaut "
-            "environ 0,12 hPa par mètre — négligeable près du niveau de la mer, "
+            "environ 0,12 hPa par mètre - négligeable près du niveau de la mer, "
             "il change la prévision dès quelques dizaines de mètres.");
     return o;
 }
@@ -596,7 +586,7 @@ QJsonObject analyzeFrostRisk(const AnalysisContext& ctx, const QJsonObject&) {
 }
 
 // ===========================================================================
-//  VAGUE 2 — climatologie
+//  VAGUE 2 - climatologie
 // ===========================================================================
 
 // Normale glissante du jour de l'annee et ecart du jour a cette normale.
@@ -968,7 +958,7 @@ QJsonObject analyzeDataQuality(const AnalysisContext& ctx, const QJsonObject& pa
 } // namespace
 
 // ===========================================================================
-//  VAGUE 3 — analyses avancees (anomalies, correlations, episodes)
+//  VAGUE 3 - analyses avancees (anomalies, correlations, episodes)
 // ===========================================================================
 
 // Detection d'anomalies par z-score ROBUSTE (MAD). La moyenne et l'ecart-type

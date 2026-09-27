@@ -32,7 +32,7 @@ class MonitorStore;
 // morfSystem la mémoire de son fonctionnement dans le temps.
 //
 // Frontière stricte : morfMonitor reste la sonde brute, ce module ne fait
-// qu'échantillonner, stocker et représenter — aucune sonde système ici.
+// qu'échantillonner, stocker et représenter - aucune sonde système ici.
 //
 // Découverte automatique (comme morfMonitor apprend les machines)
 // ---------------------------------------------------------------

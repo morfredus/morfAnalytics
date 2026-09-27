@@ -20,7 +20,7 @@ namespace morfanalytics {
 // temperature, ni pression : uniquement des CANAUX nommes, alignes sur un axe
 // de temps commun. Un autre projet (consommation electrique, qualite d'air,
 // supervision de site...) reutilise le moteur en fournissant ses propres noms
-// de canaux — c'est ce qui rend morfAnalytics transposable.
+// de canaux - c'est ce qui rend morfAnalytics transposable.
 //
 // Stockage EN COLONNES (un QVector par canal) et non en lignes : sur plusieurs
 // centaines de milliers de points, un tableau de structures avec dictionnaire
@@ -81,7 +81,7 @@ public:
 
     // Ajoute un echantillon. Les canaux absents de `values` sont marques manquants,
     // ce qui garde toutes les colonnes exactement de la meme longueur que l'axe
-    // de temps — invariant sur lequel s'appuient toutes les analyses.
+    // de temps - invariant sur lequel s'appuient toutes les analyses.
     void append(qint64 ts, const QHash<QString, double>& values) {
         m_ts.push_back(ts);
         for (const QString& name : m_names) {

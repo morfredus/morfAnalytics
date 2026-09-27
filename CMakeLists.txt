@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # =============================================================================
-#  morfAnalytics — moteur d'analyse de l'ecosysteme morfSystem.
+#  morfAnalytics - moteur d'analyse de l'ecosysteme morfSystem.
 #
 #  Recopie l'historique d'un equipement dans un cache de travail local, puis
 #  execute a la demande des analyses sur cette copie. L'equipement reste la
@@ -33,7 +33,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/third_party/morf/morfdeploy/record_compile.
 morf_enable_compile_recording()
 
 # Core + Network : serveur HTTP entrant, client HTTP sortant, JSON.
-# Sql : cache de travail local en SQLite (pilote QSQLITE, fourni avec Qt — aucune
+# Sql : cache de travail local en SQLite (pilote QSQLITE, fourni avec Qt - aucune
 # dependance supplementaire a installer sur le Raspberry Pi).
 find_package(Qt6 REQUIRED COMPONENTS Core Network Sql)
 

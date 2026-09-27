@@ -64,7 +64,7 @@ bool SampleStore::open() {
     QSqlQuery q(m_db);
     // WAL : les analyses lisent pendant que le collecteur ecrit, sans se bloquer.
     // NORMAL : on accepte de perdre les toutes dernieres insertions en cas de
-    // coupure brutale — le cache est reconstructible depuis la source, la
+    // coupure brutale - le cache est reconstructible depuis la source, la
     // durabilite stricte ne vaut pas le cout en ecritures sur carte SD.
     q.exec(QStringLiteral("PRAGMA journal_mode=WAL"));
     q.exec(QStringLiteral("PRAGMA synchronous=NORMAL"));

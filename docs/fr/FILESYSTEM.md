@@ -9,8 +9,7 @@ morfAnalytics suit la doctrine du parc morfSystem (référence complète :
 |------|---------|---------------------|----------|
 | Programme | binaire `morfanalytics` | `/opt/morfanalytics` | non |
 | Config admin | `morfanalytics.json` | `/etc/morfsystem/morfanalytics` | non |
-| État persistant | cache SQLite des échantillons | `/var/lib/morfsystem/morfanalytics` | oui |
-| Historique SiteWatch | synthèses d'analyse SQLite | `/opt/morfanalytics/cache/sitewatch-history.sqlite` | oui |
+| État persistant | caches SQLite (météo, machines, GitHub, historique SiteWatch) | `/var/lib/morfsystem/morfanalytics` | oui |
 
 Sous Windows, l'état se replie sous
 `%ProgramData%\morfsystem\morfanalytics\state`.
@@ -26,6 +25,10 @@ perdre oblige seulement à re-collecter depuis l'appareil (le bouton « Vider le
 cache » les purge tous). Ils vivent donc sous `/var/lib`, jamais dans le dossier
 courant (`/opt`, le programme) ni dans `/etc` (la config admin).
 
+La même racine accueille les autres bases du service : `monitor.sqlite`
+(historique des machines lu chez morfMonitor), `github.sqlite` (trafic GitHub
+consolidé par SiteWatch) et `sitewatch-history.sqlite` (voir plus bas).
+
 Quand le module ne fixe pas `cache_dir`, le service résout la racine de l'état
 via `$STATE_DIRECTORY` (posé par systemd grâce à
 `StateDirectory=morfsystem/morfanalytics`), avec repli sur
@@ -38,6 +41,17 @@ placer le cache sur un autre volume, ou à pointer un ancien emplacement lors
 d'une migration.
 
 ## Migration depuis une version antérieure
+
+Jusqu'à la 0.36.x, les caches `monitor`, `github` et `sitewatch-history` vivaient
+sous `/opt/morfanalytics/cache`. Les déplacer avant de déployer une version
+récente :
+
+```bash
+sudo systemctl stop morfanalytics
+sudo mv /opt/morfanalytics/cache/*.sqlite* /var/lib/morfsystem/morfanalytics/ 2>/dev/null || true
+sudo chown -R <utilisateur-du-service>: /var/lib/morfsystem/morfanalytics
+sudo systemctl start morfanalytics
+```
 
 Une installation antérieure à 0.8.0 laisse le cache dans le dossier courant
 (`/opt/morfanalytics/meteohub-cache.sqlite`). Le déplacer avant de démarrer :
@@ -53,18 +67,16 @@ conserver l'ancien emplacement.
 
 ## Historique SiteWatch
 
-`/opt/morfanalytics/cache/sitewatch-history.sqlite` conserve une ligne par
+`/var/lib/morfsystem/morfanalytics/sitewatch-history.sqlite` conserve une ligne par
 analyse reçue de SiteWatch. Il permet d'étendre les comparaisons dans le temps
 sans conserver les journaux d'accès eux-mêmes : **SiteWatch reste la source
 souveraine** de ces données.
 
-Le chemin est réglable avec `sitewatch_cache_dir` dans `morfanalytics.json`.
+Le dossier est réglable avec `sitewatch_cache_dir` dans `morfanalytics.json` ;
+vide, il vaut la racine d'état ci-dessus.
 La base utilise le mode WAL afin que les consultations ne bloquent pas la
 réception d'une nouvelle synthèse. Aucune purge automatique n'est appliquée.
 
-Le compte qui exécute le service doit pouvoir écrire dans ce dossier. Pour le
-chemin par défaut, le préparer lors de l'installation :
-
-```bash
-sudo install -d -o <utilisateur-du-service> -g <utilisateur-du-service> /opt/morfanalytics/cache
-```
+Le chemin par défaut n'a rien à préparer : systemd crée la racine d'état et la
+donne à l'utilisateur du service. Seul un `sitewatch_cache_dir` personnalisé doit
+être accessible en écriture à ce compte.

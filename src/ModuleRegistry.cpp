@@ -25,11 +25,11 @@ void ModuleRegistry::add(IModule* module) {
 void ModuleRegistry::startAll() {
     // Le retour de start() etait ignore : un module en echec restait compte
     // dans « N module(s) » et le service paraissait sain. Un module qui ne
-    // demarre pas est une information de premier ordre — elle va au journal.
+    // demarre pas est une information de premier ordre - elle va au journal.
     for (IModule* m : m_modules) {
         if (!m->start())
             qCritical().noquote() << QStringLiteral(
-                "module '%1' : demarrage EN ECHEC — le service tourne mais ce "
+                "module '%1' : demarrage EN ECHEC - le service tourne mais ce "
                 "module ne fera rien (voir les messages precedents).").arg(m->id());
     }
 }

@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.59.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.59.5-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -92,7 +92,7 @@ gets rebuilt from the device without loss, since MeteoHub remains the source of
 truth.
 
 SiteWatch summaries are stored separately in
-`/opt/morfanalytics/cache/sitewatch-history.sqlite`. This historical database
+`/var/lib/morfsystem/morfanalytics/sitewatch-history.sqlite`. This historical database
 contains only calculated summaries: SiteWatch remains the sovereign owner of
 the source access logs.
 
@@ -126,7 +126,7 @@ A **Supervision** section reads morfMonitor's own temporal memory (contract
 availability, a per-service table for the current day (incidents by cause, downtime),
 a 24 h event chronology, availability/incident trend charts and a quarterly table.
 That memory is owned by morfMonitor; morfAnalytics only reads and represents it.
-Samples are stored in `/opt/morfanalytics/cache/monitor.sqlite`, with a
+Samples are stored in `/var/lib/morfsystem/morfanalytics/monitor.sqlite`, with a
 configurable raw-sample retention (`retention_days`, 90 by default; `0` = keep
 forever) as a first step before tiered compaction. **Activities** are historised
 too: any component that knows what it is doing posts one to
@@ -215,6 +215,29 @@ With no wind or sunshine data, Zambretti and the fog and frost risks remain
 **local indications**, not forecasts. Each result carries the matching note,
 displayed as-is on the page.
 
+## HTTP API
+
+Every page of the interface is served by the service itself, and each one reads
+its data from a JSON route. The table lists them all, so a script (or another
+component) can use them directly.
+
+| Route | Role |
+|---|---|
+| `GET /healthz` · `GET /status` | Liveness, and the rich report of the morfSystem contract |
+| `GET /modules` · `GET /modules/<name>` | Declared modules and their state |
+| `GET /`, `/meteohub`, `/meteohub/graphs`, `/sitewatch`, `/photo`, `/monitor`, `/github` | HTML pages |
+| `GET /analyses` | Catalogue of available analyses (the page builds itself from it) |
+| `POST /analyze` | Run an analysis on demand |
+| `GET /meteohub/series` · `GET /meteohub/events` | Down-sampled series and time events (crossings, trends, regimes) for the Graphs tab |
+| `GET·POST /meteohub/annotations`, `POST /meteohub/annotations/delete` | Human weather observations |
+| `POST /data/cleanup` | Purge the local working cache (never the device's measurements) |
+| `POST /sitewatch/ingest` · `GET /sitewatch/reports` | SiteWatch summaries: reception, then history |
+| `POST /github/ingest` · `GET /github/data?repo=&from=&to=` | GitHub traffic consolidated by SiteWatch |
+| `GET /photo/data?sources=` · `GET /photo/sources` · `GET·POST /photo/practice` | Photo page data, known morfPhoto hosts, owned-camera scope |
+| `GET /monitor/data` · `GET /monitor/history?machine=` | Machine metrics and supervision history (`morfhistory/1`) |
+| `POST /api/monitor/activity` | Report an activity (build, indexing...) to historise |
+| `POST /api/monitor/forget` | Forget a machine and its whole history (`{"machine": "..."}`) |
+
 ## Build
 
 Only needs **Qt 6** (Core, Network, Sql). morfBeacon is vendored under
@@ -250,9 +273,6 @@ One entry point everywhere. What this service is - its name, its directory,
 its configurations - is declared in `service.json` beside it. The four install
 steps live once for the whole parc; only the service manager differs by
 platform.
-
-The former `scripts/linux/` and `scripts/windows/` scripts still work,
-unchanged.
 
 To **redeploy the configuration** to `/etc/morfsystem/morfanalytics/` after editing
 it (a MeteoHub / morfPhoto / morfMonitor source of the `monitor` module...), without

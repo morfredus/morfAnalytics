@@ -3,6 +3,56 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.59.5] - 2026-09-27
+
+### Changed
+
+- Re-vendored morfBeacon to 0.7.2 (documentation-only release; `include/` and
+  `src/` unchanged).
+
+## [0.59.4] - 2026-09-27
+
+### Changed
+
+- Re-vendored morfDeploy to 0.20.7 (dead-code removal and punctuation only; no
+  behaviour change).
+
+## [0.59.3] - 2026-09-27
+
+### Fixed
+
+- **The READMEs claimed legacy `scripts/linux/` and `scripts/windows/` install
+  scripts still worked.** None remain; the sentence is gone.
+
+## [0.59.2] - 2026-09-27
+
+### Changed
+
+- Em dashes replaced by `-` in the project's own files (code comments, UI
+  placeholders, docs), per the parc punctuation rule.
+
+## [0.59.1] - 2026-09-27
+
+### Fixed
+
+- **Docs pointed state files at `/opt`.** Since 0.37.0 the `monitor`, `github` and
+  `sitewatch-history` SQLite bases live in the state directory
+  (`/var/lib/morfsystem/morfanalytics`), but the READMEs and `docs/fr/FILESYSTEM.md`
+  still gave `/opt/morfanalytics/cache/...` and asked to pre-create that folder.
+  FILESYSTEM.md now also carries the `/opt/.../cache` -> `/var/lib` migration.
+
+### Added
+
+- **HTTP API section in both READMEs**, listing every route (pages, JSON data,
+  ingestion, `/api/monitor/activity`, `/api/monitor/forget`...). Nine of them were
+  documented nowhere.
+
+### Removed
+
+- **Dead code:** the never-read daily means of `DayAggregate` (`tMean`, `hMean`,
+  `pMean`) and the humidity/pressure accumulation that only fed them; the unused
+  `matches()` and `countBy()` helpers of the Photo page script.
+
 ## [0.59.0] - 2026-09-27
 
 ### Fixed
@@ -299,7 +349,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ### Added
 
-- **Indoor inertia model (`indoor_inertia_model`, relation / Both context)** — the
+- **Indoor inertia model (`indoor_inertia_model`, relation / Both context)** - the
   predictive step of the weather chantier (step 10). Extends `thermal_behaviour`
   from measurement to a simple model: indoor temperature is fitted as a linear
   function of outdoor temperature shifted by the building's inertia lag,
@@ -728,7 +778,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 - **Postes en double dans la liste.** Le morfPhoto local apparaissait deux fois
   (`127.0.0.1` en config ET son nom via le beacon sur l'IP du LAN), et une machine
   multi-domiciliée autant de fois que d'interfaces. La liste est **dédoublonnée par
-  machine** (une entrée, une URL — loopback préféré pour la locale). Le poste local est
+  machine** (une entrée, une URL - loopback préféré pour la locale). Le poste local est
   étiqueté **« <nom> (local) »** (ou « base locale ») au lieu de `127.0.0.1`.
 - **Rafraîchissement aléatoire au changement de postes.** Cocher/décocher vite lançait
   des requêtes dont les réponses revenaient dans le désordre. Un garde de séquence ne rend
@@ -813,7 +863,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   `/etc/morfsystem/morfanalytics/morfanalytics.json`, en **sauvegardant** l'ancien
   fichier (`.bak-<date>`) et en **affichant le diff**, puis redémarre le service.
   Contrairement à `service.py update` (qui n'ajoute que les clés manquantes), il
-  **remplace** la config déployée — la bonne commande après avoir changé une source
+  **remplace** la config déployée - la bonne commande après avoir changé une source
   (module `monitor`, `photo`, `analytics`). Options `--no-restart`, `--if-absent`,
   `--help` ; testable sans root via `MORF_SUDO`/`MORF_CONFIG_DIR`.
 
@@ -829,14 +879,14 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ### Ajouté
 
-- **Monitor — activités & compilations.** Le domaine gagne un modèle d'activité
+- **Monitor - activités & compilations.** Le domaine gagne un modèle d'activité
   générique et la vue Builds, le cas d'usage central de la spec.
   - **Endpoint d'ingestion** `POST /api/monitor/activity` : un composant qui connaît
     son activité (compilation, indexation…) la signale ; elle est historisée dans une
     table `activity` **indépendante des samples** (elle survit à la purge du brut). On
     ne devine jamais une activité d'un pic CPU.
   - **Vue Builds** sur `/monitor` : compilations par projet (nombre, réussites/échecs,
-    temps total, durée moyenne/min/max — sur les builds réussis pour ne pas fausser la
+    temps total, durée moyenne/min/max - sur les builds réussis pour ne pas fausser la
     moyenne), et liste des dernières activités avec le **coût système** mesuré sur la
     fenêtre exacte de chacune (`MonitorStore::windowStats`).
   - Correctif : les builds/activités sont renvoyés même quand aucune machine n'est
@@ -846,7 +896,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ### Ajouté
 
-- **Monitor — vue « qui consomme quoi » (par service).** La page `/monitor` gagne une
+- **Monitor - vue « qui consomme quoi » (par service).** La page `/monitor` gagne une
   section Services : classement des services par CPU et par mémoire (moyenne sur la
   période) en barres, et tableau détaillé (CPU moy/max, RAM moy/max, nombre de relevés)
   par service. Les relevés par service étaient déjà collectés depuis 0.24.0 ; ils sont
@@ -862,7 +912,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ### Ajouté
 
-- **Domaine Monitor — page `/monitor` (premier incrément).** morfAnalytics historise
+- **Domaine Monitor - page `/monitor` (premier incrément).** morfAnalytics historise
   désormais les métriques des machines du parc remontées par morfMonitor et les
   représente dans le temps ; c'est le point où morfSystem acquiert une mémoire de son
   propre fonctionnement.
@@ -893,7 +943,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   que « Analyse de la photothèque » et « Analyse des sites ». Le `<title>` d'onglet
   passe à « morfAnalytics - Météo » (aligné sur « morfAnalytics - Photo »).
 - Tiret cadratin résiduel corrigé dans le `<title>` de la page SiteWatch
-  (« — » -> « - »), conforme à la constitution.
+  (« - » -> « - »), conforme à la constitution.
 
 ## [0.23.2] - 2026-08-14
 
@@ -962,11 +1012,11 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 - **Analyses approfondies** sur la page Photo (Phase 2) :
   - **Tendances (médianes)** de focale, ouverture, ISO et vitesse, avec le nombre de
     valeurs connues.
-  - **Focales — détail** : focales exactes (au mm) les plus fréquentes, qui révèlent
+  - **Focales - détail** : focales exactes (au mm) les plus fréquentes, qui révèlent
     les positions réellement utilisées d'un zoom sans les présupposer.
   - **Vitesses d'obturation** : distribution par plages, filtrable et croisable comme
     les autres dimensions.
-  - **Boîtiers — chronologie** : années d'usage et période (première → dernière photo)
+  - **Boîtiers - chronologie** : années d'usage et période (première → dernière photo)
     par boîtier ; fait apparaître naturellement les changements de matériel.
   - **Objectifs** : boîtiers associés listés quand un objectif est filtré.
 - **Comparaison de deux sous-ensembles** (par année, boîtier ou objectif) : colonnes

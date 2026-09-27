@@ -97,7 +97,7 @@ bool MonitorModule::start() {
     m_net = new QNetworkAccessManager(this);
 
     // Écoute du beacon : découverte automatique des morfMonitor du parc. On
-    // ÉCOUTE, on ne sonde pas — les morfMonitor annoncent leur présence en
+    // ÉCOUTE, on ne sonde pas - les morfMonitor annoncent leur présence en
     // broadcast. ShareAddress car morfAnalytics ÉMET déjà son propre heartbeat
     // sur ce port (et le Dashboard peut aussi écouter) : plusieurs programmes de
     // la machine se partagent le port du parc. Un échec de bind (port pris sans
@@ -362,7 +362,7 @@ void MonitorModule::fetchHistory(const QString& baseUrl) {
 
     // Trois endpoints du contrat morfhistory/1. Chaque reponse met a jour sa propre
     // clef dans la projection de la machine ; best-effort, un echec laisse la
-    // derniere valeur connue (la page affiche « — » plutot que de casser).
+    // derniere valeur connue (la page affiche « - » plutot que de casser).
     struct Ep { QString url; QString key; };
     const QVector<Ep> eps{
         {base + QStringLiteral("/api/events?since=") + QString::number(now - 86400),

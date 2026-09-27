@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.59.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.59.5-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -111,7 +111,7 @@ source de vérité reste MeteoHub.
   taux d'erreurs, les pages concernées, les robots les plus actifs et les journées
   qui concentrent les erreurs ou les tentatives sensibles.
   Chaque synthèse est historisée dans
-  `/opt/morfanalytics/cache/sitewatch-history.sqlite` ; les journaux source ne
+  `/var/lib/morfsystem/morfanalytics/sitewatch-history.sqlite` ; les journaux source ne
   quittent jamais SiteWatch. La page lit directement cette base à chaque
   actualisation, y compris après un redémarrage du service. Si elle ne peut pas
   lire l'API, elle affiche un message explicite au lieu de conserver l'état
@@ -150,7 +150,7 @@ source de vérité reste MeteoHub.
   disponibilité/incidents et table des trimestres. Cette mémoire appartient à
   morfMonitor ; morfAnalytics ne fait que la lire et la représenter. Les relevés
   (ressources) sont historisés dans
-  `/opt/morfanalytics/cache/monitor.sqlite`, avec une rétention configurable des
+  `/var/lib/morfsystem/morfanalytics/monitor.sqlite`, avec une rétention configurable des
   relevés bruts (`retention_days`, 90 j par défaut ; `0` = illimité), première étape
   avant la compaction par paliers. Les **activités** sont aussi historisées : tout
   composant qui sait ce qu'il fait en signale une à `POST /api/monitor/activity`. Les
@@ -267,6 +267,29 @@ brouillard et de gelée, et la sécheresse atmosphérique restent des
 **indications locales**, pas des prévisions ni un danger officiel de feu. Chaque
 résultat porte la note correspondante, affichée telle quelle dans la page.
 
+## API HTTP
+
+Chaque page de l'interface est servie par le service lui-même et lit ses données
+sur une route JSON. Le tableau les rassemble toutes, pour qu'un script (ou un autre
+composant) puisse s'en servir directement.
+
+| Route | Rôle |
+|---|---|
+| `GET /healthz` · `GET /status` | Vivacité, et rapport riche du contrat morfSystem |
+| `GET /modules` · `GET /modules/<nom>` | Modules déclarés et leur état |
+| `GET /`, `/meteohub`, `/meteohub/graphs`, `/sitewatch`, `/photo`, `/monitor`, `/github` | Pages HTML |
+| `GET /analyses` | Catalogue des analyses disponibles (la page se construit à partir de lui) |
+| `POST /analyze` | Lancer une analyse à la demande |
+| `GET /meteohub/series` · `GET /meteohub/events` | Séries sous-échantillonnées et événements temporels (croisements, tendances, régimes) de l'onglet Graphiques |
+| `GET·POST /meteohub/annotations`, `POST /meteohub/annotations/delete` | Observations météo humaines |
+| `POST /data/cleanup` | Vider le cache de travail local (jamais les mesures de l'appareil) |
+| `POST /sitewatch/ingest` · `GET /sitewatch/reports` | Synthèses SiteWatch : réception, puis historique |
+| `POST /github/ingest` · `GET /github/data?repo=&from=&to=` | Trafic GitHub consolidé par SiteWatch |
+| `GET /photo/data?sources=` · `GET /photo/sources` · `GET·POST /photo/practice` | Données de la page Photo, postes morfPhoto connus, périmètre des boîtiers possédés |
+| `GET /monitor/data` · `GET /monitor/history?machine=` | Relevés des machines et historique de supervision (`morfhistory/1`) |
+| `POST /api/monitor/activity` | Signaler une activité (compilation, indexation...) à historiser |
+| `POST /api/monitor/forget` | Oublier une machine et tout son historique (`{"machine": "..."}`) |
+
 ## Compiler
 
 Nécessite seulement **Qt 6** (Core, Network, Sql). morfBeacon est vendoré dans
@@ -302,9 +325,6 @@ Un seul point d'entree partout. Ce qu'est ce service - son nom, son dossier,
 ses configurations - est declare dans `service.json` a cote. Les quatre etapes
 d'installation vivent une seule fois pour tout le parc ; seul le gestionnaire
 de services change selon la plateforme.
-
-Les anciens scripts `scripts/linux/` et `scripts/windows/` fonctionnent
-toujours, inchanges.
 
 Pour **redéployer la configuration** vers `/etc/morfsystem/morfanalytics/` après
 l'avoir modifiée (une source MeteoHub, morfPhoto, un morfMonitor du module

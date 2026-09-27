@@ -154,3 +154,6 @@ cache/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Secrets locaux : jamais versionnes
+secrets.json

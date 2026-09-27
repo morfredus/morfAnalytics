@@ -48,13 +48,13 @@ struct DaySource {
 // --- Pourquoi un curseur (jour, index) et pas un horodatage ------------------
 // La source ecrit ses fichiers journaliers en AJOUT SEUL : la position d'une
 // mesure dans son fichier ne change jamais. L'horodatage, lui, n'est pas fiable
-// comme curseur — au passage a l'heure d'hiver, une heure entiere se REPETE, et
+// comme curseur - au passage a l'heure d'hiver, une heure entiere se REPETE, et
 // un recalage NTP peut faire RECULER l'horloge de l'ESP32. Un curseur temporel
 // sauterait alors des mesures ou en importerait deux fois.
 //
 // La cle primaire (day_key, gen, idx) rend l'import IDEMPOTENT : re-demander une
 // plage deja importee ne cree aucun doublon. Le curseur peut donc etre perdu ou
-// remis a zero sans danger — au pire on relit, jamais on ne duplique. `gen`
+// remis a zero sans danger - au pire on relit, jamais on ne duplique. `gen`
 // distingue les fichiers successifs d'une meme journee (voir DaySource).
 //
 // --- Generique ---------------------------------------------------------------
@@ -119,14 +119,14 @@ public:
     Cursor cursor(const QString& source) const;
     bool setCursor(const QString& source, const Cursor& c);
 
-    // --- Nettoyage (cache uniquement — jamais la source) ---------------------
+    // --- Nettoyage (cache uniquement - jamais la source) ---------------------
     // Ces operations n'agissent QUE sur la copie locale : la source de verite
     // (l'appareil) n'est jamais touchee, le collecteur n'emettant que des GET.
     //
     // Le nettoyage partiel NEUTRALISE (valeurs mises a NULL) au lieu de
     // supprimer les lignes : la reprise de collecte se deduit de MAX(idx) par
     // jour, et des lignes supprimees seraient re-telechargees depuis l'appareil
-    // au cycle suivant. Une ligne neutralisee, elle, reste en place — l'import
+    // au cycle suivant. Une ligne neutralisee, elle, reste en place - l'import
     // etant en OR IGNORE, la valeur d'origine ne revient pas tant que le cache
     // n'est pas purge entierement.
 

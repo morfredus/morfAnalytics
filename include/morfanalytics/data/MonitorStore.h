@@ -21,7 +21,7 @@ namespace morfanalytics {
 //
 // Schéma HYBRIDE (cf. analyse du domaine Monitor) : une table LARGE par machine
 // (`sample_machine`) et une table par service (`sample_service`), plutôt qu'une
-// table longue générique — bien moins de lignes et des agrégations directes. Le
+// table longue générique - bien moins de lignes et des agrégations directes. Le
 // schéma est déjà taillé pour la suite (rollups, rétention, purge sélective) :
 // tables séparées par granularité à venir, `machine` comme registre stable.
 //

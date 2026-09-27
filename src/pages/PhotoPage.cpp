@@ -416,7 +416,6 @@ function matchesWith(i,F){
   }
   return true;
 }
-function matches(i){return matchesWith(i,S);}
 function filteredWith(F){const o=[];for(let i=0;i<D.n;i++)if(matchesWith(i,F))o.push(i);return o;}
 function filtered(){return filteredWith(S);}
 
@@ -435,7 +434,6 @@ function histoRows(idx,dim){
   const rows=ranges.map((r,k)=>({label:r[2],count:counts[k],k:[r[0],r[1],r[2]]})).filter(r=>r.count>0);
   return {rows,known};
 }
-function countBy(idx,arr){const m=new Map();let known=0;for(const i of idx){const k=arr[i];if(k===null||k===undefined)continue;known++;m.set(k,(m.get(k)||0)+1);}return {map:m,known};}
 function values(idx,col){const c=D.cols[col];const out=[];for(const i of idx){const v=c[i];if(v!==null&&v!==undefined)out.push(v);}return out;}
 function median(a){if(!a.length)return null;const s=[...a].sort((x,y)=>x-y);const m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2;}
 function topFocals(idx,limit){

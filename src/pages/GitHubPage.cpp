@@ -69,7 +69,7 @@ async function load(){
    ["Moyenne vues/jour",ov.avg_views_per_day]].forEach(([k,v])=>{
     html+=`<div class="tile"><div class="k">${k}</div><div class="n">${v??0}</div></div>`;
   });
-  html+=`<div class="tile"><div class="k">Jour le plus actif</div><div class="n">${esc(ov.busiest_day||"—")}</div><div class="muted">${ov.busiest_views??0} vues</div></div>`;
+  html+=`<div class="tile"><div class="k">Jour le plus actif</div><div class="n">${esc(ov.busiest_day||"-")}</div><div class="muted">${ov.busiest_views??0} vues</div></div>`;
   html+='</div>';
   html+='<form class="filters" method="get" action="/github">';
   html+='<label>Depot <select name="repo"><option value="">(vue globale)</option>';
@@ -102,12 +102,12 @@ async function load(){
   } else {
     html+='<h2>Depots</h2><table id="t-repos"><thead><tr><th>Depot</th><th>Vues</th><th>Clones</th><th>Etoiles</th><th>Release</th></tr></thead><tbody>';
     (ov.repos||[]).forEach(r=>{
-      html+=`<tr><td><a href="/github?repo=${encodeURIComponent(r.full_name)}">${esc(r.full_name)}</a></td><td data-sort="${r.views||0}">${r.views||0}</td><td data-sort="${r.clones||0}">${r.clones||0}</td><td data-sort="${r.stars||0}">${r.stars||0}</td><td>${esc(r.last_release||"—")}</td></tr>`;
+      html+=`<tr><td><a href="/github?repo=${encodeURIComponent(r.full_name)}">${esc(r.full_name)}</a></td><td data-sort="${r.views||0}">${r.views||0}</td><td data-sort="${r.clones||0}">${r.clones||0}</td><td data-sort="${r.stars||0}">${r.stars||0}</td><td>${esc(r.last_release||"-")}</td></tr>`;
     });
     html+='</tbody></table><h3>Evolution quotidienne</h3><table id="t-daily"><thead><tr><th>Jour</th><th>Vues</th><th>Clones</th></tr></thead><tbody>';
     (ov.daily||[]).forEach(x=>{
-      if(metric==="views") html+=`<tr><td>${esc(x.day)}</td><td data-sort="${x.views||0}">${x.views||0}</td><td data-sort="0">—</td></tr>`;
-      else if(metric==="clones") html+=`<tr><td>${esc(x.day)}</td><td data-sort="0">—</td><td data-sort="${x.clones||0}">${x.clones||0}</td></tr>`;
+      if(metric==="views") html+=`<tr><td>${esc(x.day)}</td><td data-sort="${x.views||0}">${x.views||0}</td><td data-sort="0">-</td></tr>`;
+      else if(metric==="clones") html+=`<tr><td>${esc(x.day)}</td><td data-sort="0">-</td><td data-sort="${x.clones||0}">${x.clones||0}</td></tr>`;
       else html+=`<tr><td>${esc(x.day)}</td><td data-sort="${x.views||0}">${x.views||0}</td><td data-sort="${x.clones||0}">${x.clones||0}</td></tr>`;
     });
     html+='</tbody></table><h3>Plateformes</h3><table id="t-plat"><thead><tr><th>Plateforme</th><th>Telechargements</th></tr></thead><tbody>';

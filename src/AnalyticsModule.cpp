@@ -80,7 +80,7 @@ AnalyticsModule::AnalyticsModule(const QString& id, int maintenanceMs,
         // la donnee utilisateur potentiellement perdue. On le DIT, sans empecher
         // le service de tourner (les mesures, elles, restent exploitables).
         qWarning().noquote()
-            << QStringLiteral("module analytics : annotations illisibles dans %1 — "
+            << QStringLiteral("module analytics : annotations illisibles dans %1 - "
                               "observations non chargees").arg(annPath);
     }
 }
@@ -95,15 +95,15 @@ bool AnalyticsModule::start() {
     if (!m_store->open()) {
         // Sans cache, le module ne peut rien faire d'utile : on échoue franchement
         // plutôt que de tourner en apparence tout en n'accumulant rien. Et on le
-        // DIT : cet échec est resté muet une fois — dossier /opt possédé par
-        // root, cache incréable — et l'interface renvoyait vers source_url
+        // DIT : cet échec est resté muet une fois - dossier /opt possédé par
+        // root, cache incréable - et l'interface renvoyait vers source_url
         // pendant que la vraie cause, une permission, ne figurait nulle part.
         // Un diagnostic complet a coûté une enquête là où une ligne de journal
         // aurait suffi.
         qCritical().noquote()
             << QStringLiteral("module analytics : impossible d'ouvrir le cache %1 : %2")
                    .arg(dbPath, m_store->lastError())
-            << QStringLiteral("— verifier les droits du dossier (le service tourne en User=, "
+            << QStringLiteral("- verifier les droits du dossier (le service tourne en User=, "
                               "le dossier doit lui appartenir) ; aucune mesure ne sera collectee.");
         m_store.reset();
         return false;
@@ -118,7 +118,7 @@ bool AnalyticsModule::start() {
     m_storeOut = std::make_unique<SampleStore>(dbPathOut, kChannels);
     if (!m_storeOut->open()) {
         qWarning().noquote()
-            << QStringLiteral("module analytics : cache OUT indisponible (%1) : %2 — "
+            << QStringLiteral("module analytics : cache OUT indisponible (%1) : %2 - "
                               "la météo extérieure ne sera pas historisée.")
                    .arg(dbPathOut, m_storeOut->lastError());
         m_storeOut.reset();
@@ -140,7 +140,7 @@ bool AnalyticsModule::start() {
     m_forecastStore = std::make_unique<ForecastStore>(dbPathFc);
     if (!m_forecastStore->open()) {
         qWarning().noquote()
-            << QStringLiteral("module analytics : cache prévisions indisponible (%1) : %2 — "
+            << QStringLiteral("module analytics : cache prévisions indisponible (%1) : %2 - "
                               "l'analyse prévu vs observé sera inactive.")
                    .arg(dbPathFc, m_forecastStore->lastError());
         m_forecastStore.reset();
@@ -457,7 +457,7 @@ QJsonObject AnalyticsModule::cleanupData(const QJsonObject& request) {
     }
 
     // Bornes de panne capteur : une pression hors de [300, 1200] hPa est
-    // physiquement impossible — c'est la signature du BME280 en défaut (zéros),
+    // physiquement impossible - c'est la signature du BME280 en défaut (zéros),
     // et elle disqualifie tout le relevé (le 0 °C associé n'est pas une mesure).
     // Mêmes bornes que le filtre d'import du collecteur : ce nettoyage rattrape
     // l'historique entré AVANT que le filtre n'existe.
@@ -572,7 +572,7 @@ void AnalyticsModule::maintainCache() {
     // Publication des synthèses journalières. La collecte ci-dessus est ASYNCHRONE
     // (les mesures arrivent après cet appel) : on publie donc l'état STABILISÉ,
     // celui de la collecte du cycle précédent. Un jour qui vient de gagner des
-    // mesures sera publié au cycle suivant — les synthèses journalières ne sont pas
+    // mesures sera publié au cycle suivant - les synthèses journalières ne sont pas
     // à la seconde près, et la publication reste idempotente.
     if (m_publisher)
         m_publisher->publish();

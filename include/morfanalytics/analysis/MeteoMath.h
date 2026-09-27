@@ -14,7 +14,7 @@ namespace meteo {
 // MeteoMath : les formules meteorologiques, et rien d'autre.
 //
 // Fonctions PURES : pas d'etat, pas d'acces au cache, pas de JSON. C'est
-// volontaire — ce sont les seules parties du moteur ou une erreur est silencieuse
+// volontaire - ce sont les seules parties du moteur ou une erreur est silencieuse
 // (un resultat faux reste plausible), donc les seules qui doivent pouvoir se
 // verifier isolement contre des valeurs de reference.
 //
