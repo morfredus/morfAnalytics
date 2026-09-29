@@ -86,7 +86,9 @@ une barre en haut de page :
     écartés (… pic isolé, … sonde hors conditions) » résume la période affichée.
     La donnée brute reste intacte. Pour écarter une période où la sonde n'était
     pas dehors, ajouter une annotation de type « Sonde hors conditions » sur la
-    page Analyses : l'effet est immédiat.
+    page Analyses : l'effet est immédiat. La liste complète (date, source,
+    grandeur, valeur d'origine, motif) se consulte sur la page Analyses, menu
+    **Maintenance avancée** > **Points écartés** (0.61.0), sur 24 h, 7 ou 30 jours.
   - **Événements détectés** : sous le graphique, un encart chronologique. Les
     événements sont calculés côté serveur par une **source commune** (`MeteoEvents`),
     partagée avec la page Analyse et l'endpoint `/meteohub/events` (jamais recalculés

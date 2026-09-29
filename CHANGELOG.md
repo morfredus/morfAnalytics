@@ -3,6 +3,18 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.61.0] - 2026-09-29
+
+### Added
+
+- **Excluded points list** (Analyses page, *Maintenance avancée* > *Points écartés*).
+  Lists every measurement the read-time qualification drops from the analyses
+  (isolated spike, out of bounds, optionally "sonde hors conditions" periods) over
+  24 h, 7 or 30 days, for both outdoor and indoor sources: date, source, metric,
+  original value, reason. It reads `/meteohub/series` (same rules as the Graphs
+  crosses), deduplicates repeated cache rows, and says when the 500-per-metric cap
+  truncates the list.
+
 ## [0.60.0] - 2026-09-27
 
 ### Added

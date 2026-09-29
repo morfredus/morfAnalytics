@@ -1238,6 +1238,24 @@ QByteArray HttpServer::landingPage() {
       </div>
       <div id="purge-result" class="cleanup-result"></div>
     </div>
+    <div class="card" style="grid-column:1/-1">
+      <h3>Points écartés</h3>
+      <p class="note" style="margin-top:0">Mesures que la qualification retire des
+        analyses (pic isolé, hors bornes, sonde hors conditions), sans jamais les
+        effacer du cache. Même liste que les croix grises des Graphiques.</p>
+      <div class="actions">
+        <label class="field">Période
+          <select id="susp-hours">
+            <option value="24">24 h</option>
+            <option value="168" selected>7 jours</option>
+            <option value="720">30 jours</option>
+          </select>
+        </label>
+        <label class="field"><input type="checkbox" id="susp-excl"> inclure « sonde hors conditions »</label>
+        <button id="susp-list" type="button">Lister</button>
+      </div>
+      <div id="susp-result" class="cleanup-result"></div>
+    </div>
     </div>
   </details>
 
@@ -1996,6 +2014,50 @@ document.getElementById('fix-faults').addEventListener('click', async () => {
     document.getElementById('faults-count').textContent = '';
     loadAnalyses();
   }
+});
+
+// Points écartés : relit /meteohub/series (même qualification que les
+// Graphiques et les analyses) pour chaque source et grandeur, puis fusionne en
+// une seule liste chronologique. Rien n'est recalculé ici : la page ne fait que
+// montrer ce que le service a déjà décidé.
+document.getElementById('susp-list').addEventListener('click', async () => {
+  const el = document.getElementById('susp-result');
+  const hours = document.getElementById('susp-hours').value;
+  const withExcl = document.getElementById('susp-excl').checked;
+  const CTX = { out: 'Extérieur', in: 'Intérieur' };
+  const MET = { temp: ['Température', '°C'], hum: ['Humidité', '%'], pres: ['Pression', 'hPa'] };
+  const WHY = { pic: 'pic isolé', bornes: 'hors bornes', exclusion: 'sonde hors conditions' };
+  el.className = 'cleanup-result';
+  el.textContent = 'Recherche…';
+  const jobs = [];
+  for (const c of Object.keys(CTX)) for (const m of Object.keys(MET))
+    jobs.push(fetch(`/meteohub/series?ctx=${c}&metric=${m}&hours=${hours}`)
+      .then(r => r.json()).then(j => ({ c, m, s: j.suspects || [] })).catch(() => null));
+  const res = await Promise.all(jobs);
+  if (res.some(r => r === null)) { el.className = 'cleanup-result err'; el.textContent = 'Service injoignable.'; return; }
+  // Une même ligne peut revenir plusieurs fois (doublons de cache) : on dédoublonne.
+  const seen = new Set();
+  const rows = [];
+  let capped = false;
+  for (const { c, m, s } of res) {
+    if (s.length >= 500) capped = true; // borne côté service
+    for (const [ts, v, why] of s) {
+      if (why === 'exclusion' && !withExcl) continue;
+      const k = `${ts}|${c}|${m}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      rows.push({ ts, c, m, v, why });
+    }
+  }
+  rows.sort((a, b) => b.ts - a.ts);
+  if (!rows.length) { el.textContent = 'Aucun point écarté sur la période.'; return; }
+  const body = rows.map(r => `<tr><td>${new Date(r.ts * 1000).toLocaleString('fr-FR')}</td>
+    <td>${CTX[r.c]}</td><td>${MET[r.m][0]}</td><td>${r.v} ${MET[r.m][1]}</td>
+    <td>${WHY[r.why] || esc(r.why)}</td></tr>`).join('');
+  el.innerHTML = `<p>${rows.length} point(s) écarté(s)${capped
+      ? ' - liste tronquée (500 par grandeur au plus), réduire la période' : ''}.</p>
+    <div class="scroll"><table><thead><tr><th>Date</th><th>Source</th><th>Grandeur</th>
+    <th>Valeur d'origine</th><th>Motif</th></tr></thead><tbody>${body}</tbody></table></div>`;
 });
 
 function invalidatePayload(dryRun) {
