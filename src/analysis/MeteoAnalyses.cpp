@@ -245,17 +245,8 @@ QJsonObject analyzeCurrent(const AnalysisContext& ctx, const QJsonObject&) {
         o["dew_point_spread"]  = round1(t - td);
     }
     if (!std::isnan(p)) {
+        // Pression au niveau de la mer, telle que publiee par MeteoHub.
         o["pressure"] = round1(p);
-        o["pressure_sea_level"] = round1(meteo::seaLevelPressure(p, t, ctx.altitudeM));
-        o["altitude_m"] = ctx.altitudeM;
-        // Sans altitude renseignee, la pression reduite vaut la pression brute :
-        // on le dit, plutot que de laisser croire a une valeur comparable aux
-        // bulletins meteo.
-        if (!ctx.altitudeKnown)
-            o["note"] = QStringLiteral(
-                "Altitude non renseignée (paramètre altitude_m) : la pression au "
-                "niveau de la mer est identique à la pression mesurée et n'est "
-                "pas comparable aux bulletins météo.");
     }
     return o;
 }
@@ -333,31 +324,24 @@ QJsonObject analyzeDryAirRisk(const AnalysisContext& ctx, const QJsonObject&) {
 QJsonObject analyzePressureTrend(const AnalysisContext& ctx, const QJsonObject&) {
     const Series series = ctx.store->range(ctx.now - 12 * kHour, ctx.now);
     const QVector<double>* pres = series.channel(kPres);
-    const QVector<double>* temp = series.channel(kTemp);
-    if (!pres || !temp)
+    if (!pres)
         return failure(QStringLiteral("canaux manquants"));
 
     const int i = lastValidIndex(*pres);
     if (i < 0)
         return failure(QStringLiteral("aucune mesure de pression récente"));
 
+    // Pression deja ramenee au niveau de la mer par MeteoHub.
     const qint64 nowTs = series.timestamps()[i];
-    const double t = Series::isValid((*temp)[i]) ? (*temp)[i] : 15.0;
-    const double pNow = meteo::seaLevelPressure((*pres)[i], t, ctx.altitudeM);
+    const double pNow = (*pres)[i];
 
     // Tolerance de 30 min autour de la cible : une mesure par minute suffit
     // largement, mais un trou d'acquisition ne doit pas invalider la tendance.
-    auto reduced = [&](qint64 target) {
-        const double raw = valueNear(series, *pres, target, 30 * 60);
-        return std::isnan(raw) ? std::nan("")
-                               : meteo::seaLevelPressure(raw, t, ctx.altitudeM);
-    };
-
-    const double p3 = reduced(nowTs - 3 * kHour);
-    const double p1 = reduced(nowTs - 1 * kHour);
+    const double p3 = valueNear(series, *pres, nowTs - 3 * kHour, 30 * 60);
+    const double p1 = valueNear(series, *pres, nowTs - 1 * kHour, 30 * 60);
 
     QJsonObject o;
-    o["pressure_sea_level"] = round1(pNow);
+    o["pressure"] = round1(pNow);
     if (std::isnan(p3))
         return failure(QStringLiteral("historique de pression insuffisant sur 3 h"));
 
@@ -385,43 +369,33 @@ QJsonObject analyzePressureTrend(const AnalysisContext& ctx, const QJsonObject&)
 QJsonObject analyzeZambretti(const AnalysisContext& ctx, const QJsonObject&) {
     const Series series = ctx.store->range(ctx.now - 12 * kHour, ctx.now);
     const QVector<double>* pres = series.channel(kPres);
-    const QVector<double>* temp = series.channel(kTemp);
-    if (!pres || !temp)
+    if (!pres)
         return failure(QStringLiteral("canaux manquants"));
 
     const int i = lastValidIndex(*pres);
     if (i < 0)
         return failure(QStringLiteral("aucune mesure de pression récente"));
 
+    // Zambretti est calibre sur la pression au niveau de la mer : c'est
+    // exactement ce que publie MeteoHub, utilisee telle quelle.
     const qint64 nowTs = series.timestamps()[i];
-    const double t = Series::isValid((*temp)[i]) ? (*temp)[i] : 15.0;
-    const double pNow = meteo::seaLevelPressure((*pres)[i], t, ctx.altitudeM);
+    const double pNow = (*pres)[i];
 
-    const double raw3 = valueNear(series, *pres, nowTs - 3 * kHour, 30 * 60);
-    if (std::isnan(raw3))
+    const double p3 = valueNear(series, *pres, nowTs - 3 * kHour, 30 * 60);
+    if (std::isnan(p3))
         return failure(QStringLiteral("historique de pression insuffisant sur 3 h"));
-    const double p3 = meteo::seaLevelPressure(raw3, t, ctx.altitudeM);
 
     const double delta3h = pNow - p3;
     const int month = QDateTime::fromSecsSinceEpoch(nowTs).date().month();
 
     QJsonObject o;
     o["forecast"] = meteo::zambrettiForecast(pNow, delta3h, month);
-    o["pressure_sea_level"] = round1(pNow);
+    o["pressure"] = round1(pNow);
     o["delta_3h"] = round1(delta3h);
     o["tendency"] = meteo::pressureTendencyLabel(delta3h);
     o["note"] = QStringLiteral(
         "Prévision locale pour les 12 à 24 heures à venir, déduite de la seule "
         "pression. Le vent n'étant pas mesuré, elle reste indicative.");
-    // L'avertissement ne se declenche que si le parametre est absent, et il dit
-    // ce qui est reellement en jeu : environ 0,12 hPa par metre d'altitude, soit
-    // un decalage negligeable pres du niveau de la mer et franc en altitude.
-    if (!ctx.altitudeKnown)
-        o["warning"] = QStringLiteral(
-            "Altitude non renseignée (paramètre altitude_m) : Zambretti est "
-            "calibré sur la pression ramenée au niveau de la mer. L'écart vaut "
-            "environ 0,12 hPa par mètre - négligeable près du niveau de la mer, "
-            "il change la prévision dès quelques dizaines de mètres.");
     return o;
 }
 

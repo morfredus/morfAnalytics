@@ -67,6 +67,12 @@ double crossingEps(const QString& metric);
 // contenir des NaN (mesures manquantes) et des trous : aucun croisement n'est
 // invente au travers d'un vrai silence de capteur. L'instant et la valeur sont
 // interpoles entre les deux mesures qui encadrent l'egalite.
+//
+// Pas de croisement de PRESSION (renvoie vide) : interieur et exterieur baignent
+// dans le meme air, et MeteoHub publie les deux pressions deja ramenees au
+// niveau de la mer. Leurs courbes se confondent ; qu'elles se croisent ne
+// traduit qu'un ecart entre capteurs, jamais un evenement meteo. Un tel ecart
+// releverait d'un controle de coherence des capteurs, pas des evenements.
 QVector<Crossing> detectCrossings(const QString& metric,
                                   const QVector<qint64>& tsOut, const QVector<double>& vOut,
                                   const QVector<qint64>& tsIn,  const QVector<double>& vIn);

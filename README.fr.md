@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.62.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.63.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -66,7 +66,7 @@ Voir la vision d'ensemble de l'écosystème dans `../morfSystem/docs/ARCHITECTUR
 
 ## Configurer la collecte depuis MeteoHub
 
-Renseigner l'adresse de l'appareil et l'altitude de la station dans le module
+Renseigner l'adresse de l'appareil dans le module
 `analytics` (voir `config/morfanalytics.example.json`) :
 
 ```jsonc
@@ -75,20 +75,18 @@ Renseigner l'adresse de l'appareil et l'altitude de la station dans le module
   "id": "analytics-1",
   "maintenance_ms": 60000,      // période entre deux cycles de collecte
   "cache_dir": "cache",         // dossier du cache de travail
-  "source_url": "http://192.168.1.42",
-  "altitude_m": 8               // altitude de la station, en mètres
+  "source_url": "http://192.168.1.42"
 }
 ```
 
 - **`source_url`** - sans ce paramètre, aucune collecte n'est lancée : le service
   se contente d'exposer le cache déjà constitué. C'est le mode à utiliser pour
   analyser un historique déjà recopié alors que l'appareil est hors service.
-- **`altitude_m`** - sert à ramener la pression au niveau de la mer, seule forme
-  comparable aux bulletins météo. Compter environ **0,12 hPa par mètre** : à
-  quelques mètres l'écart est négligeable, à quelques centaines il change la
-  prévision. Renseigner l'altitude réelle du capteur, pas celle de la commune.
-  Une altitude **nulle est une valeur valide** (station au bord de mer) ; c'est
-  l'*absence* du paramètre qui est signalée dans les analyses de pression.
+- **Pas d'altitude ici.** MeteoHub publie une pression déjà ramenée au niveau de
+  la mer, avec l'altitude de chacun de ses capteurs (page Système du hub).
+  morfAnalytics l'analyse telle quelle et ne connaît pas l'installation : déplacer
+  la sonde se règle dans MeteoHub seul. Un ancien paramètre `altitude_m` est
+  ignoré, avec un avertissement au démarrage.
 
 Consulter ensuite `http://<adresse-du-serveur>:8799/` pour suivre l'avancement de
 la collecte. Le premier cycle recopie l'intégralité de l'historique présent sur la

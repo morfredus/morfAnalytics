@@ -3,6 +3,28 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.63.0] - 2026-09-29
+
+### Removed
+
+- **`altitude_m` and every altitude correction.** MeteoHub (1.53.0) publishes
+  pressure already reduced to sea level, with the altitude of each of its sensors.
+  morfAnalytics analyses it as is: *Conditions actuelles*, *Tendance de pression* and
+  *Zambretti* use the received pressure directly; `meteo::seaLevelPressure`, the
+  `altitudeM` / `altitudeKnown` context and the "altitude non renseignee" notes are
+  gone. No fallback: a leftover `altitude_m` in the config is ignored and logged at
+  startup. Rule: the component that knows the physical reality of a measurement
+  normalises it; analysis components never rebuild the installation.
+- **Indoor/outdoor pressure crossings.** Both sensors sit in the same air and now
+  publish comparable sea-level values: their curves crossing only reflects a sensor
+  gap, not a weather event. `detectCrossings("pres")` returns nothing; temperature
+  and humidity crossings are unchanged.
+
+### Changed
+
+- Pressure analyses output `pressure` (sea-level, as published by MeteoHub) instead
+  of `pressure_sea_level`; `/status` no longer reports `altitude_m`.
+
 ## [0.62.0] - 2026-09-29
 
 ### Added

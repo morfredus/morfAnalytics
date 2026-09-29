@@ -93,7 +93,6 @@ const char* trendName(Trend t) {
 double crossingEps(const QString& metric) {
     if (metric == QLatin1String("temp")) return 0.2; // °C
     if (metric == QLatin1String("hum"))  return 1.0; // %
-    if (metric == QLatin1String("pres")) return 0.3; // hPa
     return 0.2;
 }
 
@@ -101,6 +100,7 @@ QVector<Crossing> detectCrossings(const QString& metric,
                                   const QVector<qint64>& tsOut, const QVector<double>& vOut,
                                   const QVector<qint64>& tsIn,  const QVector<double>& vIn) {
     QVector<Crossing> out;
+    if (metric == QLatin1String("pres")) return out; // voir MeteoEvents.h
     QVector<qint64> oTs, iTs; QVector<double> oV, iV;
     compact(tsOut, vOut, oTs, oV);
     compact(tsIn,  vIn,  iTs, iV);

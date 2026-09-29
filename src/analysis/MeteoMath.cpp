@@ -56,15 +56,6 @@ double vaporPressureDeficit(double tempC, double humidityPct) {
     return saturation * (1.0 - rh / 100.0);
 }
 
-double seaLevelPressure(double pressureHpa, double tempC, double altitudeM) {
-    if (std::abs(altitudeM) < 0.5)
-        return pressureHpa; // station au niveau de la mer : rien a corriger
-    const double denominator = tempC + 0.0065 * altitudeM + 273.15;
-    if (denominator <= 0.0)
-        return pressureHpa;
-    return pressureHpa * std::pow(1.0 - (0.0065 * altitudeM) / denominator, -5.257);
-}
-
 QString pressureTendencyLabel(double deltaHpa3h) {
     const double d = std::abs(deltaHpa3h);
     // Seuils de la classification OMM des tendances barometriques.

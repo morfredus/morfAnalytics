@@ -47,10 +47,11 @@ class ForecastCollector;
 //                      voir docs/FILESYSTEM.md).
 //   "source_url"     : URL de base de MeteoHub, p. ex. "http://192.168.1.42".
 //                      Si absent, aucune collecte n'est lancée.
-//   "altitude_m"     : altitude de la station, en mètres. Sert à ramener la
-//                      pression au niveau de la mer. Une altitude nulle est une
-//                      valeur valide ; c'est l'ABSENCE du paramètre qui est
-//                      signalée dans les analyses de pression.
+//
+// Aucune altitude ici : la pression reçue de MeteoHub est DÉJÀ ramenée au niveau
+// de la mer par le hub, avec l'altitude de chaque capteur. Règle du parc : le
+// composant qui connaît la réalité physique de la mesure la normalise ; les
+// analyses consomment la donnée normalisée sans reconstituer l'installation.
 //   "morfsync_url"   : URL de base du hub morfSync, p. ex. "http://127.0.0.1:8080".
 //                      Si absent, aucune publication n'est faite (le service reste
 //                      un moteur d'analyse local). Écriture SEULE vers morfSync.
@@ -61,7 +62,6 @@ class AnalyticsModule : public IModule {
 public:
     AnalyticsModule(const QString& id, int maintenanceMs = 60000,
                     QString cacheDir = QString(), QString sourceUrl = QString(),
-                    double altitudeM = 0.0, bool altitudeKnown = false,
                     QString morfsyncUrl = QString(), QString morfsyncToken = QString(),
                     QObject* parent = nullptr);
     ~AnalyticsModule() override;
@@ -149,8 +149,6 @@ private:
     int     m_maintenanceMs;
     QString m_cacheDir;
     QString m_sourceUrl;
-    double  m_altitudeM;
-    bool    m_altitudeKnown;
     QString m_morfsyncUrl;
     QString m_morfsyncToken;
     QTimer* m_timer;

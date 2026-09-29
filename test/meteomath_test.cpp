@@ -12,7 +12,7 @@
  *   - valeurs de reference issues de tables meteorologiques (tolerance large,
  *     pour ne pas dependre d'une variante de formule) ;
  *   - INVARIANTS qui doivent tenir pour toute implementation correcte, quelle que
- *     soit la variante : saturation, monotonie, altitude nulle, seuil humidex.
+ *     soit la variante : saturation, monotonie, seuil humidex.
  *
  * Compile via l'option CMake MA_BUILD_TESTS. Retourne 0 si tout passe.
  */
@@ -72,13 +72,6 @@ int main() {
           "VPD croissant avec la chaleur a RH egale");
 
     // --- Pression reduite au niveau de la mer --------------------------------
-    // Invariant : a altitude nulle, aucune reduction.
-    checkNear(seaLevelPressure(1013.0, 15.0, 0.0), 1013.0, 0.5,
-              "seaLevelPressure a altitude 0 == pression mesuree");
-    checkNear(seaLevelPressure(1000.0, 15.0, 100.0), 1012.0, 2.0,
-              "seaLevelPressure(1000,15,100m) ~ 1012 hPa");
-    check(seaLevelPressure(1000.0, 15.0, 200.0) > 1000.0,
-          "la reduction augmente la pression avec l'altitude");
 
     std::printf("\n%s (%d echec%s)\n",
                 failures == 0 ? "TOUS LES TESTS PASSENT" : "DES TESTS ECHOUENT",

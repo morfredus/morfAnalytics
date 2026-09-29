@@ -12,6 +12,7 @@
 #include "morfanalytics/GitHubAnalyticsModule.h"
 #include "morfanalytics/StatePaths.h"
 
+#include <QDebug>
 #include <QDir>
 #include <QJsonArray>
 #include <QStringList>
@@ -34,15 +35,18 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
         const int maintenanceMs = def.params.value("maintenance_ms").toInt(60000);
         const QString cacheDir  = def.params.value("cache_dir").toString();
         const QString sourceUrl = def.params.value("source_url").toString();
-        // Une altitude nulle etant legitime, c'est la PRESENCE de la cle qui
-        // distingue "station au bord de mer" de "parametre oublie".
-        const bool altitudeKnown = def.params.contains("altitude_m");
-        const double altitudeM   = def.params.value("altitude_m").toDouble(0.0);
+        // `altitude_m` n'existe plus : MeteoHub publie une pression deja ramenee
+        // au niveau de la mer. Une ancienne config qui le porte encore est
+        // SIGNALEE (jamais appliquee) : l'altitude se regle dans MeteoHub.
+        if (def.params.contains("altitude_m"))
+            qWarning().noquote()
+                << QStringLiteral("module %1 : parametre 'altitude_m' ignore - l'altitude "
+                                  "des capteurs se declare dans MeteoHub (page Systeme), "
+                                  "a retirer de la configuration").arg(def.id);
         // Publication (facultative) des synthèses journalières vers morfSync.
         const QString morfsyncUrl   = def.params.value("morfsync_url").toString();
         const QString morfsyncToken = def.params.value("morfsync_token").toString();
         return new AnalyticsModule(def.id, maintenanceMs, cacheDir, sourceUrl,
-                                   altitudeM, altitudeKnown,
                                    morfsyncUrl, morfsyncToken, parent);
     }
 

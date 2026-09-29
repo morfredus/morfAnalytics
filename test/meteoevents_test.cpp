@@ -48,6 +48,9 @@ int main() {
             check(std::fabs(cr[0].value - 21.0) < 0.1, "valeur du croisement ~21");
             check(cr[0].outRising, "sens : l'exterieur passe au-dessus de l'interieur");
         }
+        // Meme profil en pression : aucun croisement (meme air, pas un evenement).
+        check(detectCrossings(QStringLiteral("pres"), to, vo, ti, vi).isEmpty(),
+              "pas de croisement de pression");
     }
     {
         // Bruit qui frole l'egalite et repart du meme cote : aucun croisement.

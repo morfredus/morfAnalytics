@@ -52,15 +52,12 @@ QString defaultStateDir() {
 
 AnalyticsModule::AnalyticsModule(const QString& id, int maintenanceMs,
                                  QString cacheDir, QString sourceUrl,
-                                 double altitudeM, bool altitudeKnown,
                                  QString morfsyncUrl, QString morfsyncToken,
                                  QObject* parent)
     : IModule(id, QStringLiteral("analytics"), parent),
       m_maintenanceMs(maintenanceMs > 0 ? maintenanceMs : 60000),
       m_cacheDir(std::move(cacheDir)),
       m_sourceUrl(std::move(sourceUrl)),
-      m_altitudeM(altitudeM),
-      m_altitudeKnown(altitudeKnown),
       m_morfsyncUrl(std::move(morfsyncUrl)),
       m_morfsyncToken(std::move(morfsyncToken)),
       m_timer(new QTimer(this)) {
@@ -237,8 +234,6 @@ void AnalyticsModule::stop() {
 QJsonObject AnalyticsModule::statusJson() const {
     QJsonObject o;
     o["running"]        = m_running;
-    o["altitude_m"]     = m_altitudeM;
-    o["altitude_known"] = m_altitudeKnown;
     o["ts"]         = static_cast<double>(QDateTime::currentSecsSinceEpoch());
     if (m_collector)
         o["collector"] = m_collector->statusJson();
@@ -260,8 +255,6 @@ QJsonObject AnalyticsModule::analyze(const QJsonObject& request) const {
     ctx.storeIn   = m_store.get();
     ctx.storeOut  = m_storeOut ? m_storeOut.get() : nullptr;
     ctx.forecastStore = m_forecastStore ? m_forecastStore.get() : nullptr;
-    ctx.altitudeM     = m_altitudeM;
-    ctx.altitudeKnown = m_altitudeKnown;
     ctx.now       = QDateTime::currentSecsSinceEpoch();
 
     const QString type = request.value(QStringLiteral("type")).toString();

@@ -1472,7 +1472,7 @@ const RENDERERS = {
     if (r.dew_point !== undefined) chips.push(['Point de rosée', num(r.dew_point, '°C')]);
     if (r.dew_point_spread !== undefined) chips.push(['Écart rosée', num(r.dew_point_spread, '°C')]);
     if (r.absolute_humidity !== undefined) chips.push(['Humidité absolue', num(r.absolute_humidity, 'g/m³')]);
-    if (r.pressure_sea_level !== undefined) chips.push(['Pression (mer)', num(r.pressure_sea_level, 'hPa')]);
+    if (r.pressure !== undefined) chips.push(['Pression (mer)', num(r.pressure, 'hPa')]);
     html += `<div class="chips">${chips.map(([k, v]) =>
       `<span class="chip">${esc(k)} <b>${v}</b></span>`).join('')}</div>`;
     return html + notes(r);
@@ -1492,13 +1492,13 @@ const RENDERERS = {
 
   zambretti: (r) => `<div class="quote">${esc(r.forecast || '-')}</div>` +
     `<div class="chips">
-       <span class="chip">Pression <b>${num(r.pressure_sea_level, 'hPa')}</b></span>
+       <span class="chip">Pression <b>${num(r.pressure, 'hPa')}</b></span>
        <span class="chip">3 h <b>${r.delta_3h > 0 ? '+' : ''}${num(r.delta_3h, 'hPa')}</b></span>
        <span class="chip">${esc(r.tendency || '')}</span>
      </div>` + notes(r),
 
   pressure_trend: (r) => dl([
-    ['Pression (niveau mer)', num(r.pressure_sea_level, 'hPa')],
+    ['Pression (niveau mer)', num(r.pressure, 'hPa')],
     ['Variation 1 h', signed(r.delta_1h, 'hPa')],
     ['Variation 3 h', signed(r.delta_3h, 'hPa')],
     ['Tendance', esc(r.tendency || '')],

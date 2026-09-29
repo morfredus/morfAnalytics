@@ -19,7 +19,7 @@ namespace meteo {
 // verifier isolement contre des valeurs de reference.
 //
 // Unites, systematiquement : temperature en degres Celsius, humidite relative en
-// pourcent, pression en hectopascals, altitude en metres.
+// pourcent, pression en hectopascals.
 // -----------------------------------------------------------------------------
 
 // Point de rosee (formule de Magnus-Tetens). Temperature a laquelle l'air doit
@@ -41,13 +41,6 @@ double humidex(double tempC, double humidityPct);
 // assecher la vegetation. Zero signifie air sature ; la valeur augmente avec
 // la chaleur et la secheresse de l'air.
 double vaporPressureDeficit(double tempC, double humidityPct);
-
-// Pression ramenee au niveau de la mer (formule barometrique). Sans cette
-// reduction, la pression mesuree n'est comparable ni aux bulletins meteo ni a
-// celle d'une autre station : 100 metres d'altitude valent deja environ 12 hPa.
-// C'est aussi la seule forme exploitable par Zambretti, calibre sur des valeurs
-// reduites.
-double seaLevelPressure(double pressureHpa, double tempC, double altitudeM);
 
 // Code de tendance barometrique de l'OMM, evalue sur 3 heures. Renvoie un
 // libelle ("hausse rapide", "baisse lente", "stable"...).

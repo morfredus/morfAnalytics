@@ -59,12 +59,6 @@ struct AnalysisContext {
     // de prévisions active.
     const ForecastStore* forecastStore = nullptr;
     MeteoCtx resolvedCtx = MeteoCtx::In;     // contexte effectivement retenu
-    double altitudeM = 0.0;  // altitude de la station, en metres
-    // Une altitude nulle est une valeur LEGITIME (station au bord de mer). On ne
-    // peut donc pas deduire de `altitudeM == 0` que le parametre est absent :
-    // le fait qu'il ait ete renseigne est porte separement, sans quoi une
-    // station au niveau de la mer serait accusee a tort d'etre mal configuree.
-    bool   altitudeKnown = false;
     qint64 now = 0;          // instant de reference (secondes Unix)
 };
 

@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.62.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.63.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -61,7 +61,7 @@ See the ecosystem vision in `../morfSystem/docs/ARCHITECTURE.md`.
 
 ## Configure collection from MeteoHub
 
-Set the device address and the station altitude in the `analytics` module (see
+Set the device address in the `analytics` module (see
 `config/morfanalytics.example.json`):
 
 ```jsonc
@@ -70,20 +70,18 @@ Set the device address and the station altitude in the `analytics` module (see
   "id": "analytics-1",
   "maintenance_ms": 60000,      // delay between two collection cycles
   "cache_dir": "cache",         // working cache directory
-  "source_url": "http://192.168.1.42",
-  "altitude_m": 8               // station altitude, in metres
+  "source_url": "http://192.168.1.42"
 }
 ```
 
 - **`source_url`** - without it, no collection runs: the service only exposes the
   cache it already holds. Use that mode to analyse an already-copied history while
   the device is offline.
-- **`altitude_m`** - used to reduce pressure to sea level, the only form
-  comparable to weather bulletins. Reckon about **0.12 hPa per metre**: at a few
-  metres the difference is negligible, at a few hundred it changes the forecast.
-  Enter the actual altitude of the sensor, not the one of the town. A **zero
-  altitude is a valid value** (seaside station); it is the *absence* of the
-  parameter that pressure analyses flag.
+- **No altitude here.** MeteoHub publishes pressure already reduced to sea level,
+  using the altitude of each of its sensors (hub System page). morfAnalytics
+  analyses it as is and knows nothing of the installation: moving the probe is set
+  in MeteoHub only. A leftover `altitude_m` parameter is ignored, with a warning at
+  startup.
 
 Then open `http://<server-address>:8799/` to follow the collection. The first
 cycle copies the whole history stored on the SD card and may take several
