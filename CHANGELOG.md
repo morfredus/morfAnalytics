@@ -3,6 +3,21 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.63.1] - 2026-09-29
+
+### Changed
+
+- **Clearer "Purge totale" warning.** The cache is rebuilt only from what the device
+  still holds: after a MeteoHub history reset or an SD card swap, older measurements
+  exist only in this cache and a purge deletes them for good. The card, the two
+  confirmations and the API note now say so, and list what is kept (annotations,
+  reintegrated points, measurements on the device).
+
+### Added
+
+- Quality tests: a storm pressure drop (-6 hPa in 15 min), a 30-minute pressure step
+  and a regular 10 hPa fall in one hour are never excluded.
+
 ## [0.63.0] - 2026-09-29
 
 ### Removed

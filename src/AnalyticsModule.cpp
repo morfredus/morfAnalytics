@@ -573,9 +573,11 @@ QJsonObject AnalyticsModule::cleanupData(const QJsonObject& request) {
         }
         o["ok"] = true;
         o["note"] = QStringLiteral(
-            "Caches intérieur et extérieur vidés. Ils seront reconstruits "
-            "intégralement depuis l'appareil au prochain cycle de collecte ; les "
-            "mesures d'origine n'ont pas été touchées.");
+            "Caches intérieur et extérieur vidés. Ils seront reconstruits au "
+            "prochain cycle de collecte avec ce que l'appareil contient encore, et "
+            "seulement cela : une mesure absente de l'appareil (historique vidé, "
+            "carte changée) est perdue. Les mesures présentes sur l'appareil n'ont "
+            "pas été touchées ; annotations et points réintégrés sont conservés.");
         o["cached_points"] = static_cast<double>(
             m_store->count() + (m_storeOut ? m_storeOut->count() : 0));
         return o;

@@ -61,6 +61,21 @@ int main() {
     check(countFlag(qualifyChannel("temp", ts, v, {}), QualitySpike) == 0,
           "chute de temperature persistante conservee");
 
+    // --- Pression : vraies variations rapides jamais ecartees -------------------
+    // Chute d'orage : -6 hPa en 15 min, qui persiste.
+    mk({1012.0, 1012.0, 1010.0, 1008.0, 1006.0, 1006.0, 1006.0}, ts, v);
+    check(qualifyChannel("pres", ts, v, {}) == QVector<quint8>(7, QualityOk),
+          "chute de pression d'orage (-6 hPa / 15 min) conservee");
+    // Saut brusque d'une mesure a l'autre (+3 hPa) qui dure 30 min puis retombe.
+    mk({1010.0, 1010.0, 1013.0, 1013.0, 1013.0, 1013.0, 1013.0, 1013.0, 1010.0}, ts, v);
+    check(qualifyChannel("pres", ts, v, {}) == QVector<quint8>(9, QualityOk),
+          "saut de pression de 30 min conserve");
+    // Chute de 10 hPa en une heure, reguliere : aucun point ecarte.
+    mk({1015.0, 1014.0, 1013.0, 1012.0, 1011.0, 1010.0, 1009.0, 1008.0,
+        1007.0, 1006.0, 1005.0, 1005.0, 1005.0}, ts, v);
+    check(qualifyChannel("pres", ts, v, {}) == QVector<quint8>(13, QualityOk),
+          "chute reguliere de 10 hPa en 1 h conservee");
+
     // --- Pic sous le seuil : conserve (seuils prudents) ------------------------
     mk({20.0, 20.1, 22.5, 20.0, 20.1}, ts, v);   // +2,4 °C < 3 °C
     check(countFlag(qualifyChannel("temp", ts, v, {}), QualitySpike) == 0,

@@ -1216,11 +1216,14 @@ QByteArray HttpServer::landingPage() {
     </div>
     <div class="card">
       <h3>Purge totale</h3>
-      <p class="note" style="margin-top:0">Vide entièrement le cache local. Il se
-        reconstruit depuis l'appareil au prochain cycle de collecte - les mesures
-        d'origine, sur l'appareil, ne sont jamais touchées. Les neutralisations
-        manuelles sont alors perdues (les pannes capteur, elles, restent filtrées
-        à l'import).</p>
+      <p class="note" style="margin-top:0">Vide entièrement le cache local, puis le
+        reconstruit au prochain cycle de collecte avec <strong>ce que l'appareil
+        contient encore</strong>, et seulement cela. Si l'historique de MeteoHub a été
+        vidé, ou sa carte SD changée, les mesures plus anciennes n'existent plus que
+        dans ce cache : la purge les efface <strong>définitivement</strong>. Sont aussi
+        perdues les neutralisations de plage. Sont conservés : les annotations et les
+        points réintégrés (état du service), et les mesures d'origine présentes sur
+        l'appareil, jamais touchées.</p>
       <div class="actions">
         <button id="purge-all" type="button" class="danger">Vider le cache</button>
       </div>
@@ -2099,12 +2102,14 @@ document.getElementById('inv-apply').addEventListener('click', async () => {
 });
 
 document.getElementById('purge-all').addEventListener('click', async () => {
-  if (!confirm('Vider entièrement le cache local ? Il sera reconstruit depuis '
-    + 'l\'appareil au prochain cycle de collecte.')) return;
-  if (!confirm('Confirmer la purge totale du cache ?')) return;
+  if (!confirm('Vider entièrement le cache local ? Il sera reconstruit UNIQUEMENT '
+    + 'avec ce que l\'appareil contient encore : les mesures absentes de MeteoHub '
+    + '(historique vidé, carte changée) seront perdues définitivement.')) return;
+  if (!confirm('Confirmer la purge totale du cache (irréversible) ?')) return;
   const r = await cleanup({ action: 'purge_all' }).catch(() => null);
   showResult('purge-result', r,
-    r && r.ok ? 'Cache vidé. Reconstruction au prochain cycle de collecte.' : '');
+    r && r.ok ? 'Cache vidé. Reconstruction au prochain cycle de collecte, depuis ce '
+      + 'que contient l\'appareil.' : '');
   if (r && r.ok) { loadStatus(); loadAnalyses(); }
 });
 
