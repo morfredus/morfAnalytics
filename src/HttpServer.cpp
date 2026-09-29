@@ -1232,7 +1232,8 @@ QByteArray HttpServer::landingPage() {
     <div class="card" style="grid-column:1/-1">
       <h3>Points écartés</h3>
       <p class="note" style="margin-top:0">Mesures que la qualification retire des
-        analyses (pic isolé, hors bornes, sonde hors conditions), sans jamais les
+        analyses (pic isolé, hors bornes, démarrage à froid marqué par MeteoHub, sonde
+        hors conditions), sans jamais les
         effacer du cache. Même liste que les croix grises des Graphiques. Un point
         jugé réel se réintègre (réversible) ; les relevés de panne franche
         (pression hors 300-1200&nbsp;hPa) sont, eux, rejetés dès l'import.</p>
@@ -2012,7 +2013,8 @@ async function listSuspects() {
   const hours = document.getElementById('susp-hours').value;
   const withExcl = document.getElementById('susp-excl').checked;
   const CTX = SUSP_CTX, MET = SUSP_MET;
-  const WHY = { pic: 'pic isolé', bornes: 'hors bornes', exclusion: 'sonde hors conditions' };
+  const WHY = { pic: 'pic isolé', bornes: 'hors bornes', exclusion: 'sonde hors conditions',
+                demarrage: 'démarrage à froid' };
   el.className = 'cleanup-result';
   el.textContent = 'Recherche…';
   const jobs = [];

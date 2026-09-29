@@ -79,9 +79,12 @@ public:
     // Les doublons sont ignores silencieusement (cf. idempotence ci-dessus).
     // Tout le lot passe dans UNE transaction : sur une carte SD ou une cle USB,
     // valider chaque insertion separement serait des ordres de grandeur plus lent.
+    // `flags` : marques de la source par mesure (Series::kSourceColdBoot...),
+    // alignees sur `timestamps` ; absentes = 0 (mesure normale).
     bool insertBatch(quint32 dayKey, quint32 gen, quint32 firstIndex,
                      const QVector<qint64>& timestamps,
-                     const QVector<QHash<QString, double>>& values);
+                     const QVector<QHash<QString, double>>& values,
+                     const QVector<quint32>& flags = {});
     // Generation 0 (tests, sources a fichier unique).
     bool insertBatch(quint32 dayKey, quint32 firstIndex,
                      const QVector<qint64>& timestamps,

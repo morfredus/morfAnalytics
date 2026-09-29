@@ -3,6 +3,21 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.64.0] - 2026-09-29
+
+### Added
+
+- **Source flags, and a "démarrage à froid" reason.** The collector reads the optional
+  5th element of MeteoHub raw rows (1.54.0): a first measurement after a probe cold
+  boot that the hub judged non-conforming. It is stored (`src_flags` column, added in
+  place to existing caches, 0 = normal), carried by `Series::sourceFlags()`, and
+  `MeteoQuality` excludes it on every channel with the new reason `demarrage`
+  (`QualityColdBoot`). It shows as a grey cross on the Graphs, in *Points écartés*,
+  and can be reintegrated per channel like any excluded point. The hub's verdict is
+  applied as is: no local rule re-judges it.
+- Tests: flag round trip in the cache (including an old-schema cache), exclusion on
+  every channel, per-channel reintegration.
+
 ## [0.63.2] - 2026-09-29
 
 ### Changed

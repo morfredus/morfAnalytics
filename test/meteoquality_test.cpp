@@ -76,6 +76,27 @@ int main() {
     check(qualifyChannel("pres", ts, v, {}) == QVector<quint8>(13, QualityOk),
           "chute reguliere de 10 hPa en 1 h conservee");
 
+    // --- Demarrage a froid marque par la source : ecarte, reintegrable ---------
+    {
+        Series s(QStringList{QStringLiteral("temp"), QStringLiteral("pres")});
+        for (int i = 0; i < 5; ++i)
+            s.append(1000 + i * 300, {{QStringLiteral("temp"), 20.0 + 0.1 * i},
+                                      {QStringLiteral("pres"), 1013.0}},
+                     i == 2 ? Series::kSourceColdBoot : 0u);
+        Series a = s;
+        const auto flagged = applyQuality(a, {});
+        check(flagged.size() == 2 && qualityReasonCode(flagged[0].flags) == std::string("demarrage"),
+              "demarrage a froid : ecarte sur tous les canaux, motif demarrage");
+        check(!Series::isValid((*a.channel(QStringLiteral("temp")))[2]),
+              "demarrage a froid : NaN pour les analyses");
+        Series b = s;
+        KeptPoints kept;
+        kept[QStringLiteral("temp")].insert(1000 + 2 * 300);
+        const auto k = applyQuality(b, {}, QualityRules(), kept);
+        check(k.size() == 1 && k[0].channel == QStringLiteral("pres"),
+              "demarrage a froid : reintegration par canal");
+    }
+
     // --- Pic sous le seuil : conserve (seuils prudents) ------------------------
     mk({20.0, 20.1, 22.5, 20.0, 20.1}, ts, v);   // +2,4 °C < 3 °C
     check(countFlag(qualifyChannel("temp", ts, v, {}), QualitySpike) == 0,

@@ -79,7 +79,9 @@ une barre en haut de page :
   capteur, jamais un simple espacement de cadence). En-tête et filtres **collants**,
   comme la page Analyse.
   - **Qualité** (0.58.0) : les points écartés par `MeteoQuality` (pic isolé, hors
-    bornes, période annotée « sonde hors conditions ») ne participent ni aux
+    bornes, période annotée « sonde hors conditions », et depuis 0.64.0
+    « démarrage à froid » : première mesure après un flash de la sonde, jugée non
+    conforme et marquée par MeteoHub) ne participent ni aux
     courbes, ni aux échelles, ni aux événements. Ils sont dessinés en **croix
     grises** à leur valeur d'origine (ramenée dans le cadre si besoin), motif au
     survol ; la case « Points écartés » les masque. Une ligne « Qualité : N points

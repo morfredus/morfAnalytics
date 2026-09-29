@@ -39,6 +39,11 @@ namespace meteo {
 //     vraie journee ou interieur et exterieur se ressemblent : c'est a l'humain
 //     de le dire.
 //
+// DEMARRAGE A FROID (0.64.0) : MeteoHub marque la 1re mesure apres un flash ou
+// une remise sous tension de la sonde quand elle n'est pas conforme a la mesure
+// precedente (capteurs chauffes). Verdict de la source, applique tel quel : le
+// point est ecarte (tous canaux), et se reintegre comme les autres.
+//
 // REINTEGRATION (0.62.0) : l'utilisateur peut contredire la regle pour un point
 // precis (« ce pic etait reel »). Un point reintegre n'est jamais ecarte, quel
 // que soit le motif, et sert de voisin de reference comme n'importe quel point
@@ -54,6 +59,7 @@ enum QualityFlag : quint8 {
     QualityBounds   = 1,  // hors bornes physiques
     QualitySpike    = 2,  // pic isole (aller-retour)
     QualityExcluded = 4,  // periode exclue par annotation
+    QualityColdBoot = 8,  // marque par la source : 1re mesure d'un demarrage a froid
 };
 
 struct QualityRules {
@@ -84,7 +90,8 @@ QVector<quint8> qualifyChannel(const QString& channel, const QVector<qint64>& ts
                                const QVector<double>& values,
                                const QVector<TimeRange>& exclusions,
                                const QualityRules& rules = QualityRules(),
-                               const QSet<qint64>& keptTs = {});
+                               const QSet<qint64>& keptTs = {},
+                               const QVector<quint32>& sourceFlags = {});
 
 // Qualifie tous les canaux de `s` et remplace les points ecartes par NaN (les
 // analyses les voient alors comme des trous). Renvoie les points ecartes, dans
@@ -95,7 +102,8 @@ QVector<FlaggedPoint> applyQuality(Series& s, const QVector<TimeRange>& exclusio
                                    const QualityRules& rules = QualityRules(),
                                    const KeptPoints& kept = {});
 
-// Motif lisible (le plus grave si plusieurs) : "exclusion" | "bornes" | "pic".
+// Motif lisible (le plus grave si plusieurs) :
+// "exclusion" | "demarrage" | "bornes" | "pic".
 const char* qualityReasonCode(quint8 flags);
 
 } // namespace meteo

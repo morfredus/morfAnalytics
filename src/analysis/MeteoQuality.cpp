@@ -38,7 +38,8 @@ QVector<quint8> qualifyChannel(const QString& channel, const QVector<qint64>& ts
                                const QVector<double>& values,
                                const QVector<TimeRange>& exclusions,
                                const QualityRules& rules,
-                               const QSet<qint64>& keptTs) {
+                               const QSet<qint64>& keptTs,
+                               const QVector<quint32>& sourceFlags) {
     const int n = qMin(ts.size(), values.size());
     QVector<quint8> flags(n, QualityOk);
     const ChannelSpec spec = specFor(channel, rules);
@@ -48,6 +49,8 @@ QVector<quint8> qualifyChannel(const QString& channel, const QVector<qint64>& ts
         if (!Series::isValid(values[i])) continue;
         if (keptTs.contains(ts[i])) continue; // reintegre : la regle ne s'applique plus
         if (inExclusion(ts[i], exclusions)) flags[i] |= QualityExcluded;
+        if (i < sourceFlags.size() && (sourceFlags[i] & Series::kSourceColdBoot))
+            flags[i] |= QualityColdBoot;
         if (spec.known && (values[i] < spec.lo || values[i] > spec.hi)) flags[i] |= QualityBounds;
     }
     if (!spec.known) return flags;
@@ -84,10 +87,12 @@ QVector<FlaggedPoint> applyQuality(Series& s, const QVector<TimeRange>& exclusio
                                    const QualityRules& rules, const KeptPoints& kept) {
     QVector<FlaggedPoint> out;
     const QVector<qint64>& ts = s.timestamps();
+    QVector<quint32> src(ts.size());
+    for (int i = 0; i < ts.size(); ++i) src[i] = s.sourceFlags(i);
     for (const QString& ch : s.channelNames()) {
         QVector<double>* col = s.mutableChannel(ch);
         if (!col) continue;
-        const QVector<quint8> flags = qualifyChannel(ch, ts, *col, exclusions, rules, kept.value(ch));
+        const QVector<quint8> flags = qualifyChannel(ch, ts, *col, exclusions, rules, kept.value(ch), src);
         for (int i = 0; i < flags.size(); ++i) {
             if (flags[i] == QualityOk) continue;
             out.push_back(FlaggedPoint{ts[i], ch, (*col)[i], flags[i]});
@@ -99,6 +104,7 @@ QVector<FlaggedPoint> applyQuality(Series& s, const QVector<TimeRange>& exclusio
 
 const char* qualityReasonCode(quint8 flags) {
     if (flags & QualityExcluded) return "exclusion";
+    if (flags & QualityColdBoot) return "demarrage";
     if (flags & QualityBounds)   return "bornes";
     if (flags & QualitySpike)    return "pic";
     return "ok";

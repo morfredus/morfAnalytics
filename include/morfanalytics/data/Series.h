@@ -66,6 +66,12 @@ public:
         return it == m_channels.end() ? nullptr : &it.value();
     }
 
+    // Marques posees par la SOURCE sur chaque echantillon (bits ; 0 = mesure
+    // normale). MeteoHub marque p. ex. une 1re mesure de demarrage a froid non
+    // conforme (voir kSourceColdBoot). Alignees sur l'axe de temps.
+    static constexpr quint32 kSourceColdBoot = 1u;
+    quint32 sourceFlags(int i) const { return i >= 0 && i < m_flags.size() ? m_flags[i] : 0u; }
+
     // Sous-serie des echantillons de [fromTs, toTs] (axe de temps croissant).
     Series slice(qint64 fromTs, qint64 toTs) const {
         Series out(m_names);
@@ -74,6 +80,7 @@ public:
         int e = b;
         while (e < m_ts.size() && m_ts[e] <= toTs) ++e;
         out.m_ts = m_ts.mid(b, e - b);
+        out.m_flags = m_flags.mid(b, e - b);
         for (const QString& name : m_names)
             out.m_channels[name] = m_channels.value(name).mid(b, e - b);
         return out;
@@ -82,8 +89,9 @@ public:
     // Ajoute un echantillon. Les canaux absents de `values` sont marques manquants,
     // ce qui garde toutes les colonnes exactement de la meme longueur que l'axe
     // de temps - invariant sur lequel s'appuient toutes les analyses.
-    void append(qint64 ts, const QHash<QString, double>& values) {
+    void append(qint64 ts, const QHash<QString, double>& values, quint32 sourceFlags = 0) {
         m_ts.push_back(ts);
+        m_flags.push_back(sourceFlags);
         for (const QString& name : m_names) {
             auto it = values.constFind(name);
             m_channels[name].push_back(it == values.constEnd() ? missing() : it.value());
@@ -92,12 +100,14 @@ public:
 
     void reserve(int n) {
         m_ts.reserve(n);
+        m_flags.reserve(n);
         for (const QString& name : m_names)
             m_channels[name].reserve(n);
     }
 
 private:
     QVector<qint64> m_ts;
+    QVector<quint32> m_flags;
     QStringList m_names;
     QHash<QString, QVector<double>> m_channels;
 };

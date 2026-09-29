@@ -104,7 +104,7 @@ select{background:var(--field);border:1px solid var(--line);color:var(--ink);bor
 <div class="controls">
   <span class="metricsel"><span class="mslabel">Afficher</span><span id="metricsel"></span></span>
   <label>Source&nbsp;<select id="source"></select></label>
-  <label class="mk" title="Points écartés des analyses (pic isolé, hors bornes, sonde hors conditions)"><input type="checkbox" id="showsusp"> Points écartés</label>
+  <label class="mk" title="Points écartés des analyses (pic isolé, hors bornes, démarrage à froid, sonde hors conditions)"><input type="checkbox" id="showsusp"> Points écartés</label>
   <div class="periods" id="periods"></div>
   <div class="custom" id="custom" hidden>
     <label>Du&nbsp;<input type="datetime-local" id="cfrom" step="300"></label>
@@ -170,7 +170,7 @@ let S={
   showSuspects:localStorage.getItem(LS+"susp")!=="0"  // croix grises (défaut : visibles)
 };
 // Motifs de qualification (MeteoQuality) -> libellés.
-const QUAL_LABEL={pic:"pic isolé",bornes:"hors bornes",exclusion:"sonde hors conditions"};
+const QUAL_LABEL={pic:"pic isolé",bornes:"hors bornes",exclusion:"sonde hors conditions",demarrage:"démarrage à froid"};
 let G=null; // géométrie + séries du graphe courant, pour le survol
 
 const $=s=>document.querySelector(s);

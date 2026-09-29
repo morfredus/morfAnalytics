@@ -128,6 +128,16 @@ int main(int argc, char** argv) {
     check(store.insertBatch(day, 1, 0, ts, vals) && store.count() == 17,
           "reimport de la generation 1 : aucun doublon");
 
+    // Marques de la source (0.64.0) : colonne ajoutee a un cache ancien, marque
+    // relue a l'identique, mesures sans marque a 0.
+    const qint64 coldTs = newT0 + 10 * 300;
+    check(store.insertBatch(day, 1, 10, {coldTs}, {{{"temp", 25.0}, {"hum", 60.0}, {"pres", 1010.0}}},
+                            {Series::kSourceColdBoot}),
+          "marque : import d'une mesure de demarrage a froid");
+    const Series f = store.rangeRaw(coldTs - 300, coldTs);
+    check(f.size() == 2 && f.sourceFlags(0) == 0 && f.sourceFlags(1) == Series::kSourceColdBoot,
+          "marque : relue a l'identique, voisine sans marque");
+
     store.close();
     QDir().remove(path);
     std::printf(failures ? "\n%d echec(s)\n" : "\nTout passe.\n", failures);

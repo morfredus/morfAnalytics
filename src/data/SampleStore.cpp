@@ -80,6 +80,7 @@ bool SampleStore::open() {
                        "idx     INTEGER NOT NULL,"
                        "ts      INTEGER NOT NULL,"
                        "%1,"
+                       "src_flags INTEGER NOT NULL DEFAULT 0,"
                        "PRIMARY KEY (day_key, gen, idx))")
             .arg(columns.join(QStringLiteral(",")));
 
@@ -89,6 +90,19 @@ bool SampleStore::open() {
     }
     if (!migrateToGenerations())
         return false;
+    // Cache anterieur a 0.64.0 : pas de colonne des marques de la source. Ajout
+    // en place (SQLite sait ajouter une colonne avec defaut) : 0 = mesure normale.
+    {
+        bool hasFlags = false;
+        if (q.exec(QStringLiteral("PRAGMA table_info(sample)")))
+            while (q.next())
+                if (q.value(1).toString() == QLatin1String("src_flags")) hasFlags = true;
+        if (!hasFlags && !q.exec(QStringLiteral(
+                "ALTER TABLE sample ADD COLUMN src_flags INTEGER NOT NULL DEFAULT 0"))) {
+            m_lastError = q.lastError().text();
+            return false;
+        }
+    }
     // Les analyses interrogent presque toujours par plage temporelle.
     q.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS idx_sample_ts ON sample(ts)"));
 
@@ -182,7 +196,8 @@ bool SampleStore::isOpen() const {
 
 bool SampleStore::insertBatch(quint32 dayKey, quint32 gen, quint32 firstIndex,
                               const QVector<qint64>& timestamps,
-                              const QVector<QHash<QString, double>>& values) {
+                              const QVector<QHash<QString, double>>& values,
+                              const QVector<quint32>& flags) {
     if (timestamps.isEmpty())
         return true;
     if (timestamps.size() != values.size()) {
@@ -191,9 +206,9 @@ bool SampleStore::insertBatch(quint32 dayKey, quint32 gen, quint32 firstIndex,
     }
 
     QStringList cols{QStringLiteral("day_key"), QStringLiteral("gen"), QStringLiteral("idx"),
-                     QStringLiteral("ts")};
+                     QStringLiteral("ts"), QStringLiteral("src_flags")};
     QStringList placeholders{QStringLiteral("?"), QStringLiteral("?"), QStringLiteral("?"),
-                             QStringLiteral("?")};
+                             QStringLiteral("?"), QStringLiteral("?")};
     for (const QString& ch : m_channels) {
         cols << column(ch);
         placeholders << QStringLiteral("?");
@@ -222,6 +237,7 @@ bool SampleStore::insertBatch(quint32 dayKey, quint32 gen, quint32 firstIndex,
         q.addBindValue(gen);
         q.addBindValue(firstIndex + static_cast<quint32>(i));
         q.addBindValue(static_cast<qlonglong>(timestamps[i]));
+        q.addBindValue(i < flags.size() ? static_cast<qlonglong>(flags[i]) : 0LL);
         for (const QString& ch : m_channels) {
             auto it = values[i].constFind(ch);
             // Un canal absent ou NaN devient NULL en base : les analyses le
@@ -441,7 +457,7 @@ Series SampleStore::rangeRaw(qint64 fromTs, qint64 toTs) const {
     // Tri par ts : l'ordre (day_key, idx) suit l'ordre d'ecriture, mais un
     // recalage d'horloge sur la source peut le desynchroniser de l'ordre
     // chronologique. Les analyses, elles, exigent un axe de temps croissant.
-    q.prepare(QStringLiteral("SELECT ts, %1 FROM sample "
+    q.prepare(QStringLiteral("SELECT ts, src_flags, %1 FROM sample "
                              "WHERE ts BETWEEN ? AND ? ORDER BY ts ASC")
                   .arg(cols.join(QStringLiteral(","))));
     q.addBindValue(static_cast<qlonglong>(fromTs));
@@ -452,10 +468,11 @@ Series SampleStore::rangeRaw(qint64 fromTs, qint64 toTs) const {
     while (q.next()) {
         QHash<QString, double> values;
         for (int i = 0; i < m_channels.size(); ++i) {
-            const QVariant v = q.value(i + 1);
+            const QVariant v = q.value(i + 2);
             values.insert(m_channels[i], v.isNull() ? Series::missing() : v.toDouble());
         }
-        series.append(q.value(0).toLongLong(), values);
+        series.append(q.value(0).toLongLong(), values,
+                      static_cast<quint32>(q.value(1).toLongLong()));
     }
     return series;
 }
@@ -469,7 +486,7 @@ Series SampleStore::rangeForDayRaw(quint32 dayKey) const {
     QSqlQuery q(m_db);
     // Tri par ts (comme range) : l'ordre d'ecriture (idx) peut differer de l'ordre
     // chronologique apres un recalage d'horloge, et une synthese raisonne en temps.
-    q.prepare(QStringLiteral("SELECT ts, %1 FROM sample "
+    q.prepare(QStringLiteral("SELECT ts, src_flags, %1 FROM sample "
                              "WHERE day_key = ? ORDER BY ts ASC")
                   .arg(cols.join(QStringLiteral(","))));
     q.addBindValue(dayKey);
@@ -479,10 +496,11 @@ Series SampleStore::rangeForDayRaw(quint32 dayKey) const {
     while (q.next()) {
         QHash<QString, double> values;
         for (int i = 0; i < m_channels.size(); ++i) {
-            const QVariant v = q.value(i + 1);
+            const QVariant v = q.value(i + 2);
             values.insert(m_channels[i], v.isNull() ? Series::missing() : v.toDouble());
         }
-        series.append(q.value(0).toLongLong(), values);
+        series.append(q.value(0).toLongLong(), values,
+                      static_cast<quint32>(q.value(1).toLongLong()));
     }
     return series;
 }

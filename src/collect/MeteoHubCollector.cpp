@@ -173,15 +173,20 @@ void MeteoHubCollector::onChunkReply(QNetworkReply* reply) {
 
     QVector<qint64> timestamps;
     QVector<QHash<QString, double>> values;
+    QVector<quint32> flags;
     timestamps.reserve(data.size());
     values.reserve(data.size());
 
     for (const QJsonValue& v : data) {
-        // Format compact emis par MeteoHub : [ts, temperature, humidite, pression].
+        // Format compact emis par MeteoHub : [ts, temperature, humidite, pression],
+        // plus un 5e element, les MARQUES, quand le hub en a pose (1.54.0 :
+        // demarrage a froid non conforme). Le hub a juge la mesure ; on garde son
+        // verdict pour que la qualification l'ecarte et permette de la reintegrer.
         const QJsonArray row = v.toArray();
         if (row.size() < 4)
             continue;
         timestamps.push_back(static_cast<qint64>(row.at(0).toDouble()));
+        flags.push_back(row.size() >= 5 ? static_cast<quint32>(row.at(4).toDouble()) : 0u);
 
         // Filtre de plausibilite AVANT insertion : une valeur physiquement
         // impossible devient "manquante" au lieu de polluer les analyses. On
@@ -207,7 +212,7 @@ void MeteoHubCollector::onChunkReply(QNetworkReply* reply) {
 
     if (!timestamps.isEmpty()) {
         if (!m_store->insertBatch(m_currentDay, m_currentGen, m_currentIndex, timestamps,
-                                  values)) {
+                                  values, flags)) {
             finish(m_store->lastError());
             return;
         }
