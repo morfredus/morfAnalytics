@@ -17,6 +17,10 @@
       "migrate_from": [
         "/etc/morfanalytics/morfanalytics.json",
         "/opt/morfanalytics/morfanalytics.json"
+      ],
+      "_comment_removed_keys": "Keys retired by a version, deleted from the installed config on update (morfdeploy >= 0.21.0). Kept here for good. altitude_m: 0.63.0, MeteoHub publishes sea-level pressure.",
+      "removed_keys": [
+        "modules[].altitude_m"
       ]
     }
   ],

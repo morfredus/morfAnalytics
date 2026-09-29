@@ -3,6 +3,17 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.63.2] - 2026-09-29
+
+### Changed
+
+- **Vendored morfDeploy 0.21.0.** An update now brings the installed config fully up
+  to the example: new keys also reach modules already present (matched by `id`),
+  documentation comments follow the example, and keys a version declares in
+  `removed_keys` (service.json) are deleted after a backup.
+- `service.json` declares `modules[].altitude_m` in `removed_keys`: the next update
+  removes the dead altitude setting (retired in 0.63.0) from the installed config.
+
 ## [0.63.1] - 2026-09-29
 
 ### Changed
