@@ -101,11 +101,12 @@ public:
 
     // Nettoyage du CACHE - et de lui seul : la source de vérité (l'appareil)
     // n'est jamais touchée, le collecteur n'émettant que des GET.
-    // `request` : {"action": "scan_faults" | "invalidate_faults"
-    //              | "invalidate_range" (+ from_ts, to_ts, channels[])
-    //              | "purge_all"}.
-    // Les scans comptent sans modifier ; la purge totale se reconstruit depuis
-    // l'appareil au cycle de collecte suivant.
+    // `request` : {"action": "invalidate_range" (+ from_ts, to_ts, channels[],
+    //              dry_run) | "purge_all" | "collect_now"
+    //              | "keep_point" / "unkeep_point" (+ ctx, channel, ts)
+    //              | "list_kept"}.
+    // La purge totale se reconstruit depuis l'appareil au cycle suivant. Les
+    // points reintegres, eux, sont de l'ETAT : ils survivent a la purge.
     QJsonObject cleanupData(const QJsonObject& request);
 
     // -------------------------------------------------------------------------
@@ -133,6 +134,15 @@ public:
 
 private:
     QVector<meteo::TimeRange> outExclusions() const;
+
+    // Points reintegres par l'utilisateur (« ce pic etait reel ») : la
+    // qualification ne les ecarte plus. Fichier d'etat meteo-kept-points.json,
+    // a cote des annotations, jamais dans le cache.
+    meteo::KeptPoints keptFor(const QString& ctx) const { return m_kept.value(ctx); }
+    void loadKept();
+    bool saveKept() const;
+    QString m_keptPath;
+    QHash<QString, meteo::KeptPoints> m_kept; // ctx ("in"/"out") -> canal -> ts
 
     void maintainCache();
 

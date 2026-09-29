@@ -89,6 +89,12 @@ une barre en haut de page :
     page Analyses : l'effet est immédiat. La liste complète (date, source,
     grandeur, valeur d'origine, motif) se consulte sur la page Analyses, menu
     **Maintenance avancée** > **Points écartés** (0.61.0), sur 24 h, 7 ou 30 jours.
+    Depuis 0.62.0, un point jugé réel se **réintègre** (bouton par ligne) : il
+    rejoint courbes et analyses aussitôt, et se ré-écarte depuis la liste des
+    points réintégrés. La liste vit dans l'état du service
+    (`meteo-kept-points.json`, à côté des annotations) et survit à une purge du
+    cache. Les périodes « sonde hors conditions » se corrigent par leur
+    annotation, pas point par point.
   - **Événements détectés** : sous le graphique, un encart chronologique. Les
     événements sont calculés côté serveur par une **source commune** (`MeteoEvents`),
     partagée avec la page Analyse et l'endpoint `/meteohub/events` (jamais recalculés

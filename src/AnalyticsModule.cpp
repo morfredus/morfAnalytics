@@ -16,6 +16,9 @@
 #include "morfanalytics/analysis/MeteoQuality.h"
 
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QFile>
+#include <QSaveFile>
 #include <algorithm>
 #include <cmath>
 #include <QTimer>
@@ -83,6 +86,42 @@ AnalyticsModule::AnalyticsModule(const QString& id, int maintenanceMs,
             << QStringLiteral("module analytics : annotations illisibles dans %1 - "
                               "observations non chargees").arg(annPath);
     }
+    m_keptPath = QDir(defaultStateDir()).filePath(QStringLiteral("meteo-kept-points.json"));
+    loadKept();
+}
+
+void AnalyticsModule::loadKept() {
+    // Format : {"points":[{"ctx":"out","channel":"pres","ts":1759...}, ...]}.
+    // Fichier absent = aucun point reintegre (cas normal).
+    QFile f(m_keptPath);
+    if (!f.open(QIODevice::ReadOnly)) return;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    if (!doc.isObject()) {
+        qWarning().noquote() << QStringLiteral("module analytics : %1 illisible - "
+                                               "points reintegres ignores").arg(m_keptPath);
+        return;
+    }
+    for (const QJsonValue& v : doc.object().value(QStringLiteral("points")).toArray()) {
+        const QJsonObject p = v.toObject();
+        m_kept[p.value(QStringLiteral("ctx")).toString()]
+              [p.value(QStringLiteral("channel")).toString()]
+            .insert(static_cast<qint64>(p.value(QStringLiteral("ts")).toDouble()));
+    }
+}
+
+bool AnalyticsModule::saveKept() const {
+    QJsonArray pts;
+    for (auto c = m_kept.cbegin(); c != m_kept.cend(); ++c)
+        for (auto ch = c.value().cbegin(); ch != c.value().cend(); ++ch)
+            for (qint64 ts : ch.value())
+                pts.append(QJsonObject{{QStringLiteral("ctx"), c.key()},
+                                       {QStringLiteral("channel"), ch.key()},
+                                       {QStringLiteral("ts"), static_cast<double>(ts)}});
+    // Ecriture atomique (temporaire + renommage), comme les annotations.
+    QSaveFile f(m_keptPath);
+    if (!f.open(QIODevice::WriteOnly)) return false;
+    f.write(QJsonDocument(QJsonObject{{QStringLiteral("points"), pts}}).toJson());
+    return f.commit();
 }
 
 AnalyticsModule::~AnalyticsModule() = default;
@@ -130,9 +169,14 @@ bool AnalyticsModule::start() {
     // capte par le hub lui-meme, n'est concerne que par les regles automatiques.
     // Les exclusions sont relues a chaque lecture : une annotation ajoutee agit
     // aussitot, sans redemarrage ni recalcul du cache.
-    m_store->setQualifier([](Series& s) { meteo::applyQuality(s, {}); });
+    // Les points reintegres par l'utilisateur echappent a la qualification.
+    m_store->setQualifier([this](Series& s) {
+        meteo::applyQuality(s, {}, {}, keptFor(QStringLiteral("in")));
+    });
     if (m_storeOut)
-        m_storeOut->setQualifier([this](Series& s) { meteo::applyQuality(s, outExclusions()); });
+        m_storeOut->setQualifier([this](Series& s) {
+            meteo::applyQuality(s, outExclusions(), {}, keptFor(QStringLiteral("out")));
+        });
 
     // Cache des prévisions « day-ahead » archivées par l'appareil (étape 9).
     // Additif comme le cache OUT : un échec n'empêche pas le reste de tourner.
@@ -268,7 +312,8 @@ QJsonObject AnalyticsModule::seriesJson(const QString& ctx, const QString& metri
         Series s = store->rangeRaw(from - SampleStore::kQualifyPadS, to + SampleStore::kQualifyPadS);
         const bool isOut = (ctx == QLatin1String("out"));
         const QVector<meteo::FlaggedPoint> flagged =
-            meteo::applyQuality(s, isOut ? outExclusions() : QVector<meteo::TimeRange>());
+            meteo::applyQuality(s, isOut ? outExclusions() : QVector<meteo::TimeRange>(), {},
+                                keptFor(ctx));
         for (const meteo::FlaggedPoint& f : flagged) {
             if (f.channel != metric || f.ts < from || f.ts > to) continue;
             if (suspects.size() >= 500) break; // borne : le graphique n'en a pas besoin de plus
@@ -450,27 +495,53 @@ QJsonObject AnalyticsModule::cleanupData(const QJsonObject& request) {
         return o;
     }
 
+    const QString action = request.value(QStringLiteral("action")).toString();
+
+    // Reintegration d'un point ecarte par la qualification. N'agit que sur
+    // l'ETAT (liste des points reintegres), jamais sur le cache : effet immediat
+    // a la lecture suivante, et reversible (unkeep_point).
+    if (action == QLatin1String("list_kept")) {
+        QJsonArray pts;
+        for (auto c = m_kept.cbegin(); c != m_kept.cend(); ++c)
+            for (auto ch = c.value().cbegin(); ch != c.value().cend(); ++ch)
+                for (qint64 ts : ch.value())
+                    pts.append(QJsonArray{c.key(), ch.key(), static_cast<double>(ts)});
+        o["ok"] = true;
+        o["points"] = pts;
+        return o;
+    }
+    if (action == QLatin1String("keep_point") || action == QLatin1String("unkeep_point")) {
+        const QString ctx = request.value(QStringLiteral("ctx")).toString();
+        const QString ch  = request.value(QStringLiteral("channel")).toString();
+        const auto ts = static_cast<qint64>(request.value(QStringLiteral("ts")).toDouble());
+        if ((ctx != QLatin1String("in") && ctx != QLatin1String("out"))
+            || !kChannels.contains(ch) || ts <= 0) {
+            o["ok"] = false;
+            o["error"] = QStringLiteral("ctx (in|out), channel (temp|hum|pres) et ts requis");
+            return o;
+        }
+        if (action == QLatin1String("keep_point")) {
+            m_kept[ctx][ch].insert(ts);
+        } else {
+            m_kept[ctx][ch].remove(ts);
+            if (m_kept[ctx][ch].isEmpty()) m_kept[ctx].remove(ch);
+            if (m_kept[ctx].isEmpty()) m_kept.remove(ctx);
+        }
+        const bool saved = saveKept();
+        o["ok"] = saved;
+        if (!saved) o["error"] = QStringLiteral("écriture impossible : %1").arg(m_keptPath);
+        return o;
+    }
+
     if (!m_store || !m_store->isOpen()) {
         o["ok"] = false;
         o["error"] = QStringLiteral("cache indisponible");
         return o;
     }
 
-    // Bornes de panne capteur : une pression hors de [300, 1200] hPa est
-    // physiquement impossible - c'est la signature du BME280 en défaut (zéros),
-    // et elle disqualifie tout le relevé (le 0 °C associé n'est pas une mesure).
-    // Mêmes bornes que le filtre d'import du collecteur : ce nettoyage rattrape
-    // l'historique entré AVANT que le filtre n'existe.
-    constexpr double kPresMin = 300.0, kPresMax = 1200.0;
-    const QString kPres = QStringLiteral("pres");
-
-    const QString action = request.value(QStringLiteral("action")).toString();
     qint64 n = -1;
 
-    if (action == QLatin1String("scan_faults") || action == QLatin1String("invalidate_faults")) {
-        const bool dryRun = (action == QLatin1String("scan_faults"));
-        n = m_store->invalidateOutliers(kPres, kPresMin, kPresMax, dryRun);
-    } else if (action == QLatin1String("invalidate_range")) {
+    if (action == QLatin1String("invalidate_range")) {
         const auto fromTs = static_cast<qint64>(request.value(QStringLiteral("from_ts")).toDouble());
         const auto toTs   = static_cast<qint64>(request.value(QStringLiteral("to_ts")).toDouble());
         if (fromTs <= 0 || toTs <= 0 || toTs < fromTs) {

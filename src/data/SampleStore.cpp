@@ -402,36 +402,6 @@ qint64 SampleStore::invalidateChannels(qint64 fromTs, qint64 toTs,
     return q.numRowsAffected();
 }
 
-qint64 SampleStore::invalidateOutliers(const QString& channel, double lo, double hi,
-                                       bool dryRun) {
-    if (!m_channels.contains(channel)) {
-        m_lastError = QStringLiteral("canal inconnu : %1").arg(channel);
-        return -1;
-    }
-    const QString ref = column(channel);
-    const QString where = QStringLiteral("%1 IS NOT NULL AND (%1 < ? OR %1 > ?)").arg(ref);
-
-    QSqlQuery q(m_db);
-    if (dryRun) {
-        q.prepare(QStringLiteral("SELECT COUNT(*) FROM sample WHERE %1").arg(where));
-    } else {
-        QStringList sets;
-        for (const QString& ch : m_channels)
-            sets << (column(ch) + QStringLiteral(" = NULL"));
-        q.prepare(QStringLiteral("UPDATE sample SET %1 WHERE %2")
-                      .arg(sets.join(QStringLiteral(",")), where));
-    }
-    q.addBindValue(lo);
-    q.addBindValue(hi);
-    if (!q.exec()) {
-        m_lastError = q.lastError().text();
-        return -1;
-    }
-    if (dryRun)
-        return q.next() ? q.value(0).toLongLong() : 0;
-    return q.numRowsAffected();
-}
-
 bool SampleStore::purgeAll() {
     QSqlQuery q(m_db);
     if (!q.exec(QStringLiteral("DELETE FROM sample"))) {

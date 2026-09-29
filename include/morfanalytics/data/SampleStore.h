@@ -136,12 +136,6 @@ public:
     qint64 invalidateChannels(qint64 fromTs, qint64 toTs, const QStringList& channels,
                               bool dryRun);
 
-    // Neutralise TOUTE la ligne (tous les canaux) quand `channel` porte une
-    // valeur hors de [lo, hi] : une grandeur physiquement impossible signe une
-    // panne du capteur, qui rend les autres valeurs du meme releve suspectes.
-    // Renvoie le nombre de lignes touchees, ou -1. dryRun : compte seulement.
-    qint64 invalidateOutliers(const QString& channel, double lo, double hi, bool dryRun);
-
     // Vide integralement le cache (mesures + curseurs). Le prochain cycle de
     // collecte reconstruit tout depuis la source, sans aucune perte : c'est la
     // seule forme de suppression totale qui reste coherente avec la reprise.

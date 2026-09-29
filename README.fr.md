@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.61.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.62.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -54,9 +54,10 @@ Voir la vision d'ensemble de l'écosystème dans `../morfSystem/docs/ARCHITECTUR
   `GET /status` (compatible morfBeacon), `/healthz`, `/modules`, `/modules/{id}`,
   `POST /analyze` (analyse à la demande) et `POST /data/cleanup` (nettoyage du
   cache local - jamais de la source).
-- **Nettoyage du cache** - depuis la page ou l'API : neutralisation des relevés
-  de capteur en panne (`0 hPa`, `0 °C`), neutralisation d'une plage, purge
-  totale. N'agit que sur la copie locale ; les mesures d'origine, sur
+- **Nettoyage du cache** - depuis la page ou l'API : neutralisation d'une plage,
+  purge totale (les relevés de capteur en panne, `0 hPa`, sont rejetés dès
+  l'import). Les points écartés par la qualification se listent et se
+  réintègrent un par un (état du service, réversible). N'agit que sur la copie locale ; les mesures d'origine, sur
   l'appareil, ne sont jamais touchées et le cache purgé se reconstruit seul.
 - **Config** - fichier JSON avec une liste `modules` ; une fabrique les instancie.
 - **Annonce LAN** - heartbeat morfBeacon (embarqué, aucune dépendance externe).

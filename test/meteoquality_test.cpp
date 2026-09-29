@@ -50,6 +50,10 @@ int main() {
         const auto f = qualifyChannel("pres", ts, v, {});
         check(f[2] & QualitySpike, "pic de pression +7 hPa ecarte");
         check(countFlag(f, QualitySpike) == 1, "un seul point ecarte (les voisins restent)");
+        // Reintegration : l'utilisateur declare ce pic reel, il n'est plus ecarte.
+        const auto k = qualifyChannel("pres", ts, v, {}, QualityRules(), QSet<qint64>{ts[2]});
+        check(k[2] == QualityOk, "point reintegre non ecarte");
+        check(countFlag(k, QualitySpike) == 0, "reintegration : aucun autre point accuse");
     }
 
     // --- Vraie variation : une marche qui PERSISTE n'est pas un pic ------------

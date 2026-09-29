@@ -1192,18 +1192,6 @@ QByteArray HttpServer::landingPage() {
     <summary>Maintenance avancée</summary>
     <div class="grid">
     <div class="card">
-      <h3>Mesures aberrantes</h3>
-      <p class="note" style="margin-top:0">Relevés portant une pression physiquement
-        impossible (capteur en panne : 0&nbsp;hPa, 0&nbsp;°C…). La ligne entière est
-        neutralisée, le relevé n'étant pas une mesure.</p>
-      <div class="actions">
-        <button id="scan-faults" type="button">Rechercher</button>
-        <button id="fix-faults" type="button" hidden>Neutraliser</button>
-        <span id="faults-count" class="unavailable"></span>
-      </div>
-      <div id="faults-result" class="cleanup-result"></div>
-    </div>
-    <div class="card">
       <h3>Neutraliser une plage</h3>
       <p class="note" style="margin-top:0">Marque comme manquantes les valeurs d'une
         période (capteur resté en défaut, valeurs douteuses…). Les lignes restent en
@@ -1242,7 +1230,9 @@ QByteArray HttpServer::landingPage() {
       <h3>Points écartés</h3>
       <p class="note" style="margin-top:0">Mesures que la qualification retire des
         analyses (pic isolé, hors bornes, sonde hors conditions), sans jamais les
-        effacer du cache. Même liste que les croix grises des Graphiques.</p>
+        effacer du cache. Même liste que les croix grises des Graphiques. Un point
+        jugé réel se réintègre (réversible) ; les relevés de panne franche
+        (pression hors 300-1200&nbsp;hPa) sont, eux, rejetés dès l'import.</p>
       <div class="actions">
         <label class="field">Période
           <select id="susp-hours">
@@ -1990,42 +1980,35 @@ function showResult(id, r, okText) {
   el.textContent = (r && r.ok) ? okText : `Échec : ${(r && r.error) || 'service injoignable'}`;
 }
 
-document.getElementById('scan-faults').addEventListener('click', async () => {
-  const r = await cleanup({ action: 'scan_faults' }).catch(() => null);
-  const fix = document.getElementById('fix-faults');
-  const count = document.getElementById('faults-count');
-  if (!r || !r.ok) { showResult('faults-result', r, ''); return; }
-  document.getElementById('faults-result').textContent = '';
-  if (r.affected > 0) {
-    count.textContent = `${r.affected.toLocaleString('fr-FR')} relevé(s) aberrant(s)`;
-    fix.hidden = false;
-  } else {
-    count.textContent = 'aucun relevé aberrant';
-    fix.hidden = true;
-  }
-});
-
-document.getElementById('fix-faults').addEventListener('click', async () => {
-  const r = await cleanup({ action: 'invalidate_faults' }).catch(() => null);
-  showResult('faults-result', r,
-    r && r.ok ? `${r.affected.toLocaleString('fr-FR')} relevé(s) neutralisé(s).` : '');
-  if (r && r.ok) {
-    document.getElementById('fix-faults').hidden = true;
-    document.getElementById('faults-count').textContent = '';
-    loadAnalyses();
-  }
-});
-
 // Points écartés : relit /meteohub/series (même qualification que les
 // Graphiques et les analyses) pour chaque source et grandeur, puis fusionne en
 // une seule liste chronologique. Rien n'est recalculé ici : la page ne fait que
 // montrer ce que le service a déjà décidé.
-document.getElementById('susp-list').addEventListener('click', async () => {
+// Réintégrer un point le retire de la qualification (état du service, jamais le
+// cache) ; « Écarter à nouveau » annule. Une période « sonde hors conditions » se
+// corrige par son annotation, pas point par point : pas de bouton pour elle.
+const SUSP_CTX = { out: 'Extérieur', in: 'Intérieur' };
+const SUSP_MET = { temp: ['Température', '°C'], hum: ['Humidité', '%'], pres: ['Pression', 'hPa'] };
+const suspDate = (ts) => new Date(ts * 1000).toLocaleString('fr-FR');
+
+document.getElementById('susp-result').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  b.disabled = true;
+  const r = await cleanup({ action: b.dataset.act, ctx: b.dataset.ctx,
+    channel: b.dataset.ch, ts: Number(b.dataset.ts) }).catch(() => null);
+  if (!r || !r.ok) { b.disabled = false; alert(`Échec : ${(r && r.error) || 'service injoignable'}`); return; }
+  listSuspects();
+  loadAnalyses();
+});
+
+document.getElementById('susp-list').addEventListener('click', () => listSuspects());
+
+async function listSuspects() {
   const el = document.getElementById('susp-result');
   const hours = document.getElementById('susp-hours').value;
   const withExcl = document.getElementById('susp-excl').checked;
-  const CTX = { out: 'Extérieur', in: 'Intérieur' };
-  const MET = { temp: ['Température', '°C'], hum: ['Humidité', '%'], pres: ['Pression', 'hPa'] };
+  const CTX = SUSP_CTX, MET = SUSP_MET;
   const WHY = { pic: 'pic isolé', bornes: 'hors bornes', exclusion: 'sonde hors conditions' };
   el.className = 'cleanup-result';
   el.textContent = 'Recherche…';
@@ -2033,8 +2016,17 @@ document.getElementById('susp-list').addEventListener('click', async () => {
   for (const c of Object.keys(CTX)) for (const m of Object.keys(MET))
     jobs.push(fetch(`/meteohub/series?ctx=${c}&metric=${m}&hours=${hours}`)
       .then(r => r.json()).then(j => ({ c, m, s: j.suspects || [] })).catch(() => null));
+  const kept = await cleanup({ action: 'list_kept' }).catch(() => null);
   const res = await Promise.all(jobs);
-  if (res.some(r => r === null)) { el.className = 'cleanup-result err'; el.textContent = 'Service injoignable.'; return; }
+  if (!kept || res.some(r => r === null)) { el.className = 'cleanup-result err'; el.textContent = 'Service injoignable.'; return; }
+  const btn = (act, c, m, ts, label) =>
+    `<button type="button" data-act="${act}" data-ctx="${c}" data-ch="${m}" data-ts="${ts}">${label}</button>`;
+  const keptRows = (kept.points || []).sort((a, b) => b[2] - a[2]).map(([c, m, ts]) =>
+    `<tr><td>${suspDate(ts)}</td><td>${CTX[c] || esc(c)}</td><td>${(MET[m] || [esc(m)])[0]}</td>
+     <td>${btn('unkeep_point', c, m, ts, 'Écarter à nouveau')}</td></tr>`).join('');
+  const keptHtml = keptRows ? `<h4>Points réintégrés (${kept.points.length})</h4>
+    <div class="scroll"><table><thead><tr><th>Date</th><th>Source</th><th>Grandeur</th><th></th></tr></thead>
+    <tbody>${keptRows}</tbody></table></div>` : '';
   // Une même ligne peut revenir plusieurs fois (doublons de cache) : on dédoublonne.
   const seen = new Set();
   const rows = [];
@@ -2050,15 +2042,17 @@ document.getElementById('susp-list').addEventListener('click', async () => {
     }
   }
   rows.sort((a, b) => b.ts - a.ts);
-  if (!rows.length) { el.textContent = 'Aucun point écarté sur la période.'; return; }
-  const body = rows.map(r => `<tr><td>${new Date(r.ts * 1000).toLocaleString('fr-FR')}</td>
+  if (!rows.length) { el.innerHTML = '<p>Aucun point écarté sur la période.</p>' + keptHtml; return; }
+  const body = rows.map(r => `<tr><td>${suspDate(r.ts)}</td>
     <td>${CTX[r.c]}</td><td>${MET[r.m][0]}</td><td>${r.v} ${MET[r.m][1]}</td>
-    <td>${WHY[r.why] || esc(r.why)}</td></tr>`).join('');
+    <td>${WHY[r.why] || esc(r.why)}</td>
+    <td>${r.why === 'exclusion' ? '' : btn('keep_point', r.c, r.m, r.ts, 'Réintégrer')}</td></tr>`).join('');
   el.innerHTML = `<p>${rows.length} point(s) écarté(s)${capped
       ? ' - liste tronquée (500 par grandeur au plus), réduire la période' : ''}.</p>
     <div class="scroll"><table><thead><tr><th>Date</th><th>Source</th><th>Grandeur</th>
-    <th>Valeur d'origine</th><th>Motif</th></tr></thead><tbody>${body}</tbody></table></div>`;
-});
+    <th>Valeur d'origine</th><th>Motif</th><th></th></tr></thead><tbody>${body}</tbody></table></div>`
+    + keptHtml;
+}
 
 function invalidatePayload(dryRun) {
   const from = document.getElementById('inv-from').value;

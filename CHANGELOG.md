@@ -3,6 +3,25 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.62.0] - 2026-09-29
+
+### Added
+
+- **Reintegrate an excluded point.** Each isolated-spike / out-of-bounds row of
+  *Points écartés* gets a *Réintégrer* button: the point is no longer excluded by
+  the read-time qualification (analyses, events, graphs) and serves as a normal
+  neighbour. Reintegrated points are listed below with *Écarter à nouveau*. Stored
+  as service state (`meteo-kept-points.json`, next to the annotations), never in the
+  cache, so they survive a purge. New `/data/cleanup` actions: `keep_point`,
+  `unkeep_point`, `list_kept`.
+
+### Removed
+
+- **"Mesures aberrantes" card** and the `scan_faults` / `invalidate_faults` actions
+  (with `SampleStore::invalidateOutliers`). The collector already rejects readings
+  with a pressure outside 300-1200 hPa at import, so the scan always came back empty;
+  it only served to clean history imported before that filter.
+
 ## [0.61.0] - 2026-09-29
 
 ### Added

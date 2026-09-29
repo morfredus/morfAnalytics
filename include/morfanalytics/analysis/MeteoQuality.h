@@ -5,6 +5,8 @@
  */
 
 #pragma once
+#include <QHash>
+#include <QSet>
 #include <QString>
 #include <QVector>
 #include <QtGlobal>
@@ -36,6 +38,11 @@ namespace meteo {
 //     regle automatique ne distingue sans risque une sonde a l'interieur d'une
 //     vraie journee ou interieur et exterieur se ressemblent : c'est a l'humain
 //     de le dire.
+//
+// REINTEGRATION (0.62.0) : l'utilisateur peut contredire la regle pour un point
+// precis (« ce pic etait reel »). Un point reintegre n'est jamais ecarte, quel
+// que soit le motif, et sert de voisin de reference comme n'importe quel point
+// valide. La liste vit dans l'etat du service, pas dans le cache.
 //
 // Seuils volontairement PRUDENTS : mieux vaut laisser passer un petit artefact
 // que d'ecarter une vraie variation rapide (orage, passage nuageux). Ils sont
@@ -76,13 +83,17 @@ struct FlaggedPoint {
 QVector<quint8> qualifyChannel(const QString& channel, const QVector<qint64>& ts,
                                const QVector<double>& values,
                                const QVector<TimeRange>& exclusions,
-                               const QualityRules& rules = QualityRules());
+                               const QualityRules& rules = QualityRules(),
+                               const QSet<qint64>& keptTs = {});
 
 // Qualifie tous les canaux de `s` et remplace les points ecartes par NaN (les
 // analyses les voient alors comme des trous). Renvoie les points ecartes, dans
 // l'ordre des canaux puis du temps, avec leur valeur d'origine.
+// `kept` : points reintegres par l'utilisateur, par canal (canal -> horodatages).
+using KeptPoints = QHash<QString, QSet<qint64>>;
 QVector<FlaggedPoint> applyQuality(Series& s, const QVector<TimeRange>& exclusions,
-                                   const QualityRules& rules = QualityRules());
+                                   const QualityRules& rules = QualityRules(),
+                                   const KeptPoints& kept = {});
 
 // Motif lisible (le plus grave si plusieurs) : "exclusion" | "bornes" | "pic".
 const char* qualityReasonCode(quint8 flags);

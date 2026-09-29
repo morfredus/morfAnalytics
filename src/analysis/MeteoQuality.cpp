@@ -37,7 +37,8 @@ bool inExclusion(qint64 t, const QVector<TimeRange>& ex) {
 QVector<quint8> qualifyChannel(const QString& channel, const QVector<qint64>& ts,
                                const QVector<double>& values,
                                const QVector<TimeRange>& exclusions,
-                               const QualityRules& rules) {
+                               const QualityRules& rules,
+                               const QSet<qint64>& keptTs) {
     const int n = qMin(ts.size(), values.size());
     QVector<quint8> flags(n, QualityOk);
     const ChannelSpec spec = specFor(channel, rules);
@@ -45,6 +46,7 @@ QVector<quint8> qualifyChannel(const QString& channel, const QVector<qint64>& ts
     // 1) Exclusion manuelle et bornes : jugement point par point.
     for (int i = 0; i < n; ++i) {
         if (!Series::isValid(values[i])) continue;
+        if (keptTs.contains(ts[i])) continue; // reintegre : la regle ne s'applique plus
         if (inExclusion(ts[i], exclusions)) flags[i] |= QualityExcluded;
         if (spec.known && (values[i] < spec.lo || values[i] > spec.hi)) flags[i] |= QualityBounds;
     }
@@ -59,7 +61,7 @@ QVector<quint8> qualifyChannel(const QString& channel, const QVector<qint64>& ts
     //        une vraie transition (front, averse), pas un aller-retour.
     auto usable = [&](int k) { return Series::isValid(values[k]) && flags[k] == QualityOk; };
     for (int i = 0; i < n; ++i) {
-        if (!usable(i)) continue;
+        if (!usable(i) || keptTs.contains(ts[i])) continue;
         int p = i - 1;
         while (p >= 0 && !usable(p)) --p;
         int q = i + 1;
@@ -79,13 +81,13 @@ QVector<quint8> qualifyChannel(const QString& channel, const QVector<qint64>& ts
 }
 
 QVector<FlaggedPoint> applyQuality(Series& s, const QVector<TimeRange>& exclusions,
-                                   const QualityRules& rules) {
+                                   const QualityRules& rules, const KeptPoints& kept) {
     QVector<FlaggedPoint> out;
     const QVector<qint64>& ts = s.timestamps();
     for (const QString& ch : s.channelNames()) {
         QVector<double>* col = s.mutableChannel(ch);
         if (!col) continue;
-        const QVector<quint8> flags = qualifyChannel(ch, ts, *col, exclusions, rules);
+        const QVector<quint8> flags = qualifyChannel(ch, ts, *col, exclusions, rules, kept.value(ch));
         for (int i = 0; i < flags.size(); ++i) {
             if (flags[i] == QualityOk) continue;
             out.push_back(FlaggedPoint{ts[i], ch, (*col)[i], flags[i]});

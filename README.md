@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.61.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.62.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -48,8 +48,10 @@ See the ecosystem vision in `../morfSystem/docs/ARCHITECTURE.md`.
   `GET /status` (morfBeacon-compatible), `GET /healthz`, `GET /modules`,
   `GET /modules/{id}`, `POST /analyze` (on-demand analysis) and
   `POST /data/cleanup` (local-cache cleanup - never the source).
-- **Cache cleanup** - from the page or the API: neutralise failed-sensor
-  readings (`0 hPa`, `0 °C`), neutralise a time range, or purge everything.
+- **Cache cleanup** - from the page or the API: neutralise a time range or purge
+  everything (failed-sensor readings, `0 hPa`, are rejected at import). Points
+  excluded by the quality rules can be listed and reintegrated one by one
+  (service state, reversible).
   Acts on the local copy only; the original measurements on the device are
   never touched, and a purged cache rebuilds itself.
 - **Config** - JSON file with a `modules` list; a factory turns it into modules.
