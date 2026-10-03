@@ -13,6 +13,7 @@
 #include "morfanalytics/collect/ForecastCollector.h"
 #include "morfanalytics/publish/MeteoSyncPublisher.h"
 #include "morfanalytics/analysis/MeteoEvents.h"
+#include "morfanalytics/analysis/MeteoDiagnosis.h"
 #include "morfanalytics/analysis/MeteoQuality.h"
 
 #include <QJsonArray>
@@ -350,6 +351,61 @@ QJsonObject AnalyticsModule::seriesJson(const QString& ctx, const QString& metri
     o["v"]  = vArr;
     // Points ecartes de la periode : [ts, valeur d'origine, motif].
     o["suspects"] = suspects;
+    return o;
+}
+
+QJsonObject AnalyticsModule::diagnosisJson(qint64 to) const {
+    if (to <= 0) to = QDateTime::currentSecsSinceEpoch();
+    const SampleStore* out = m_storeOut ? m_storeOut.get() : nullptr;
+    QJsonObject o;
+    o["ts"] = static_cast<double>(to);
+    if (!out || !out->isOpen()) {
+        o["valid"] = false;
+        o["error"] = QStringLiteral("aucun cache extérieur");
+        return o;
+    }
+    // 13 h de contexte : la plus longue tendance utilisée est 12 h.
+    const Series s = out->range(to - 13 * 3600 - 1800, to);
+    const QVector<double>* t = s.channel(QStringLiteral("temp"));
+    const QVector<double>* h = s.channel(QStringLiteral("hum"));
+    const QVector<double>* p = s.channel(QStringLiteral("pres"));
+    if (s.isEmpty() || !t || !h) {
+        o["valid"] = false;
+        return o;
+    }
+    const int hour = QDateTime::fromSecsSinceEpoch(to).time().hour();
+    const meteo::Diagnosis d = meteo::diagnose(s.timestamps(), *t, *h,
+                                               p ? *p : QVector<double>(), to, hour);
+    // NaN n'existe pas en JSON : une valeur inconnue devient null.
+    auto num = [](double v, int dec) -> QJsonValue {
+        if (std::isnan(v)) return QJsonValue::Null;
+        const double k = std::pow(10.0, dec);
+        return std::round(v * k) / k;
+    };
+    o["valid"] = d.valid;
+    if (!d.valid) return o;
+    o["primary"] = d.primary;
+    o["situations"] = QJsonArray::fromStringList(d.situations);
+    o["precipitation"] = d.precipitation;
+    o["fog"] = d.fog;
+    o["frost"] = d.frost;
+    o["air_mass_change"] = d.airMassChange;
+    o["signals_agree"] = d.agree;
+    o["signals_total"] = d.total;
+    o["temperature"] = num(d.temp, 1);
+    o["humidity"] = num(d.hum, 0);
+    o["pressure"] = num(d.pres, 1);
+    o["dew_point"] = num(d.dewPoint, 1);
+    o["dew_point_spread"] = num(d.spread, 1);
+    o["abs_humidity"] = num(d.absHum, 1);
+    o["dew_point_trend"] = QJsonObject{{"1h", num(d.dewTrend[0], 1)}, {"3h", num(d.dewTrend[1], 1)},
+                                       {"6h", num(d.dewTrend[2], 1)}, {"12h", num(d.dewTrend[3], 1)}};
+    QJsonArray sig;
+    for (const meteo::DiagSignal& x : d.signalsList)
+        sig.append(QJsonObject{{"key", x.key}, {"label", x.label}, {"delta_6h", num(x.delta, 1)},
+                               {"direction", x.dir}, {"measured", x.measured}});
+    o["signals"] = sig;
+    o["why"] = QJsonArray::fromStringList(d.why);
     return o;
 }
 

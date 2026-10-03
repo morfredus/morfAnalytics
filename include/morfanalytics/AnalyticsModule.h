@@ -99,6 +99,11 @@ public:
     // Renvoie { from, to, hours, crossings:[...], trend_changes:[...], regime_changes:[...] }.
     QJsonObject eventsJson(qint64 from, qint64 to) const;
 
+    // Diagnostic météo EXTÉRIEUR à l'instant `to` (maintenant si <= 0) : situation,
+    // niveaux précipitations/brouillard/gel, changement probable de l'air,
+    // convergence des signaux et explication chiffrée. Calcul dans MeteoDiagnosis.
+    QJsonObject diagnosisJson(qint64 to) const;
+
     // Nettoyage du CACHE - et de lui seul : la source de vérité (l'appareil)
     // n'est jamais touchée, le collecteur n'émettant que des GET.
     // `request` : {"action": "invalidate_range" (+ from_ts, to_ts, channels[],

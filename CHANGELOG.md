@@ -3,6 +3,32 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.66.0] - 2026-10-03
+
+### Added
+
+- **"Diagnostic météorologique" section** on the analyses page, right under "Situation
+  actuelle": primary situation, signal badges, "N concordant signals out of M",
+  precipitation / fog / frost levels, air characteristics change, and a collapsible
+  "Pourquoi cette analyse ?" with the figures behind the verdict. Reads
+  `/meteohub/diagnosis`; hidden when no valid diagnosis is available.
+
+## [0.65.0] - 2026-10-03
+
+### Added
+
+- **Weather diagnosis engine, steps 1 and 2.** New pure module `MeteoDiagnosis` that
+  interprets the OUTDOOR series instead of adding metrics: dew point trends (1/3/6/12 h),
+  dew point spread, absolute humidity and pressure feed a primary situation (stable,
+  warming, cooling, humidification, drying, saturation, degradation, improvement) and
+  qualitative levels (none/low/moderate/high) for precipitation, fog and frost, plus a
+  "possible/probable air characteristics change". A real humidification requires dew
+  point AND absolute humidity to rise, so a night-time RH rise caused by cooling alone is
+  reported as cooling. Signal convergence ("4 of 5") and a numbers-based "why" list make
+  every verdict explainable. No probability is produced. Exposed on
+  `GET /meteohub/diagnosis` (optional window end). Covered by `test/meteodiagnosis_test.cpp`.
+  Not yet: comparison with the usual behaviour at the same hour, UI section, AI layer.
+
 ## [0.64.0] - 2026-09-29
 
 ### Added

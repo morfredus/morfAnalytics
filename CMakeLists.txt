@@ -80,6 +80,7 @@ add_library(morfAnalytics STATIC
     src/analysis/AnalysisRegistry.cpp     # moteur d'analyse (generique)
     src/analysis/MeteoMath.cpp            # formules meteorologiques (pures)
     src/analysis/ForecastQuality.cpp      # indicateurs de qualite de prevision (purs)
+    src/analysis/MeteoDiagnosis.cpp       # diagnostic meteo : situations + convergence des signaux
     src/analysis/MeteoEvents.cpp          # evenements temporels (croisements, tendances, regimes) - source commune
     src/analysis/MeteoQuality.cpp         # qualification des mesures (bornes, pic isole, exclusion) - non destructive
     src/analysis/MeteoAnalyses.cpp        # jeu d'analyses meteo
@@ -172,6 +173,10 @@ if(MA_BUILD_TESTS)
     add_executable(meteoevents_test test/meteoevents_test.cpp)
     target_link_libraries(meteoevents_test PRIVATE morfAnalytics)
     add_test(NAME meteoevents COMMAND meteoevents_test)
+
+    add_executable(meteodiagnosis_test test/meteodiagnosis_test.cpp)
+    target_link_libraries(meteodiagnosis_test PRIVATE morfAnalytics)
+    add_test(NAME meteodiagnosis COMMAND meteodiagnosis_test)
 
     add_executable(meteoquality_test test/meteoquality_test.cpp)
     target_link_libraries(meteoquality_test PRIVATE morfAnalytics)

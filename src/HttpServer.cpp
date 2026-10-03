@@ -556,6 +556,17 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         } else {
             out = toJson(module->eventsJson(from, to));
         }
+    } else if (path == "/meteohub/diagnosis") {
+        // Diagnostic météo extérieur (situation + convergence des signaux), calculé
+        // par MeteoDiagnosis. Instant = fin de fenêtre si fournie, sinon maintenant.
+        auto* module = m_registry
+            ? qobject_cast<AnalyticsModule*>(m_registry->firstOfType(QStringLiteral("analytics")))
+            : nullptr;
+        qint64 from = 0, to = 0;
+        resolveWindow(rawPath, &from, &to);
+        out = toJson(module ? module->diagnosisJson(to > from ? to : 0)
+                            : QJsonObject{{"valid", false},
+                                          {"error", QStringLiteral("aucun module 'analytics' configuré")}});
     } else if (path == "/sitewatch") {
         const QJsonArray reports = siteWatchReports();
         reply(sock, 200, "OK", pages::Theme::apply(pages::SiteWatchPage::render(siteWatchPage(), reports)), "text/html; charset=utf-8");
@@ -1256,7 +1267,7 @@ QByteArray HttpServer::landingPage() {
   <footer>
     État détaillé au format JSON : <code>/status</code>, <code>/modules</code>,
     <code>/analyses</code>, <code>/meteohub/series</code>,
-    <code>/meteohub/events</code>, <code>/healthz</code>.
+    <code>/meteohub/events</code>, <code>/meteohub/diagnosis</code>, <code>/healthz</code>.
     Les mesures d'origine restent sur MeteoHub, seule source de vérité ;
     ce service travaille sur une copie en lecture seule.
   </footer>
@@ -1846,6 +1857,59 @@ function renderSection(title, rows, catalogById, resultsById) {
   return body ? `${title ? `<h2 class="section">${esc(title)}</h2>` : ''}${body}` : '';
 }
 
+// --- Diagnostic météorologique ----------------------------------------------
+// Interprétation (MeteoDiagnosis) des analyses déjà calculées : situation,
+// niveaux qualitatifs, convergence des signaux, et le détail chiffré replié
+// sous « Pourquoi cette analyse ? ». Jamais de probabilité de pluie.
+const DIAG_SITUATION = {
+  stable: ['Atmosphère stable', 'Aucune évolution marquée du point de rosée, de la pression ni de la température.'],
+  saturation: ['Air proche de la saturation', 'L’écart entre la température et le point de rosée est très faible.'],
+  humidification: ['Humidification progressive', 'L’air devient plus humide : le point de rosée et l’humidité absolue augmentent.'],
+  dessechement: ['Assèchement de l’air', 'Le point de rosée et l’humidité absolue diminuent.'],
+  degradation: ['Dégradation progressive', 'La pression baisse alors que l’air se rapproche de la saturation.'],
+  amelioration: ['Amélioration progressive', 'La pression monte alors que l’air s’éloigne de la saturation.'],
+  refroidissement: ['Refroidissement', 'La température baisse ; une hausse d’humidité relative peut n’en être que la conséquence.'],
+  rechauffement: ['Réchauffement', 'La température monte sensiblement.']
+};
+const DIAG_LEVEL = {
+  none: ['⚪', 'Aucun signe'], low: ['🟡', 'Conditions peu favorables'],
+  moderate: ['🟠', 'Conditions favorables'], high: ['🔴', 'Conditions très favorables']
+};
+const DIAG_AIR = { none: ['⚪', 'Pas de signe'], possible: ['🟡', 'Possible'], probable: ['🟠', 'Probable'] };
+
+function renderDiagnosis(d) {
+  if (!d || !d.valid) return '';
+  const sit = DIAG_SITUATION[d.primary] || [d.primary, ''];
+  const lvl = (map, k, title) => {
+    const m = map[k] || map.none;
+    return `<div><strong>${title}</strong><br>${m[0]} ${m[1]}</div>`;
+  };
+  const arrows = (d.signals || []).filter((x) => x.measured).map((x) => {
+    const ar = x.direction > 0 ? '↑' : x.direction < 0 ? '↓' : '→';
+    return `<span class="badge">${esc(x.label)} ${ar}</span>`;
+  }).join(' ');
+  const others = (d.situations || []).slice(1).map((k) => (DIAG_SITUATION[k] || [k])[0]);
+  return `<h2 class="section">Diagnostic météorologique</h2>
+    <div class="card" id="diag-card">
+      <h3>${esc(sit[0])}</h3>
+      <p>${esc(sit[1])}</p>
+      ${others.length ? `<p class="muted">Aussi : ${esc(others.join(', '))}.</p>` : ''}
+      <p>${arrows}</p>
+      <p><strong>Convergence</strong> : ${d.signals_agree} signaux concordants sur ${d.signals_total}.</p>
+      <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
+        ${lvl(DIAG_LEVEL, d.precipitation, 'Précipitations')}
+        ${lvl(DIAG_LEVEL, d.fog, 'Brouillard')}
+        ${lvl(DIAG_LEVEL, d.frost, 'Gel')}
+        ${lvl(DIAG_AIR, d.air_mass_change, 'Changement des caractéristiques de l’air')}
+      </div>
+      <details><summary>Pourquoi cette analyse ?</summary>
+        <ul>${(d.why || []).map((w) => `<li>${esc(w)}</li>`).join('')}</ul>
+        <p class="muted">Diagnostic qualitatif fondé sur des seuils fixes, sans comparaison à
+        l’habitude du lieu : ce n’est pas une prévision.</p>
+      </details>
+    </div>`;
+}
+
 async function loadAnalyses() {
   const container = document.getElementById('groups');
   let catalog;
@@ -1867,6 +1931,7 @@ async function loadAnalyses() {
 
   // Les analyses sont demandees en parallele : chacune est independante et
   // travaille sur le meme cache en lecture seule.
+  const diagPromise = fetch('/meteohub/diagnosis').then((r) => r.json()).catch(() => null);
   const results = await Promise.all(catalog.map((meta) => {
     const req = { type: meta.id };
     if (ctxOverride && ctxOverride !== 'auto') req.ctx = ctxOverride;
@@ -1901,8 +1966,9 @@ async function loadAnalyses() {
     ]]
   ];
   const displayed = new Set(layout.flatMap(([, rows]) => rows.flat()));
-  const main = layout.map(([title, rows]) =>
-    renderSection(title, rows, catalogById, byId)).join('');
+  const diagHtml = renderDiagnosis(await diagPromise);
+  const main = layout.map(([title, rows], i) =>
+    renderSection(title, rows, catalogById, byId) + (i === 0 ? diagHtml : '')).join('');
   const advancedIds = ['episodes', 'anomalies', 'correlations', 'decomposition'];
   advancedIds.forEach((id) => displayed.add(id));
   const advanced = renderSection('', [
