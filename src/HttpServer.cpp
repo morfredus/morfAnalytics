@@ -1869,6 +1869,7 @@ const DIAG_SITUATION = {
   degradation: ['Dégradation progressive', 'La pression baisse alors que l’air se rapproche de la saturation.'],
   amelioration: ['Amélioration progressive', 'La pression monte alors que l’air s’éloigne de la saturation.'],
   refroidissement: ['Refroidissement', 'La température baisse ; une hausse d’humidité relative peut n’en être que la conséquence.'],
+  inhabituelle: ['Évolution inhabituelle', 'Plusieurs grandeurs s’écartent nettement de ce qui est habituel à cette heure.'],
   rechauffement: ['Réchauffement', 'La température monte sensiblement.']
 };
 const DIAG_LEVEL = {
@@ -1904,8 +1905,8 @@ function renderDiagnosis(d) {
       </div>
       <details><summary>Pourquoi cette analyse ?</summary>
         <ul>${(d.why || []).map((w) => `<li>${esc(w)}</li>`).join('')}</ul>
-        <p class="muted">Diagnostic qualitatif fondé sur des seuils fixes, sans comparaison à
-        l’habitude du lieu : ce n’est pas une prévision.</p>
+        <p class="muted">${d.adaptive ? 'Seuils établis sur l’historique observé ici à cette heure.' : 'Historique insuffisant : seuils fixes.'}
+        Diagnostic qualitatif : ce n’est pas une prévision.</p>
       </details>
     </div>`;
 }

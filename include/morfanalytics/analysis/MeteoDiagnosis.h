@@ -21,8 +21,8 @@ namespace meteo {
 // SIGNAUX qui convergent, et un diagnostic prudent (« conditions favorables »,
 // jamais « il va pleuvoir »). Tout est explicable : chaque signal porte sa valeur.
 //
-// Limite assumee de la v1 : pas de comparaison au comportement habituel de
-// l'heure (etape 3) et pas de vent.
+// Seuils : relatifs a l'HABITUDE du lieu a la meme heure (Baseline) des que
+// l'historique le permet ; seuils fixes de repli sinon. Pas de vent.
 // -----------------------------------------------------------------------------
 
 // Un signal physique, oriente vers l'humidification de l'air.
@@ -32,7 +32,27 @@ struct DiagSignal {
     double  delta = 0; // variation sur la fenetre (6 h), unite de la grandeur
     int     dir   = 0; // +1 va vers « plus humide », -1 vers « plus sec », 0 neutre
     bool    measured = false; // false : donnee manquante, exclu du total
+    bool    adaptive = false; // seuil tire de l'historique (sinon seuil fixe de repli)
+    double  z = 0;            // ecart a l'habitude de l'heure, en sigmas robustes
+    double  usual = 0;        // variation HABITUELLE a cette heure (mediane historique)
+    bool    unusual = false;  // |z| >= 2 : evolution inhabituelle pour cette heure
 };
+
+// Comportement habituel du lieu : distribution des variations sur 6 h observees
+// a la MEME heure locale (+-1 h) dans l'historique. Ordre : point de rosee,
+// humidite absolue, HR, ecart a la saturation, pression.
+struct Baseline {
+    bool   ok = false;     // assez de cas pour s'y fier
+    int    n[5] = {0, 0, 0, 0, 0};
+    double med[5] = {0, 0, 0, 0, 0};
+    double sig[5] = {0, 0, 0, 0, 0}; // ecart-type robuste (MAD x 1,4826), avec plancher
+};
+
+// Construit la Baseline a partir d'un long historique (plusieurs semaines).
+// `utcOffsetS` : decalage horaire local, pour comparer des heures locales.
+Baseline buildBaseline(const QVector<qint64>& ts, const QVector<double>& temp,
+                       const QVector<double>& hum, const QVector<double>& pres,
+                       qint64 now, int utcOffsetS);
 
 struct Diagnosis {
     bool    valid = false;
@@ -51,14 +71,17 @@ struct Diagnosis {
     QString airMassChange;
 
     QVector<DiagSignal> signalsList;
+    bool adaptive = false;    // seuils issus de l'historique du lieu
+    int unusualCount = 0;     // signaux inhabituels pour l'heure
     int agree = 0, total = 0; // convergence : signaux dans le sens dominant / mesures
     QStringList why;          // phrases chiffrees, pour « Pourquoi cette analyse ? »
 };
 
-// `localHour` (0-23) sert au brouillard (nuit/aube). Fenetre utile : 13 h avant `now`.
+// `localHour` (0-23) sert au brouillard (nuit/aube). `base` (optionnel) remplace les
+// seuils fixes par ceux du lieu ; null ou !ok -> seuils fixes de repli.
 Diagnosis diagnose(const QVector<qint64>& ts, const QVector<double>& temp,
                    const QVector<double>& hum, const QVector<double>& pres,
-                   qint64 now, int localHour);
+                   qint64 now, int localHour, const Baseline* base = nullptr);
 
 } // namespace meteo
 } // namespace morfanalytics

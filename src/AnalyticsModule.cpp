@@ -364,8 +364,10 @@ QJsonObject AnalyticsModule::diagnosisJson(qint64 to) const {
         o["error"] = QStringLiteral("aucun cache extérieur");
         return o;
     }
-    // 13 h de contexte : la plus longue tendance utilisée est 12 h.
-    const Series s = out->range(to - 13 * 3600 - 1800, to);
+    // 90 jours d'historique : les 13 dernières heures donnent la situation (la plus
+    // longue tendance est 12 h), le reste sert à établir l'habitude du lieu à cette
+    // heure (Baseline). Les seuils s'adaptent donc à ce qui est observé ici.
+    const Series s = out->range(to - 90 * 86400, to);
     const QVector<double>* t = s.channel(QStringLiteral("temp"));
     const QVector<double>* h = s.channel(QStringLiteral("hum"));
     const QVector<double>* p = s.channel(QStringLiteral("pres"));
@@ -374,8 +376,10 @@ QJsonObject AnalyticsModule::diagnosisJson(qint64 to) const {
         return o;
     }
     const int hour = QDateTime::fromSecsSinceEpoch(to).time().hour();
-    const meteo::Diagnosis d = meteo::diagnose(s.timestamps(), *t, *h,
-                                               p ? *p : QVector<double>(), to, hour);
+    const QVector<double> noPres;
+    const int utcOff = QDateTime::fromSecsSinceEpoch(to).offsetFromUtc();
+    const meteo::Baseline base = meteo::buildBaseline(s.timestamps(), *t, *h, p ? *p : noPres, to, utcOff);
+    const meteo::Diagnosis d = meteo::diagnose(s.timestamps(), *t, *h, p ? *p : noPres, to, hour, &base);
     // NaN n'existe pas en JSON : une valeur inconnue devient null.
     auto num = [](double v, int dec) -> QJsonValue {
         if (std::isnan(v)) return QJsonValue::Null;
@@ -390,6 +394,8 @@ QJsonObject AnalyticsModule::diagnosisJson(qint64 to) const {
     o["fog"] = d.fog;
     o["frost"] = d.frost;
     o["air_mass_change"] = d.airMassChange;
+    o["adaptive"] = d.adaptive;
+    o["unusual_signals"] = d.unusualCount;
     o["signals_agree"] = d.agree;
     o["signals_total"] = d.total;
     o["temperature"] = num(d.temp, 1);
@@ -403,7 +409,10 @@ QJsonObject AnalyticsModule::diagnosisJson(qint64 to) const {
     QJsonArray sig;
     for (const meteo::DiagSignal& x : d.signalsList)
         sig.append(QJsonObject{{"key", x.key}, {"label", x.label}, {"delta_6h", num(x.delta, 1)},
-                               {"direction", x.dir}, {"measured", x.measured}});
+                               {"direction", x.dir}, {"measured", x.measured},
+                               {"z", x.adaptive ? num(x.z, 1) : QJsonValue::Null},
+                               {"usual_6h", x.adaptive ? num(x.usual, 1) : QJsonValue::Null},
+                               {"unusual", x.unusual}});
     o["signals"] = sig;
     o["why"] = QJsonArray::fromStringList(d.why);
     return o;

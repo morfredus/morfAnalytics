@@ -3,6 +3,21 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.67.0] - 2026-10-03
+
+### Changed
+
+- **Weather diagnosis thresholds now adapt to the site's own history (step 3).** A new
+  `Baseline` is built from 90 days of outdoor data: the distribution of 6 h changes
+  observed at the same local hour (+-1 h). Each signal is scored as a robust z-score
+  against that habit (active from |z| >= 1, "unusual for this hour" from |z| >= 2), so an
+  evening humidity rise that happens every day no longer counts, and a much larger one
+  is flagged. A new "inhabituelle" situation fires when two quantities are unusual, and
+  the "air characteristics change" level now relies on unusual changes. The "why" list
+  states the usual value for the hour. Fixed thresholds remain as a fallback when fewer
+  than ~15 days of history exist for that hour. `/meteohub/diagnosis` gains `adaptive`,
+  `unusual_signals` and per-signal `z`, `usual_6h`, `unusual`.
+
 ## [0.66.0] - 2026-10-03
 
 ### Added

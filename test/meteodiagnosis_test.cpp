@@ -77,5 +77,38 @@ int main() {
     Diagnosis g = diagnose(ts, t, h, p, now, 5);
     check(g.frost == "high", "gel : niveau fort");
 
+    // Habitude du lieu : 30 jours avec un cycle quotidien (HR monte chaque soir).
+    // Le meme soir ne doit rien declencher ; une humidification en plus, si.
+    {
+        const double pi = 3.14159265358979;
+        const qint64 now2 = 30 * 86400 + 19 * 3600;
+        auto build = [&](double extraRamp, QVector<qint64>& ts2, QVector<double>& t2,
+                         QVector<double>& h2, QVector<double>& p2) {
+            ts2.clear(); t2.clear(); h2.clear(); p2.clear();
+            for (qint64 x = 0; x <= now2; x += 600) {
+                const double hr = double(x % 86400) / 3600.0;
+                const double ph = 2 * pi * (hr - 9) / 24;
+                const double wob = 0.3 * std::sin(double(x / 600) * 1.7);
+                double T = 15 + 6 * std::sin(ph) + wob;
+                double H = 70 - 20 * std::sin(ph) + wob;
+                const double ago = double(now2 - x) / 3600.0; // heures avant « maintenant »
+                if (ago < 6) H += extraRamp * (6 - ago) / 6.0;
+                ts2.push_back(x); t2.push_back(T); h2.push_back(std::min(H, 99.0)); p2.push_back(1015);
+            }
+        };
+        QVector<qint64> t3; QVector<double> a3, b3, c3;
+        build(0, t3, a3, b3, c3);
+        Baseline bl = buildBaseline(t3, a3, b3, c3, now2, 0);
+        check(bl.ok, "habitude : baseline suffisante");
+        Diagnosis n = diagnose(t3, a3, b3, c3, now2, 19, &bl);
+        check(n.adaptive, "habitude : seuils adaptatifs");
+        check(!n.situations.contains("humidification") && n.unusualCount == 0,
+              "habitude : un soir ordinaire ne declenche rien");
+        build(25, t3, a3, b3, c3);
+        Diagnosis u = diagnose(t3, a3, b3, c3, now2, 19, &bl);
+        check(u.signalsList.size() == 5 && u.signalsList[2].unusual,
+              "habitude : une hausse d'HR hors norme est inhabituelle");
+    }
+
     return failures ? 1 : 0;
 }
