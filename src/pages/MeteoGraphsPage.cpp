@@ -137,8 +137,8 @@ const PERIODS=[["6 h",6],["12 h",12],["24 h",24],["3 j",72],["7 j",168],["30 j",
 // au plus un an (même plafond que le serveur).
 const STEP_S=300;
 const MAX_SPAN_S=366*86400;
-// Mono-grandeur : IN et OUT en deux couleurs distinctes (jamais de pointillés).
-const SRC_COL={out:mfaColor("--s-out"),in:mfaColor("--s-in")};
+// Couleur = grandeur, quel que soit le filtre (orange Temp, vert Hum, violet Pres) ;
+// IN et OUT se distinguent par l'épaisseur et l'opacité (jamais de pointillés).
 // Cadence ~5 min (10 au boot) : plancher de connexion des points.
 const CONNECT_MIN_S=20*60;
 const AXIS_MUTED=mfaColor("--muted");
@@ -349,12 +349,12 @@ function renderSingle(byCtx, key){
   let allv=[]; ctxs.forEach(c=>{allv=allv.concat((byCtx[c].v||[]).filter(x=>x!==null&&x!==undefined));});
   let [mn,mx]=minMax(allv); if(!isFinite(mn)){mn=0;mx=1;}
   let pad=(mx-mn)*0.08; if(pad<(md[3]?0.5:1))pad=(md[3]?0.5:1); const smin=mn-pad, smax=mx+pad;
-  const series=ctxs.map(c=>({ts:byCtx[c].ts||[],vals:byCtx[c].v||[],color:SRC_COL[c],width:2,
+  const series=ctxs.map(c=>({ts:byCtx[c].ts||[],vals:byCtx[c].v||[],color:md[4],width:c==="in"?1.4:2.2,opacity:c==="in"?0.55:1,
     bucket:byCtx[c].bucket_s||0,smin,smax,label:srcLabel(c),unit:md[2],dec:md[3],
     suspects:byCtx[c].suspects||[]}));
   const axes=[{min:smin,max:smax,dec:md[3],side:'L',col:AXIS_MUTED},
               {min:smin,max:smax,dec:md[3],side:'R',col:AXIS_MUTED}];
-  const legend=ctxs.map(c=>'<span class="k"><span class="sw" style="border-color:'+SRC_COL[c]+'"></span>'+srcLabel(c)+'</span>').join("");
+  const legend=ctxs.map(c=>'<span class="k"><span class="sw" style="border-color:'+md[4]+';opacity:'+(c==="in"?0.55:1)+';border-top-width:'+(c==="in"?2:3)+'px"></span>'+srcLabel(c)+'</span>').join("");
   // Croisements : seulement si Int ET Ext tracés. Régimes : dès que l'Ext est visible.
   const showCross = S.source==="both";
   const showRegime = (S.source==="out"||S.source==="both");
@@ -417,7 +417,7 @@ function noteFor(multi){
       : "Plusieurs grandeurs sur un axe de temps commun, chacune à son échelle. Survolez pour lire les valeurs.")+'</p>';
   }
   return '<p class="note">'+(S.source==="both"
-    ? "IN et OUT en deux couleurs ; échelle à gauche et à droite. Pour les chiffres d'inertie, voir « Comportement thermique » et « Modèle d'inertie » dans les <a href=\"/meteohub\">analyses</a>."
+    ? "Intérieur en trait plus fin et atténué ; échelle à gauche et à droite. Pour les chiffres d'inertie, voir « Comportement thermique » et « Modèle d'inertie » dans les <a href=\"/meteohub\">analyses</a>."
     : "Échelle à gauche et à droite. Points reliés tant que l'écart reste proche de la cadence ; coupé seulement sur un vrai silence du capteur.")+'</p>';
 }
 

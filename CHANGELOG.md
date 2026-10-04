@@ -3,6 +3,15 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.67.1] - 2026-10-04
+
+### Fixed
+
+- **Weather graphs: a metric keeps its color whatever the filter.** With a single metric
+  selected, the curves used the OUT/IN source colors (blue/orange), so temperature was no
+  longer orange. Now orange is always temperature, green humidity, purple pressure; indoor
+  is drawn thinner and faded, as in the multi-metric view.
+
 ## [0.67.0] - 2026-10-03
 
 ### Changed
