@@ -43,8 +43,12 @@ QByteArray MeteoGraphsPage::render() {
 .wrap{max-width:72rem;margin:auto}h1{margin:.2rem 0}
 /* En-tete + filtres collants : restent accessibles quel que soit le defilement,
    et changer un filtre ne renvoie plus en haut de la page. */
-.topbar{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--line);
-  margin:-1.5rem -1.5rem 0;padding:1rem 1.5rem .6rem}
+/* #tbh = support collant de hauteur FIGEE (celle de l'en-tete déployé) : l'en-tete
+   peut se resserrer au defilement sans jamais changer la hauteur du document, donc
+   sans decalage du contenu ni boucle defilement/mise en page (le clignotement). */
+#tbh{position:sticky;top:0;z-index:10;margin:-1.5rem -1.5rem 0;pointer-events:none}
+.topbar{pointer-events:auto;background:var(--bg);border-bottom:1px solid var(--line);
+  padding:1rem 1.5rem .6rem}
 .topbar .wrap{padding:0}
 .muted{color:var(--muted)}a{color:var(--accent)}
 .vb{font-size:.8rem;font-weight:600;vertical-align:middle;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;padding:.1rem .5rem;margin-left:.4rem}
@@ -53,7 +57,6 @@ QByteArray MeteoGraphsPage::render() {
 .controls{display:flex;flex-wrap:wrap;gap:.5rem 1.2rem;align-items:center;margin:.6rem 0}
 /* Defilement : l'en-tete collant se resserre (description masquee, marges reduites)
    pour laisser la place aux graphes. */
-.topbar{transition:padding .15s}
 .topbar.compact{padding-top:.4rem;padding-bottom:.3rem}
 .topbar.compact .desc{display:none}
 .topbar.compact h1{font-size:1.15rem;margin:0}
@@ -106,7 +109,7 @@ select{background:var(--field);border:1px solid var(--line);color:var(--ink);bor
 .ct{font-weight:600;font-variant-numeric:tabular-nums}
 .cd{color:var(--soft);font-size:.9rem}
 </style></head><body>
-<div class="topbar"><div class="wrap">
+<div id="tbh"><div class="topbar"><div class="wrap">
 <!--nav-back-->
 <h1>Météo <span id="vb" class="vb"></span><!--theme-toggle--></h1>
 <div class="tabs"><a class="tab" href="/meteohub">Analyses</a><span class="tab on">Graphiques</span></div>
@@ -126,7 +129,7 @@ select{background:var(--field);border:1px solid var(--line);color:var(--ink);bor
   </div>
   <span class="rangelbl" id="rangelbl"></span>
 </div>
-</div></div>
+</div></div></div>
 <div class="wrap">
 <div id="charts"><p class="muted">Chargement&hellip;</p></div>
 </div>
@@ -642,12 +645,14 @@ fetch("/status").then(r=>r.json()).then(s=>{const b=$("#vb");if(b)b.textContent=
 // Domaine météo : retour possible vers la station collectée, en plus de morfAnalytics.
 mfaMeteoHubBack();
 
-// En-tete compact des que l'on descend (hysteresis : evite le clignotement quand
-// la hauteur de l'en-tete change sous le defilement).
-(function(){const tb=document.querySelector(".topbar");let on=false;
-  addEventListener("scroll",()=>{const y=scrollY;
-    if(!on&&y>80){on=true;tb.classList.add("compact");}
-    else if(on&&y<20){on=false;tb.classList.remove("compact");}},{passive:true});})();
+// En-tete compact des que l'on descend. Le support #tbh garde la hauteur de l'en-tete
+// deploye (mesuree, y compris quand la periode libre s'ouvre) : le resserrement ne
+// deplace donc rien dans la page.
+(function(){const h=document.getElementById("tbh"),tb=document.querySelector(".topbar");
+  new ResizeObserver(()=>{if(!tb.classList.contains("compact"))h.style.height=tb.offsetHeight+"px";}).observe(tb);
+  h.style.height=tb.offsetHeight+"px";
+  const sync=()=>tb.classList.toggle("compact",scrollY>40);
+  addEventListener("scroll",sync,{passive:true});sync();})();
 
 draw();
 // Rafraîchissement : utile tant que la fenêtre touche le présent. Une période

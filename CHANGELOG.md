@@ -3,6 +3,16 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.68.2] - 2026-10-06
+
+### Fixed
+
+- **Graphs page: the header no longer flickers while scrolling.** Shrinking the sticky
+  header changed the page height, which moved the scroll position and toggled the header
+  again right at the threshold. The header now sits in a sticky holder whose height stays
+  fixed (that of the full header), so shrinking it never shifts the content: no layout
+  feedback loop, a single threshold.
+
 ## [0.68.1] - 2026-10-06
 
 ### Changed
