@@ -54,6 +54,13 @@ Baseline buildBaseline(const QVector<qint64>& ts, const QVector<double>& temp,
                        const QVector<double>& hum, const QVector<double>& pres,
                        qint64 now, int utcOffsetS);
 
+// Un critere verifiable derriere un niveau (« humidite >= 93 % : oui/non »). Rend le
+// diagnostic falsifiable : on montre les faits observes, pas un score.
+struct Factor {
+    QString label;      // phrase chiffree (valeur mesuree + seuil)
+    bool    met = false;
+};
+
 struct Diagnosis {
     bool    valid = false;
     qint64  ts = 0;
@@ -69,6 +76,9 @@ struct Diagnosis {
     QString precipitation, fog, frost;
     // "none" | "possible" | "probable".
     QString airMassChange;
+
+    // Criteres observes derriere chaque niveau (memes seuils que le calcul ci-dessous).
+    QVector<Factor> precipFactors, fogFactors, frostFactors;
 
     QVector<DiagSignal> signalsList;
     bool adaptive = false;    // seuils issus de l'historique du lieu

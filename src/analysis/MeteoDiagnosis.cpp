@@ -262,6 +262,27 @@ Diagnosis diagnose(const QVector<qint64>& ts, const QVector<double>& temp,
         else d.fog = "low";
     }
 
+    // Facteurs affiches (criteres du niveau « eleve » : la reference lisible).
+    // Les seuils sont repetes ici, a garder alignes avec les conditions ci-dessus.
+    auto fac = [](QVector<Factor>& v, bool met, const QString& label) { v.push_back({label, met}); };
+    const QString coolTxt = cooling ? QStringLiteral("Température en baisse (%1 °C sur 3 h)").arg(f1(d.tempDelta3h))
+                          : night ? QStringLiteral("Nuit ou aube")
+                                  : QStringLiteral("Ni refroidissement ni nuit");
+    fac(d.fogFactors, d.hum >= 93, QStringLiteral("Humidité %1 % (seuil 93 %)").arg(qRound(d.hum)));
+    fac(d.fogFactors, d.spread <= 1.5,
+        QStringLiteral("Écart au point de rosée %1 °C (seuil 1,5 °C)").arg(f1(d.spread)));
+    fac(d.fogFactors, cooling || night, coolTxt);
+    fac(d.precipFactors, humidifying, QStringLiteral("Air qui s'humidifie"));
+    fac(d.precipFactors, sDew.measured && sDew.dir > 0, QStringLiteral("Point de rosée en hausse"));
+    fac(d.precipFactors, d.spread <= 2.5,
+        QStringLiteral("Écart au point de rosée %1 °C (seuil 2,5 °C)").arg(f1(d.spread)));
+    fac(d.precipFactors, d.hum >= 85, QStringLiteral("Humidité %1 % (seuil 85 %)").arg(qRound(d.hum)));
+    fac(d.precipFactors, presDown, QStringLiteral("Pression en baisse"));
+    fac(d.frostFactors, d.temp <= 5.0, QStringLiteral("Température %1 °C (seuil 5 °C)").arg(f1(d.temp)));
+    fac(d.frostFactors, cooling || (ok(dT6) && dT6 <= -1.0), QStringLiteral("Température en baisse"));
+    fac(d.frostFactors, d.spread <= 4.0,
+        QStringLiteral("Écart au point de rosée %1 °C (seuil 4 °C)").arg(f1(d.spread)));
+
     // Gel : temperature REELLE proche de 0 et en baisse, Td proche de T.
     if (d.temp <= 5.0 && (cooling || (ok(dT6) && dT6 <= -1.0) || d.temp <= 0.5)) {
         if (d.temp <= 1.0 && d.spread <= 4.0) d.frost = "high";

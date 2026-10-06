@@ -978,6 +978,17 @@ QByteArray HttpServer::landingPage() {
   .summary .summary-main { font-size: 1.2rem; font-weight: 600; margin: 0 0 .45rem; }
   .summary .summary-lines { margin: 0; color: var(--muted); }
   .summary .summary-lines span + span::before { content: " · "; }
+  /* Vue rapide : trois cartes (grandeur, valeur, lecture), lisibles d'un coup d'oeil. */
+  .quick { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .8rem; margin: .2rem 0 .8rem; }
+  .quick .qcard { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .8rem; }
+  .quick .qlabel { display: block; font-size: .78rem; text-transform: uppercase; color: var(--muted); }
+  .quick .qval { display: block; font-size: 1.7rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .quick .qsub { display: block; color: var(--soft); font-size: .9rem; }
+  /* Facteurs observes derriere un niveau du diagnostic (coche = critere rempli). */
+  .factors { margin: .8rem 0 0; font-size: .9rem; }
+  .factors ul { list-style: none; margin: .25rem 0 0; padding: 0; }
+  .factors li.no { color: var(--muted); }
+  .measure-event { margin: .9rem 0 0; padding: .6rem .8rem; border-left: 3px solid var(--warn); background: var(--field); border-radius: 0 8px 8px 0; font-size: .9rem; }
 
   dl { display: grid; grid-template-columns: auto 1fr; gap: .35rem .9rem; margin: 0; }
   dt { color: var(--muted); white-space: nowrap; }
@@ -1301,7 +1312,7 @@ const FIELD_LABELS = {
   outdoor_amplitude: 'Amplitude extérieure', damping: 'Amortissement',
   correlation: 'Corrélation', lag_hours: 'Décalage (heures)',
   inertia: 'Inertie', window_hours: 'Fenêtre analysée (heures)',
-  // Modèle d'inertie intérieure (indoor_inertia_model)
+  // Réactivité du bâtiment (indoor_inertia_model)
   gain: 'Gain (°C int. / °C ext.)', offset: 'Apport propre (offset °C)',
   fit_r2: 'Qualité du modèle (R²)', rmse: 'Erreur type (RMSE °C)',
   mae: 'Erreur moyenne (MAE °C)', predicted_indoor: 'Intérieur prédit',
@@ -1394,7 +1405,7 @@ function fitDefinitionLists() {
   });
 }
 
-function renderSummary(results) {
+function renderSummary(results, diag) {
   const summary = document.getElementById('summary');
   const current = results.current;
   if (!current || current.ok === false || current.temperature === undefined) {
@@ -1403,17 +1414,29 @@ function renderSummary(results) {
   }
 
   const temp = current.temperature;
-  let headline = temp >= 30 ? 'Conditions très chaudes.'
+  // Le diagnostic (situation interpretee) prime sur le simple seuil de temperature.
+  const sit = diag && diag.valid ? DIAG_SITUATION[diag.primary] : null;
+  let headline = sit ? sit[0] + '.'
+    : temp >= 30 ? 'Conditions très chaudes.'
     : temp >= 25 ? 'Conditions chaudes.'
     : temp <= 0 ? 'Conditions hivernales.' : 'Conditions locales stables.';
-  const lines = [`Température mesurée : ${num(temp, '°C')}`];
+  const lines = [];
 
   const trend = results.temp_trend;
-  if (trend && trend.ok !== false && trend.tendency)
-    lines.push(`Température : ${esc(trend.tendency)}`);
   const pressure = results.pressure_trend;
-  if (pressure && pressure.ok !== false && pressure.tendency)
-    lines.push(`Pression : ${esc(pressure.tendency)}`);
+  // Trois cartes : ce qu'il fait maintenant, avant le pourquoi (tout le reste de la page).
+  const fogLvl = diag && diag.valid && diag.fog && diag.fog !== 'none'
+    ? 'Brouillard : ' + DIAG_LEVEL[diag.fog][1].toLowerCase() : 'Pas de signe de brouillard';
+  const card = (label, value, sub) =>
+    `<div class="qcard"><span class="qlabel">${label}</span><span class="qval">${value}</span>` +
+    `<span class="qsub">${sub}</span></div>`;
+  const quick = '<div class="quick">' +
+    card('Température', num(temp, '°C'), esc((trend && trend.ok !== false && trend.tendency) || '')) +
+    (current.humidity !== undefined ? card('Humidité', num(current.humidity, '%'), esc(fogLvl)) : '') +
+    (current.pressure !== undefined
+      ? card('Pression', num(current.pressure, 'hPa'),
+             esc((pressure && pressure.ok !== false && pressure.tendency) || '')) : '') +
+    '</div>';
 
   const alerts = [];
   [results.heat_risk, results.dry_air, results.fog_risk, results.frost_risk]
@@ -1427,7 +1450,7 @@ function renderSummary(results) {
   if (forecast && forecast.ok !== false && forecast.forecast)
     lines.push(esc(forecast.forecast));
 
-  summary.innerHTML = `<h2>En un coup d’œil</h2><p class="summary-main">${headline}</p>` +
+  summary.innerHTML = `<h2>En un coup d’œil</h2><p class="summary-main">${headline}</p>` + quick +
     `<p class="summary-lines">${lines.map((line) => `<span>${line}</span>`).join('')}</p>`;
   summary.hidden = false;
 }
@@ -1878,7 +1901,7 @@ const DIAG_LEVEL = {
 };
 const DIAG_AIR = { none: ['⚪', 'Pas de signe'], possible: ['🟡', 'Possible'], probable: ['🟠', 'Probable'] };
 
-function renderDiagnosis(d) {
+function renderDiagnosis(d, ev) {
   if (!d || !d.valid) return '';
   const sit = DIAG_SITUATION[d.primary] || [d.primary, ''];
   const lvl = (map, k, title) => {
@@ -1890,6 +1913,23 @@ function renderDiagnosis(d) {
     return `<span class="badge">${esc(x.label)} ${ar}</span>`;
   }).join(' ');
   const others = (d.situations || []).slice(1).map((k) => (DIAG_SITUATION[k] || [k])[0]);
+  // Facteurs observes (coche = critere rempli) pour chaque niveau actif : le
+  // diagnostic reste falsifiable, sans score de confiance non calibre.
+  const fac = (title, level, list) => (level && level !== 'none' && list && list.length)
+    ? `<div class="factors"><strong>${title} : facteurs observés</strong><ul>` +
+      list.map((f) => `<li class="${f.met ? 'yes' : 'no'}">${f.met ? '✓' : '✗'} ${esc(f.label)}</li>`).join('') +
+      '</ul></div>' : '';
+  const fx = d.factors || {};
+  // Constat de mesure (pas de meteo interpretee) : variation brutale locale recente.
+  const sud = ((ev && ev.sudden_changes) || []).slice(-1)[0];
+  const sg = (v, dec) => (v > 0 ? '+' : '') + v.toFixed(dec).replace('.', ',');
+  const hhmm = (t) => new Date(t * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const measure = sud
+    ? `<div class="measure-event"><strong>Qualité de mesure</strong> : variation brutale locale à ${hhmm(sud.ts)}, ` +
+      `en ${Math.max(1, Math.round((sud.ts - sud.start_ts) / 60))} min : température ${sg(sud.d_temp, 1)} °C, ` +
+      `humidité ${sg(sud.d_hum, 0)} %, pression ${sg(sud.d_pres, 1)} hPa.<br>` +
+      `<span class="muted">Cause indéterminée : ${esc((sud.causes || []).join(', '))}. ` +
+      `<a href="/meteohub/graphs">Voir le graphique</a>.</span></div>` : '';
   return `<h2 class="section">Diagnostic météorologique</h2>
     <div class="card" id="diag-card">
       <h3>${esc(sit[0])}</h3>
@@ -1903,6 +1943,10 @@ function renderDiagnosis(d) {
         ${lvl(DIAG_LEVEL, d.frost, 'Gel')}
         ${lvl(DIAG_AIR, d.air_mass_change, 'Changement des caractéristiques de l’air')}
       </div>
+      ${fac('Précipitations', d.precipitation, fx.precipitation)}
+      ${fac('Brouillard', d.fog, fx.fog)}
+      ${fac('Gel', d.frost, fx.frost)}
+      ${measure}
       <details><summary>Pourquoi cette analyse ?</summary>
         <ul>${(d.why || []).map((w) => `<li>${esc(w)}</li>`).join('')}</ul>
         <p class="muted">${d.adaptive ? 'Seuils établis sur l’historique observé ici à cette heure.' : 'Historique insuffisant : seuils fixes.'}
@@ -1933,6 +1977,7 @@ async function loadAnalyses() {
   // Les analyses sont demandees en parallele : chacune est independante et
   // travaille sur le meme cache en lecture seule.
   const diagPromise = fetch('/meteohub/diagnosis').then((r) => r.json()).catch(() => null);
+  const eventsPromise = fetch('/meteohub/events?hours=6').then((r) => r.json()).catch(() => null);
   const results = await Promise.all(catalog.map((meta) => {
     const req = { type: meta.id };
     if (ctxOverride && ctxOverride !== 'auto') req.ctx = ctxOverride;
@@ -1967,7 +2012,8 @@ async function loadAnalyses() {
     ]]
   ];
   const displayed = new Set(layout.flatMap(([, rows]) => rows.flat()));
-  const diagHtml = renderDiagnosis(await diagPromise);
+  const diag = await diagPromise;
+  const diagHtml = renderDiagnosis(diag, await eventsPromise);
   const main = layout.map(([title, rows], i) =>
     renderSection(title, rows, catalogById, byId) + (i === 0 ? diagHtml : '')).join('');
   const advancedIds = ['episodes', 'anomalies', 'correlations', 'decomposition'];
@@ -1981,7 +2027,7 @@ async function loadAnalyses() {
   container.innerHTML = main + (advanced
     ? `<details class="advanced-section"><summary>Analyses approfondies et diagnostic</summary>${advanced}</details>`
     : '') + extra;
-  renderSummary(byId);
+  renderSummary(byId, diag);
   requestAnimationFrame(fitDefinitionLists);
   document.getElementById('refreshed').textContent =
     new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });

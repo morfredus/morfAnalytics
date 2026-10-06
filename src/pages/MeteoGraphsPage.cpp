@@ -103,6 +103,7 @@ select{background:var(--field);border:1px solid var(--line);color:var(--ink);bor
 <p class="muted">Montre ce que font réellement les données dans le temps. Les analyses, elles, disent ce que ça signifie.</p>
 <div class="controls">
   <span class="metricsel"><span class="mslabel">Afficher</span><span id="metricsel"></span></span>
+  <span class="periods" id="layoutsel" title="Plusieurs grandeurs : un graphe chacune, ou toutes sur le même"></span>
   <label>Source&nbsp;<select id="source"></select></label>
   <label class="mk" title="Points écartés des analyses (pic isolé, hors bornes, démarrage à froid, sonde hors conditions)"><input type="checkbox" id="showsusp"> Points écartés</label>
   <div class="periods" id="periods"></div>
@@ -167,11 +168,12 @@ let S={
   source:localStorage.getItem(LS+"source")||"out",
   hours:+(localStorage.getItem(LS+"hours")||24),
   range:loadRange(),   // null = période glissante ; sinon {from,to} en secondes epoch
-  showSuspects:localStorage.getItem(LS+"susp")!=="0"  // croix grises (défaut : visibles)
+  showSuspects:localStorage.getItem(LS+"susp")!=="0",  // croix grises (défaut : visibles)
+  layout:localStorage.getItem(LS+"layout")==="overlay"?"overlay":"stack"  // plusieurs grandeurs : empilées ou superposées
 };
 // Motifs de qualification (MeteoQuality) -> libellés.
 const QUAL_LABEL={pic:"pic isolé",bornes:"hors bornes",exclusion:"sonde hors conditions",demarrage:"démarrage à froid"};
-let G=null; // géométrie + séries du graphe courant, pour le survol
+let GS=[]; // géométrie + séries de chaque graphe affiché (un par grandeur en vue empilée), pour le survol
 
 const $=s=>document.querySelector(s);
 function metricDef(k){return METRICS.find(m=>m[0]===k)||METRICS[0];}
@@ -215,8 +217,12 @@ function assembleEvents(metricsShown, showCross, showRegime){
     list.push({kind:"cross",ts:c.ts,metric:c.metric,value:c.value,unit:c.unit,dec:c.dec,
                metricName:c.metric_name,outRising:c.out_rising}); });
   if(showRegime) (EV.regime_changes||[]).forEach(r=>list.push({kind:"regime",ts:r.ts,parts:r.parts||[]}));
+  // Variation brutale locale : constat de mesure (T et HR en sens opposés, pression
+  // stable), cause volontairement non tranchée. Même visibilité que les régimes.
+  if(showRegime) (EV.sudden_changes||[]).forEach(s=>list.push({kind:"sudden",ts:s.ts,start:s.start_ts,
+    dT:s.d_temp,dH:s.d_hum,dP:s.d_pres,dD:s.d_dew,causes:s.causes||[]}));
   list.sort((a,b)=>a.ts-b.ts);
-  list.forEach((e,i)=>{e.n=i+1;e.color=e.kind==="cross"?metricColor(e.metric):REGIME_COL;});
+  list.forEach((e,i)=>{e.n=i+1;e.color=e.kind==="cross"?metricColor(e.metric):e.kind==="sudden"?mfaColor("--bad"):REGIME_COL;});
   return list;
 }
 
@@ -225,7 +231,9 @@ function eventsBox(list){
   const intro="Les croisements comparent deux séries de même grandeur physique (Intérieur et "+
     "Extérieur) : leur heure et leur valeur sont interpolées entre les mesures qui encadrent "+
     "l'égalité (une estimation, pas une mesure). Les changements de régime signalent le "+
-    "basculement rapproché de plusieurs tendances, même entre grandeurs différentes.";
+    "basculement rapproché de plusieurs tendances, même entre grandeurs différentes. Une variation "+
+    "brutale locale est un constat (température et humidité partent en sens opposés en quelques "+
+    "minutes, pression stable) : sa cause n'est pas tranchée.";
   if(!list.length){
     return '<div class="cross"><h4>Événements détectés</h4><p class="cintro">'+intro+'</p>'+
       '<p class="muted">Aucun événement sur la période affichée.</p></div>';
@@ -235,6 +243,13 @@ function eventsBox(list){
     if(e.kind==="cross"){
       return '<li>'+cn+'<div class="cev"><div class="ct">'+fmtClock(e.ts)+' - Croisement de '+e.metricName+'</div>'+
         '<div class="cd">Extérieur rejoint Intérieur à '+fmtNum(e.value,e.dec)+' '+e.unit+'.</div></div></li>';
+    }
+    if(e.kind==="sudden"){
+      const sg=(v,d)=>(v>0?"+":"")+fmtNum(v,d);
+      return '<li>'+cn+'<div class="cev"><div class="ct">'+fmtClock(e.ts)+' - Variation brutale locale</div>'+
+        '<div class="cd">En '+Math.max(1,Math.round((e.ts-e.start)/60))+' min : température '+sg(e.dT,1)+' °C, humidité '+
+        sg(e.dH,0)+' %, pression '+sg(e.dP,1)+' hPa, point de rosée '+sg(e.dD,1)+' °C.<br>'+
+        '<span class="muted">Cause indéterminée : '+(e.causes||[]).join(", ")+'.</span></div></div></li>';
     }
     const lines=(e.parts||[]).map(p=>p.metric_name+' : '+p.from+' → '+p.to+'.').join('<br>');
     return '<li>'+cn+'<div class="cev"><div class="ct">'+fmtClock(e.ts)+' - Changement de régime</div>'+
@@ -249,15 +264,20 @@ function eventsBox(list){
 // gauche/droite (dynamiques). Chaque série est tracée avec SA propre [smin,smax].
 // `events` (optionnel) = timeline numérotée [{kind,ts,n,color,metric,value,parts}].
 // `scaleByMetric` = {metric:{smin,smax}} pour placer un croisement à SA hauteur.
-function buildChart(series, axes, events, scaleByMetric){
-  const W=760,H=240,pT=12,pB=24;
+// `idx` = rang du graphe (vue empilée : plusieurs graphes) ; `tr` = [t0,t1] imposé
+// pour que tous les graphes empilés partagent le même axe de temps (null : plage
+// propre aux séries). Un graphe empilé est plus bas.
+function buildChart(series, axes, events, scaleByMetric, idx, tr){
+  idx=idx||0;
+  const W=760,H=tr?170:240,pT=12,pB=24;
   const lefts=axes.filter(a=>a.side==='L'), rights=axes.filter(a=>a.side==='R');
   const pL = lefts.length ? 48 : 16;
   const pR = 14 + rights.length*46;
   let t0=Infinity,t1=-Infinity,any=false;
   series.forEach(s=>{for(let i=0;i<s.vals.length;i++){const v=s.vals[i];
     if(v!==null&&v!==undefined){any=true;const t=s.ts[i];if(t<t0)t0=t;if(t>t1)t1=t;}}});
-  if(!any){G=null;return '<div class="muted">Pas encore de mesure sur cette période.</div>';}
+  if(tr){t0=tr[0];t1=tr[1];}
+  if(!any){GS[idx]=null;return '<div class="muted">Pas encore de mesure sur cette période.</div>';}
   if(!(t1>t0))t1=t0+1;
   const X=t=>pL+(W-pL-pR)*((t-t0)/Math.max(1,(t1-t0)));
   const Ys=(s,v)=>pT+(H-pT-pB)*(1-(v-s.smin)/Math.max(1e-9,s.smax-s.smin));
@@ -323,6 +343,11 @@ function buildChart(series, axes, events, scaleByMetric){
       } else {
         marks+='<text class="cnum" x="'+(x+4).toFixed(1)+'" y="'+(pT+11)+'" fill="'+e.color+'">'+e.n+'</text>';
       }
+    } else if(e.kind==="sudden"){ // variation brutale : bande sur la fenêtre mesurée
+      const xs=X(Math.max(t0,e.start));
+      marks+='<rect x="'+xs.toFixed(1)+'" y="'+pT+'" width="'+Math.max(3,x-xs).toFixed(1)+'" height="'+(H-pT-pB)+
+        '" fill="'+e.color+'" fill-opacity="0.16"/>';
+      marks+='<text class="cnum" x="'+(x+4).toFixed(1)+'" y="'+(pT+11)+'" fill="'+e.color+'">'+e.n+'</text>';
     } else { // changement de régime : repère temporel pleine hauteur
       marks+='<line x1="'+x.toFixed(1)+'" y1="'+pT+'" x2="'+x.toFixed(1)+'" y2="'+(H-pB)+
         '" stroke="'+e.color+'" stroke-opacity="0.6" stroke-dasharray="1 3" stroke-width="1.4"/>';
@@ -331,10 +356,10 @@ function buildChart(series, axes, events, scaleByMetric){
   });
 
   // Contexte de survol : tout ce qu'il faut pour retrouver un point depuis la souris.
-  G={W,H,pL,pR,pT,pB,t0,t1,series};
+  GS[idx]={W,H,pL,pR,pT,pB,t0,t1,series};
 
-  return '<svg id="gsvg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img">'+
-    grid+labels+paths+susp+marks+'<g id="hoverg"></g>'+xt0+xt1+'</svg>';
+  return '<svg id="gsvg'+idx+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img">'+
+    grid+labels+paths+susp+marks+'<g id="hoverg'+idx+'"></g>'+xt0+xt1+'</svg>';
 }
 
 function fetchSeries(ctx, metric){
@@ -342,8 +367,10 @@ function fetchSeries(ctx, metric){
     .then(r=>r.json()).catch(()=>({ts:[],v:[],bucket_s:0}));
 }
 
-// Vue MONO-GRANDEUR : IN/OUT en deux couleurs, échelle numérique à gauche ET à droite.
-function renderSingle(byCtx, key){
+// Un graphe d'UNE grandeur : IN/OUT en deux couleurs, échelle numérique à gauche ET
+// à droite. `events` = timeline déjà assemblée (les croisements d'autres grandeurs
+// en sont exclus par l'appelant). `tr`/`withNote` : voir renderStack.
+function singleChart(byCtx, key, events, idx, tr, withNote){
   const md=metricDef(key);
   const ctxs = S.source==="both" ? ["out","in"] : [S.source];
   let allv=[]; ctxs.forEach(c=>{allv=allv.concat((byCtx[c].v||[]).filter(x=>x!==null&&x!==undefined));});
@@ -355,14 +382,39 @@ function renderSingle(byCtx, key){
   const axes=[{min:smin,max:smax,dec:md[3],side:'L',col:AXIS_MUTED},
               {min:smin,max:smax,dec:md[3],side:'R',col:AXIS_MUTED}];
   const legend=ctxs.map(c=>'<span class="k"><span class="sw" style="border-color:'+md[4]+';opacity:'+(c==="in"?0.55:1)+';border-top-width:'+(c==="in"?2:3)+'px"></span>'+srcLabel(c)+'</span>').join("");
-  // Croisements : seulement si Int ET Ext tracés. Régimes : dès que l'Ext est visible.
-  const showCross = S.source==="both";
-  const showRegime = (S.source==="out"||S.source==="both");
   const scaleByMetric={}; scaleByMetric[key]={smin,smax};
-  const events = assembleEvents([key], showCross, showRegime);
-  const box = (showCross||showRegime) ? eventsBox(events) : "";
-  return '<div class="chart"><h3>'+md[1]+" ("+md[2]+")"+'</h3><div class="plot">'+buildChart(series,axes,events,scaleByMetric)+
-    '<div class="tip" hidden></div></div><div class="legend">'+legend+'</div>'+qualityLine(series)+noteFor(false)+'</div>'+box;
+  return '<div class="chart"><h3>'+md[1]+" ("+md[2]+")"+'</h3><div class="plot">'+buildChart(series,axes,events,scaleByMetric,idx,tr)+
+    '<div class="tip" hidden></div></div><div class="legend">'+legend+'</div>'+qualityLine(series)+(withNote?noteFor(false):"")+'</div>';
+}
+
+// Croisements : seulement si Int ET Ext tracés. Régimes et variations brutales :
+// dès que l'Ext est visible.
+function eventFlags(){
+  return {cross:S.source==="both", regime:(S.source==="out"||S.source==="both")};
+}
+
+// Vue MONO-GRANDEUR.
+function renderSingle(byCtx, key){
+  const f=eventFlags();
+  const events = assembleEvents([key], f.cross, f.regime);
+  const box = (f.cross||f.regime) ? eventsBox(events) : "";
+  return singleChart(byCtx,key,events,0,null,true)+box;
+}
+
+// Vue EMPILÉE : un graphe par grandeur, même axe de temps, survol synchronisé.
+// Chaque grandeur garde sa propre échelle, sans que l'une écrase les autres ; les
+// événements sont listés une seule fois, sous le dernier graphe.
+function renderStack(data, metrics){
+  const ctxs = S.source==="both" ? ["out","in"] : [S.source];
+  let t0=Infinity,t1=-Infinity;
+  metrics.forEach(k=>ctxs.forEach(c=>{const d=data[k][c]||{};(d.ts||[]).forEach((t,i)=>{
+    const v=(d.v||[])[i]; if(v!==null&&v!==undefined){if(t<t0)t0=t;if(t>t1)t1=t;}});}));
+  const tr = isFinite(t0) ? [t0, t1>t0?t1:t0+1] : [0,1];
+  const f=eventFlags();
+  const events = assembleEvents(metrics, f.cross, f.regime);
+  const charts = metrics.map((k,i)=>singleChart(data[k],k,
+    events.filter(e=>e.kind!=="cross"||e.metric===k), i, tr, i===metrics.length-1)).join("");
+  return charts+((f.cross||f.regime)?eventsBox(events):"");
 }
 
 // Vue MULTI-GRANDEURS : un seul graphe, les grandeurs SÉLECTIONNÉES superposées
@@ -388,12 +440,11 @@ function renderAll(data, metrics){
       legend.push('<span class="k"><span class="sw" style="border-color:'+col+';opacity:'+(inner?0.55:1)+';border-top-width:'+(inner?2:3)+'px"></span>'+
         m[1]+(S.source==="both"?" "+(inner?"(int)":"(ext)"):"")+(c===ctxs[ctxs.length-1]?' · '+range:'')+'</span>');});
   });
-  const showCross = S.source==="both";
-  const showRegime = (S.source==="out"||S.source==="both");
+  const {cross:showCross, regime:showRegime} = eventFlags();
   const events = assembleEvents(shownKeys, showCross, showRegime);
   const names = metrics.map(k=>metricDef(k)[1]).join(" + ");
   const title = names+(S.source==="both" ? " (Intérieur + Extérieur)" : " ("+srcLabel(S.source)+")");
-  const body = series.length ? buildChart(series,axes,events,scaleByMetric) : '<div class="muted">Pas encore de mesure sur cette période.</div>';
+  const body = series.length ? buildChart(series,axes,events,scaleByMetric,0,null) : '<div class="muted">Pas encore de mesure sur cette période.</div>';
   const box = (series.length && (showCross||showRegime)) ? eventsBox(events) : "";
   return '<div class="chart"><h3>'+title+'</h3><div class="plot">'+body+'<div class="tip" hidden></div></div>'+
     '<div class="legend">'+legend.join("")+'</div>'+qualityLine(series)+noteFor(true)+'</div>'+box;
@@ -417,49 +468,57 @@ function noteFor(multi){
       : "Plusieurs grandeurs sur un axe de temps commun, chacune à son échelle. Survolez pour lire les valeurs.")+'</p>';
   }
   return '<p class="note">'+(S.source==="both"
-    ? "Intérieur en trait plus fin et atténué ; échelle à gauche et à droite. Pour les chiffres d'inertie, voir « Comportement thermique » et « Modèle d'inertie » dans les <a href=\"/meteohub\">analyses</a>."
+    ? "Intérieur en trait plus fin et atténué ; échelle à gauche et à droite. Pour les chiffres d'inertie, voir « Comportement thermique » et « Réactivité du bâtiment » dans les <a href=\"/meteohub\">analyses</a>."
     : "Échelle à gauche et à droite. Points reliés tant que l'écart reste proche de la cadence ; coupé seulement sur un vrai silence du capteur.")+'</p>';
 }
 
 // --- Survol : ligne-guide + infobulle des valeurs à l'instant pointé ----------
+// Vue empilée : tous les graphes partagent l'axe de temps, donc le curseur d'un
+// graphe est reporté sur les autres (ligne-guide et infobulle de chacun).
+function hoverAt(i,t,pos){
+  const g=GS[i], svg=$("#gsvg"+i), hg=$("#hoverg"+i); if(!g||!svg||!hg)return;
+  const plot=svg.closest(".plot"), tip=plot.querySelector(".tip");
+  if(t===null){tip.hidden=true;hg.innerHTML="";return;}
+  const X=tt=>g.pL+(g.W-g.pL-g.pR)*((tt-g.t0)/Math.max(1,(g.t1-g.t0)));
+  const Ys=(s,v)=>g.pT+(g.H-g.pT-g.pB)*(1-(v-s.smin)/Math.max(1e-9,s.smax-s.smin));
+  let dots="",rows="";
+  g.series.forEach(s=>{
+    let best=-1,bd=Infinity;
+    for(let k=0;k<s.ts.length;k++){const v=s.vals[k];if(v===null||v===undefined)continue;
+      const d=Math.abs(s.ts[k]-t);if(d<bd){bd=d;best=k;}}
+    if(best<0)return;
+    const gapMax=Math.max((s.bucket>0?s.bucket:600)*2.5, CONNECT_MIN_S);
+    if(bd>gapMax)return; // point trop loin (vrai trou) : on ne l'invente pas
+    const px=X(s.ts[best]),py=Ys(s,s.vals[best]);
+    dots+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="3.6" fill="'+s.color+'" stroke="'+mfaColor("--tip")+'" stroke-width="1.2"/>';
+    rows+='<div class="tr"><span class="sw" style="background:'+s.color+(s.opacity!==undefined?';opacity:'+s.opacity:'')+'"></span>'+
+      s.label+' : <b>'+s.vals[best].toFixed(s.dec)+' '+s.unit+'</b></div>';});
+  const sx=X(t);
+  hg.innerHTML='<line x1="'+sx.toFixed(1)+'" y1="'+g.pT+'" x2="'+sx.toFixed(1)+'" y2="'+(g.H-g.pB)+
+    '" stroke="'+mfaColor("--ink")+'" stroke-opacity="0.22" stroke-width="1"/>'+dots;
+  if(!rows){tip.hidden=true;return;}
+  tip.innerHTML='<div class="th">'+fmtFull(t)+'</div>'+rows;
+  tip.hidden=false;
+  const pr=plot.getBoundingClientRect();
+  // Graphe survolé : l'infobulle suit la souris ; les autres se calent sur la ligne-guide.
+  let left=pos?pos.x-pr.left+14:sx/g.W*pr.width+14, top=pos?pos.y-pr.top+14:4;
+  if(left+tip.offsetWidth>pr.width) left=left-tip.offsetWidth-28;
+  if(top+tip.offsetHeight>pr.height) top=pr.height-tip.offsetHeight-4;
+  if(top<0)top=4;
+  tip.style.left=left+"px";tip.style.top=top+"px";
+}
 function attachHover(){
-  const svg=$("#gsvg"); const tip=document.querySelector(".plot .tip");
-  const hg=$("#hoverg"); if(!svg||!tip||!hg||!G)return;
-  const plot=svg.closest(".plot");
-  function move(ev){
-    const r=svg.getBoundingClientRect();
-    const sx=(ev.clientX-r.left)/r.width*G.W;
-    if(sx<G.pL||sx>G.W-G.pR){leave();return;}
-    const t=G.t0+(sx-G.pL)/Math.max(1,(G.W-G.pL-G.pR))*(G.t1-G.t0);
-    const X=tt=>G.pL+(G.W-G.pL-G.pR)*((tt-G.t0)/Math.max(1,(G.t1-G.t0)));
-    const Ys=(s,v)=>G.pT+(G.H-G.pT-G.pB)*(1-(v-s.smin)/Math.max(1e-9,s.smax-s.smin));
-    let dots="",rows="";
-    G.series.forEach(s=>{
-      let best=-1,bd=Infinity;
-      for(let i=0;i<s.ts.length;i++){const v=s.vals[i];if(v===null||v===undefined)continue;
-        const d=Math.abs(s.ts[i]-t);if(d<bd){bd=d;best=i;}}
-      if(best<0)return;
-      const gapMax=Math.max((s.bucket>0?s.bucket:600)*2.5, CONNECT_MIN_S);
-      if(bd>gapMax)return; // point trop loin (vrai trou) : on ne l'invente pas
-      const px=X(s.ts[best]),py=Ys(s,s.vals[best]);
-      dots+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="3.6" fill="'+s.color+'" stroke="'+mfaColor("--tip")+'" stroke-width="1.2"/>';
-      rows+='<div class="tr"><span class="sw" style="background:'+s.color+(s.opacity!==undefined?';opacity:'+s.opacity:'')+'"></span>'+
-        s.label+' : <b>'+s.vals[best].toFixed(s.dec)+' '+s.unit+'</b></div>';});
-    hg.innerHTML='<line x1="'+sx.toFixed(1)+'" y1="'+G.pT+'" x2="'+sx.toFixed(1)+'" y2="'+(G.H-G.pB)+
-      '" stroke="'+mfaColor("--ink")+'" stroke-opacity="0.22" stroke-width="1"/>'+dots;
-    if(!rows){tip.hidden=true;return;}
-    tip.innerHTML='<div class="th">'+fmtFull(t)+'</div>'+rows;
-    tip.hidden=false;
-    const pr=plot.getBoundingClientRect();
-    let left=ev.clientX-pr.left+14, top=ev.clientY-pr.top+14;
-    if(left+tip.offsetWidth>pr.width) left=ev.clientX-pr.left-tip.offsetWidth-14;
-    if(top+tip.offsetHeight>pr.height) top=pr.height-tip.offsetHeight-4;
-    if(top<0)top=4;
-    tip.style.left=left+"px";tip.style.top=top+"px";
-  }
-  function leave(){tip.hidden=true;hg.innerHTML="";}
-  svg.addEventListener("mousemove",move);
-  svg.addEventListener("mouseleave",leave);
+  GS.forEach((g,i)=>{
+    const svg=$("#gsvg"+i); if(!g||!svg)return;
+    const all=(t,pos)=>GS.forEach((_,k)=>hoverAt(k,t,k===i?pos:null));
+    svg.addEventListener("mousemove",ev=>{
+      const r=svg.getBoundingClientRect();
+      const sx=(ev.clientX-r.left)/r.width*g.W;
+      if(sx<g.pL||sx>g.W-g.pR){all(null);return;}
+      all(g.t0+(sx-g.pL)/Math.max(1,(g.W-g.pL-g.pR))*(g.t1-g.t0),{x:ev.clientX,y:ev.clientY});
+    });
+    svg.addEventListener("mouseleave",()=>all(null));
+  });
 }
 
 function draw(){
@@ -480,7 +539,9 @@ function draw(){
     const data={};
     list.forEach(x=>{(data[x.m]=data[x.m]||{})[x.c]=x.r;});
     metrics.forEach(m=>{const d=data[m]=data[m]||{};["out","in"].forEach(c=>{if(!d[c])d[c]={ts:[],v:[],bucket_s:0,suspects:[]};});});
-    charts.innerHTML = (metrics.length===1) ? renderSingle(data[metrics[0]], metrics[0]) : renderAll(data, metrics);
+    GS=[];
+    charts.innerHTML = (metrics.length===1) ? renderSingle(data[metrics[0]], metrics[0])
+      : (S.layout==="overlay" ? renderAll(data, metrics) : renderStack(data, metrics));
     attachHover();
   });
 }
@@ -493,6 +554,11 @@ function renderMetricSel(){
   }).join("");
 }
 renderMetricSel();
+$("#layoutsel").innerHTML=[["stack","Empilés"],["overlay","Superposés"]].map(l=>
+  '<button class="pbtn'+(S.layout===l[0]?" on":"")+'" data-l="'+l[0]+'">'+l[1]+'</button>').join("");
+$("#layoutsel").addEventListener("click",e=>{const b=e.target.closest(".pbtn");if(!b)return;
+  S.layout=b.dataset.l;localStorage.setItem(LS+"layout",S.layout);
+  document.querySelectorAll("#layoutsel .pbtn").forEach(x=>x.classList.toggle("on",x===b));draw();});
 $("#source").innerHTML=SOURCES.map(s=>'<option value="'+s[0]+'"'+(s[0]===S.source?" selected":"")+'>'+s[1]+'</option>').join("");
 $("#periods").innerHTML=PERIODS.map(p=>'<button class="pbtn" data-h="'+p[1]+'">'+p[0]+'</button>').join("")+
   '<button class="pbtn" data-h="custom">Période libre</button>';

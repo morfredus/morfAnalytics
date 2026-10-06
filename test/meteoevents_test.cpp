@@ -132,6 +132,30 @@ int main() {
         check(rc.isEmpty(), "un changement de tendance isole n'est pas un regime");
     }
 
+    // --- Variation brutale locale --------------------------------------------
+    {
+        // Stable, puis en 10 min : T -2,1 degC, HR +18 points, pression -0,2 hPa.
+        QVector<qint64> t; QVector<double> T, H, P;
+        mk({22.2, 22.2, 22.2, 22.2, 20.1, 20.1, 20.1}, t, T);
+        mk({60, 60, 60, 60, 78, 78, 78}, t, H);
+        mk({1011, 1011, 1011, 1011, 1010.8, 1010.8, 1010.8}, t, P);
+        const auto sc = detectSuddenChanges(t, T, H, P);
+        check(sc.size() == 1, "variation brutale : un evenement");
+        if (sc.size() == 1) {
+            check(sc[0].dTemp < -2.0 && sc[0].dHum > 17.0, "variation brutale : T baisse, HR monte");
+            check(sc[0].dDew > 0.0, "variation brutale : le point de rosee a monte");
+        }
+        // Meme refroidissement mais pression qui chute : c'est de la meteo, pas ce signal.
+        mk({1011, 1011, 1011, 1011, 1009, 1009, 1009}, t, P);
+        check(detectSuddenChanges(t, T, H, P).isEmpty(), "pression qui bouge : pas de variation locale");
+        // Derive lente (meme ecart total sur 3 h) : pas brutal.
+        QVector<qint64> t2; QVector<double> T2, H2, P2;
+        QVector<double> a, b, c;
+        for (int i = 0; i < 37; ++i) { a.push_back(22.2 - i * 0.06); b.push_back(60 + i * 0.5); c.push_back(1011); }
+        mk(a, t2, T2); mk(b, t2, H2); mk(c, t2, P2);
+        check(detectSuddenChanges(t2, T2, H2, P2).isEmpty(), "derive lente : pas de variation brutale");
+    }
+
     std::printf("\n%s (%d echec%s)\n",
                 failures == 0 ? "TOUS LES TESTS PASSENT" : "DES TESTS ECHOUENT",
                 failures, failures > 1 ? "s" : "");

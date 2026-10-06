@@ -58,6 +58,21 @@ struct RegimeChange {
     QVector<TrendChange> parts;     // les changements de tendance impliques
 };
 
+// Une variation brutale LOCALE : en un quart d'heure, la temperature et l'humidite
+// partent en sens opposes alors que la pression ne bouge pas. C'est un constat,
+// jamais une cause : l'ombre soudaine sur le capteur, un nuage dense, une averse
+// locale ou un abri mal ventile donnent la meme signature. Le point de rosee
+// aide a lire l'evenement (stable : seul l'effet thermique joue ; en hausse : l'air
+// lui-meme s'est humidifie) sans pour autant trancher.
+struct SuddenChange {
+    qint64 ts = 0;          // fin de la variation (instant de la derniere mesure)
+    qint64 startTs = 0;     // debut de la fenetre sur laquelle l'ecart est mesure
+    double dTemp = 0.0;     // variation de temperature (degC)
+    double dHum  = 0.0;     // variation d'humidite relative (points de %)
+    double dPres = 0.0;     // variation de pression (hPa)
+    double dDew  = 0.0;     // variation du point de rosee (degC)
+};
+
 // Bande morte (eps) d'un croisement, dans l'unite de la grandeur : un croisement
 // n'est valide que si l'ecart repart franchement de l'autre cote. Sert aussi
 // cote client comme repere de tolerance. Grandeur inconnue -> valeur prudente.
@@ -88,6 +103,13 @@ QVector<TrendChange> detectTrendChanges(const QString& metric,
 // distinctes (sinon ce n'est qu'un changement de tendance isole).
 QVector<RegimeChange> detectRegimeChanges(const QVector<TrendChange>& changes,
                                           qint64 windowS = 90 * 60);
+
+// Detecte les variations brutales locales d'une serie EXTERIEURE (les trois
+// grandeurs partagent les memes instants, NaN = manquant). Seuils fixes (voir le
+// .cpp) : volontairement simples, a affiner avec l'experience. Les detections
+// voisines (moins de 30 min) sont fusionnees en gardant la plus forte.
+QVector<SuddenChange> detectSuddenChanges(const QVector<qint64>& ts, const QVector<double>& temp,
+                                          const QVector<double>& hum, const QVector<double>& pres);
 
 } // namespace meteo
 } // namespace morfanalytics

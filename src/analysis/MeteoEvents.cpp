@@ -5,6 +5,7 @@
  */
 
 #include "morfanalytics/analysis/MeteoEvents.h"
+#include "morfanalytics/analysis/MeteoMath.h"
 
 #include <QSet>
 #include <algorithm>
@@ -272,6 +273,51 @@ QVector<RegimeChange> detectRegimeChanges(const QVector<TrendChange>& changes, q
         }
         i = j;
     }
+    return out;
+}
+
+QVector<SuddenChange> detectSuddenChanges(const QVector<qint64>& ts, const QVector<double>& temp,
+                                          const QVector<double>& hum, const QVector<double>& pres) {
+    // Seuils fixes, choisis pour qu'un nuage ou une ombre franche passe et qu'une
+    // derive lente du matin ne passe pas. ponytail : pas de seuil adaptatif a
+    // l'habitude du lieu ; a ajouter si les faux positifs gênent (cf. Baseline).
+    constexpr qint64 kWindow  = 15 * 60;  // fenetre de mesure de l'ecart
+    constexpr qint64 kMerge   = 30 * 60;  // detections plus proches : un seul evenement
+    constexpr double kMinTemp = 1.5;      // degC
+    constexpr double kMinHum  = 8.0;      // points de %
+    constexpr double kMaxPres = 0.5;      // hPa : « pression stable »
+
+    QVector<SuddenChange> out;
+    const int n = std::min({ts.size(), temp.size(), hum.size(), pres.size()});
+    auto ok = [&](int i) { return isValid(temp[i]) && isValid(hum[i]) && isValid(pres[i]); };
+
+    bool have = false;
+    SuddenChange best;
+    qint64 lastCand = 0;
+    int j = 0; // debut de fenetre : n'avance que (ts croissants)
+    for (int i = 0; i < n; ++i) {
+        if (!ok(i)) continue;
+        while (j < i && ts[i] - ts[j] > kWindow) ++j;
+        // Plus ancienne mesure complete de la fenetre : l'ecart le plus large.
+        int k = j;
+        while (k < i && !ok(k)) ++k;
+        if (k >= i) continue;
+
+        const double dT = temp[i] - temp[k], dH = hum[i] - hum[k], dP = pres[i] - pres[k];
+        if (std::fabs(dT) < kMinTemp || std::fabs(dH) < kMinHum || std::fabs(dP) > kMaxPres) continue;
+        if (dT * dH >= 0.0) continue; // T et HR doivent partir en sens opposes
+
+        SuddenChange c;
+        c.ts = ts[i]; c.startTs = ts[k];
+        c.dTemp = dT; c.dHum = dH; c.dPres = dP;
+        c.dDew = dewPoint(temp[i], hum[i]) - dewPoint(temp[k], hum[k]);
+
+        if (have && c.ts - lastCand > kMerge) { out.push_back(best); have = false; }
+        if (!have || std::fabs(c.dTemp) > std::fabs(best.dTemp)) best = c;
+        have = true;
+        lastCand = c.ts;
+    }
+    if (have) out.push_back(best);
     return out;
 }
 

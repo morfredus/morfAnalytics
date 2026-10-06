@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.67.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.68.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -236,7 +236,7 @@ l'extérieur sont deux caches séparés ; la prévision a le sien.
 |---|---|---|---|
 | Confort intérieur | `indoor_comfort` | Intérieur | Zones de confort température/humidité, point de rosée, repère de moisissure |
 | Comportement thermique du bâtiment | `thermal_behaviour` | Les deux | Écart intérieur/extérieur, amortissement, décalage d'inertie |
-| Modèle d'inertie intérieure | `indoor_inertia_model` | Les deux | Ajuste l'intérieur à partir de l'extérieur décalé (gain, offset, R²/RMSE), prédit vs réel |
+| Réactivité du bâtiment | `indoor_inertia_model` | Les deux | Ajuste l'intérieur à partir de l'extérieur décalé (gain, offset, R²/RMSE), prédit vs réel |
 | Prévu vs observé | `forecast_vs_observed` | Extérieur | Prévision « du lendemain » vs min/max observés : biais et erreur moyenne |
 
 Paramètres facultatifs : `days` (profondeur de la fenêtre), `window_days` (demi-

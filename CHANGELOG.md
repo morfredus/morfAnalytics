@@ -3,6 +3,34 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.68.0] - 2026-10-06
+
+### Added
+
+- **Weather quick view (analyses page).** The "At a glance" block now opens with three
+  cards (temperature, humidity, pressure), each with its reading (trend, fog level), and
+  takes its headline from the weather diagnosis instead of a bare temperature threshold.
+- **Observed factors behind each diagnosis level.** `/meteohub/diagnosis` gains `factors`
+  (precipitation, fog, frost): the checked criteria with their measured value and threshold.
+  The page shows them as a tick list for every active level, instead of an unexplained
+  level. No confidence percentage on purpose: it would be a made-up number without a
+  calibration history.
+- **Sudden local variation detector (`MeteoEvents`).** New `detectSuddenChanges` and
+  `sudden_changes` in `/meteohub/events`: within 15 minutes, temperature and humidity move
+  in opposite directions (>= 1.5 C and >= 8 points) while pressure stays within 0.5 hPa.
+  It is reported as a measurement-quality finding, never as weather: the cause is left
+  undetermined (cloud cover, sensor shading, local shower), with the dew point change as
+  a hint. Shown as a shaded band and a line in the graphs events box, and as a "Measurement
+  quality" note in the diagnosis card (last 6 hours).
+- **Stacked graphs.** With several metrics selected, the graphs page now draws one chart
+  per metric on a shared time axis (default), with a synchronized hover cursor and tooltip.
+  The previous single overlaid chart stays available as "Superposés".
+
+### Changed
+
+- **"Indoor inertia model" renamed "Building reactivity"** (`indoor_inertia_model`, title
+  only: the id and the maths are unchanged).
+
 ## [0.67.1] - 2026-10-04
 
 ### Fixed

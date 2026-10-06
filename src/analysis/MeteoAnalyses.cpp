@@ -1906,7 +1906,7 @@ void registerMeteoAnalyses(AnalysisRegistry& registry) {
     // --- Relation interieur / exterieur (contexte Both) ----------------------
     add("thermal_behaviour", "Comportement thermique du bâtiment", "relation",
         1 * kDay, analyzeThermalBehaviour, MeteoCtx::Both);
-    add("indoor_inertia_model", "Modèle d'inertie intérieure", "relation",
+    add("indoor_inertia_model", "Réactivité du bâtiment", "relation",
         1 * kDay, analyzeIndoorInertiaModel, MeteoCtx::Both);
 
     // --- Prevision (prevu vs observe) ----------------------------------------

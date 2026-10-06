@@ -415,6 +415,14 @@ QJsonObject AnalyticsModule::diagnosisJson(qint64 to) const {
                                {"unusual", x.unusual}});
     o["signals"] = sig;
     o["why"] = QJsonArray::fromStringList(d.why);
+    auto facJson = [](const QVector<meteo::Factor>& v) {
+        QJsonArray a;
+        for (const meteo::Factor& f : v) a.append(QJsonObject{{"label", f.label}, {"met", f.met}});
+        return a;
+    };
+    o["factors"] = QJsonObject{{"precipitation", facJson(d.precipFactors)},
+                               {"fog", facJson(d.fogFactors)},
+                               {"frost", facJson(d.frostFactors)}};
     return o;
 }
 
@@ -528,9 +536,33 @@ QJsonObject AnalyticsModule::eventsJson(qint64 from, qint64 to) const {
         regimeChanges.append(j);
     }
 
+    // Variations brutales locales (EXTÉRIEUR) : un constat de mesure, jamais une
+    // cause. `causes` liste ce qui est possible, pour que l'interface sépare ce
+    // qui est observé de ce qui est interprété.
+    QJsonArray suddenChanges;
+    const QVector<double>* oT = outS.channel(QStringLiteral("temp"));
+    const QVector<double>* oH = outS.channel(QStringLiteral("hum"));
+    const QVector<double>* oP = outS.channel(QStringLiteral("pres"));
+    if (oT && oH && oP && !outS.isEmpty()) {
+        for (const auto& s : meteo::detectSuddenChanges(outS.timestamps(), *oT, *oH, *oP)) {
+            if (s.ts < displayFrom) continue;
+            suddenChanges.append(QJsonObject{
+                {"ts", static_cast<double>(s.ts)},
+                {"start_ts", static_cast<double>(s.startTs)},
+                {"d_temp", roundTo(s.dTemp, 1)},
+                {"d_hum", roundTo(s.dHum, 0)},
+                {"d_pres", roundTo(s.dPres, 1)},
+                {"d_dew", roundTo(s.dDew, 1)},
+                {"causes", QJsonArray{QStringLiteral("couverture nuageuse"),
+                                      QStringLiteral("ombrage du capteur"),
+                                      QStringLiteral("averse locale")}}});
+        }
+    }
+
     o["crossings"]      = crossings;
     o["trend_changes"]  = trendChanges;
     o["regime_changes"] = regimeChanges;
+    o["sudden_changes"] = suddenChanges;
     return o;
 }
 

@@ -66,7 +66,10 @@ une barre en haut de page :
   grandeurs dans le temps. Les grandeurs à afficher se choisissent par **cases à
   cocher** (sélection libre : une seule, un couple température + humidité, humidité +
   pression, ou les trois). Une seule cochée donne la vue mono (Intérieur/Extérieur en
-  deux couleurs) ; plusieurs se superposent, chacune avec son axe et sa couleur.
+  deux couleurs) ; plusieurs s'**empilent** (0.68.0) : un graphe par grandeur sur un
+  axe de temps commun, avec un curseur de survol synchronisé (la pression ne se lit
+  plus à l'échelle de la température). Le bouton « Superposés » rétablit l'ancien
+  graphe unique, chaque grandeur avec son axe et sa couleur.
   Source **Intérieur / Extérieur / les deux** sur le même axe de temps. Période
   **glissante** (6 h, 12 h, 24 h, 3 j, 7 j, 30 j, fin = maintenant) ou **libre** : le
   bouton « Période libre » ouvre deux champs jour + heure (pas de 5 min, cadence de
@@ -110,9 +113,27 @@ une barre en haut de page :
     - **Changement de régime** : plusieurs tendances qui basculent dans une fenêtre
       rapprochée, **même entre grandeurs de natures différentes** (relation TEMPORELLE,
       jamais déduite d'une proximité graphique). Matérialisé par un repère vertical.
+    - **Variation brutale locale** (0.68.0) : en un quart d'heure, température et
+      humidité partent en sens opposés (au moins 1,5 °C et 8 points) alors que la
+      pression reste stable (0,5 hPa au plus). C'est un **constat de mesure**, pas de la
+      météo : la cause reste indéterminée (couverture nuageuse, ombrage du capteur,
+      averse locale) et le point de rosée aide à la lire. Matérialisé par une bande
+      sur la fenêtre mesurée ; la page Analyses en reprend la dernière occurrence
+      (6 h) sous « Qualité de mesure » dans le diagnostic. Seuils fixes, volontairement
+      simples.
     - Chaque marqueur porte un numéro qui le relie à sa ligne dans l'encart.
     Aucun croisement n'est jamais généré entre grandeurs différentes. C'est une
     première timeline analytique tirée directement des relations entre séries.
+
+### Vue rapide et facteurs du diagnostic (0.68.0)
+
+Le bloc « En un coup d'œil » s'ouvre sur trois cartes (température, humidité,
+pression) avec leur lecture : tendance, niveau de brouillard. Dans le diagnostic
+météorologique, chaque niveau actif (précipitations, brouillard, gel) liste ses
+**facteurs observés** : le critère, la valeur mesurée, le seuil, coché s'il est rempli.
+Pas de pourcentage de confiance : sans historique d'observations calibré, ce serait un
+nombre décoratif. L'analyse « Réactivité du bâtiment » (ex-« Modèle d'inertie
+intérieure ») garde son identifiant `indoor_inertia_model`.
 
 ## Analyse des machines
 
