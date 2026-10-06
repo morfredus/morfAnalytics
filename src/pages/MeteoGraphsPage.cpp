@@ -50,7 +50,15 @@ QByteArray MeteoGraphsPage::render() {
 .vb{font-size:.8rem;font-weight:600;vertical-align:middle;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;padding:.1rem .5rem;margin-left:.4rem}
 .tabs{margin:.3rem 0 1rem}.tabs .tab{display:inline-block;padding:.25rem .7rem;border:1px solid var(--line);border-radius:999px;margin-right:.4rem;font-size:.9rem;color:var(--soft);text-decoration:none}
 .tabs .tab.on{background:var(--sel);border-color:var(--accent);color:var(--sel-ink)}
-.controls{display:flex;flex-wrap:wrap;gap:.8rem 1.2rem;align-items:center;margin:1rem 0}
+.controls{display:flex;flex-wrap:wrap;gap:.5rem 1.2rem;align-items:center;margin:.6rem 0}
+/* Defilement : l'en-tete collant se resserre (description masquee, marges reduites)
+   pour laisser la place aux graphes. */
+.topbar{transition:padding .15s}
+.topbar.compact{padding-top:.4rem;padding-bottom:.3rem}
+.topbar.compact .desc{display:none}
+.topbar.compact h1{font-size:1.15rem;margin:0}
+.topbar.compact .tabs{margin:.2rem 0 .3rem}
+.topbar.compact .controls{margin:.3rem 0 0}
 label{font-size:.9rem;color:var(--soft)}
 select{background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.3rem .5rem;font-size:.9rem}
 .metricsel{display:inline-flex;align-items:center;gap:.5rem;flex-wrap:wrap}
@@ -64,8 +72,10 @@ select{background:var(--field);border:1px solid var(--line);color:var(--ink);bor
 .pbtn:hover{border-color:var(--accent);color:var(--ink)}.pbtn.on{background:var(--sel);border-color:var(--accent);color:var(--sel-ink)}
 /* Période libre : deux champs jour + heure (pas de 5 min), repliés tant que
    l'on reste sur les périodes glissantes. */
-.custom{display:flex;flex-wrap:wrap;gap:.5rem .8rem;align-items:center;width:100%;margin-top:-.3rem}
+.custom{display:flex;flex-wrap:wrap;gap:.5rem .8rem;align-items:center}
 .custom[hidden]{display:none}
+/* Les deux champs de la période libre disent déjà la période : pas de deuxième ligne. */
+#custom:not([hidden])~.rangelbl{display:none}
 .custom input{background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.25rem .45rem;font-size:.85rem}
 .custom .err{color:var(--warn);font-size:.82rem}
 .rangelbl{color:var(--muted);font-size:.85rem;font-variant-numeric:tabular-nums}
@@ -100,7 +110,7 @@ select{background:var(--field);border:1px solid var(--line);color:var(--ink);bor
 <!--nav-back-->
 <h1>Météo <span id="vb" class="vb"></span><!--theme-toggle--></h1>
 <div class="tabs"><a class="tab" href="/meteohub">Analyses</a><span class="tab on">Graphiques</span></div>
-<p class="muted">Montre ce que font réellement les données dans le temps. Les analyses, elles, disent ce que ça signifie.</p>
+<p class="muted desc">Montre ce que font réellement les données dans le temps. Les analyses, elles, disent ce que ça signifie.</p>
 <div class="controls">
   <span class="metricsel"><span class="mslabel">Afficher</span><span id="metricsel"></span></span>
   <span class="periods" id="layoutsel" title="Plusieurs grandeurs : un graphe chacune, ou toutes sur le même"></span>
@@ -631,6 +641,13 @@ $("#cnow").addEventListener("click",()=>{$("#cto").value=toLocalInput(floor5(Dat
 fetch("/status").then(r=>r.json()).then(s=>{const b=$("#vb");if(b)b.textContent=s.version?"v"+s.version:"";}).catch(()=>{});
 // Domaine météo : retour possible vers la station collectée, en plus de morfAnalytics.
 mfaMeteoHubBack();
+
+// En-tete compact des que l'on descend (hysteresis : evite le clignotement quand
+// la hauteur de l'en-tete change sous le defilement).
+(function(){const tb=document.querySelector(".topbar");let on=false;
+  addEventListener("scroll",()=>{const y=scrollY;
+    if(!on&&y>80){on=true;tb.classList.add("compact");}
+    else if(on&&y<20){on=false;tb.classList.remove("compact");}},{passive:true});})();
 
 draw();
 // Rafraîchissement : utile tant que la fenêtre touche le présent. Une période

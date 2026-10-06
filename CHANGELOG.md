@@ -3,6 +3,15 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.68.1] - 2026-10-06
+
+### Changed
+
+- **Graphs page: more compact header.** The free period fields now sit on the same line as
+  the fixed periods (6 h, 12 h...), and their redundant "displayed period" label is hidden
+  while they are open. When scrolling down, the sticky header shrinks (description hidden,
+  smaller margins) to leave room for the charts; it expands back at the top of the page.
+
 ## [0.68.0] - 2026-10-06
 
 ### Added
