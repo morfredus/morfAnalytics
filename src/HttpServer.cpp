@@ -1927,7 +1927,7 @@ function renderDiagnosis(d, ev) {
   const measure = sud
     ? `<div class="measure-event"><strong>Qualité de mesure</strong> : variation brutale locale à ${hhmm(sud.ts)}, ` +
       `en ${Math.max(1, Math.round((sud.ts - sud.start_ts) / 60))} min : température ${sg(sud.d_temp, 1)} °C, ` +
-      `humidité ${sg(sud.d_hum, 0)} %, pression ${sg(sud.d_pres, 1)} hPa.<br>` +
+      `humidité ${sg(sud.d_hum, 1)} %, pression ${sg(sud.d_pres, 1)} hPa.<br>` +
       `<span class="muted">Cause indéterminée : ${esc((sud.causes || []).join(', '))}. ` +
       `<a href="/meteohub/graphs">Voir le graphique</a>.</span></div>` : '';
   return `<h2 class="section">Diagnostic météorologique</h2>

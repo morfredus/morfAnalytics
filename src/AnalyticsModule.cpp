@@ -399,7 +399,7 @@ QJsonObject AnalyticsModule::diagnosisJson(qint64 to) const {
     o["signals_agree"] = d.agree;
     o["signals_total"] = d.total;
     o["temperature"] = num(d.temp, 1);
-    o["humidity"] = num(d.hum, 0);
+    o["humidity"] = num(d.hum, 1);
     o["pressure"] = num(d.pres, 1);
     o["dew_point"] = num(d.dewPoint, 1);
     o["dew_point_spread"] = num(d.spread, 1);
@@ -452,7 +452,7 @@ QJsonObject AnalyticsModule::eventsJson(qint64 from, qint64 to) const {
     struct M { const char* key; const char* name; const char* unit; int dec; };
     static const M metrics[3] = {
         {"temp", "Température", "°C", 1},
-        {"hum",  "Humidité",   "%",  0},
+        {"hum",  "Humidité",   "%",  1},
         {"pres", "Pression",   "hPa", 1},
     };
     auto nameOf = [](const QString& k) -> QString {
@@ -550,7 +550,7 @@ QJsonObject AnalyticsModule::eventsJson(qint64 from, qint64 to) const {
                 {"ts", static_cast<double>(s.ts)},
                 {"start_ts", static_cast<double>(s.startTs)},
                 {"d_temp", roundTo(s.dTemp, 1)},
-                {"d_hum", roundTo(s.dHum, 0)},
+                {"d_hum", roundTo(s.dHum, 1)},
                 {"d_pres", roundTo(s.dPres, 1)},
                 {"d_dew", roundTo(s.dDew, 1)},
                 {"causes", QJsonArray{QStringLiteral("couverture nuageuse"),

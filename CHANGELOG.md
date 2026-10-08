@@ -3,6 +3,16 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.68.3] - 2026-10-08
+
+### Changed
+
+- **Humidity is displayed with one decimal** (it was rounded to a whole number): graphs and tooltips,
+  event and crossing values, sudden-variation delta, current-state card and diagnosis factors. The
+  probe's DHT22 (now its humidity reference) resolves 0.1 %. Requires MeteoHub 1.59.1, whose
+  `/api/history/raw` export used to round humidity to an integer: older samples already imported
+  stay whole numbers.
+
 ## [0.68.2] - 2026-10-06
 
 ### Fixed

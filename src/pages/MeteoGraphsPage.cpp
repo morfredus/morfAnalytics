@@ -141,7 +141,7 @@ const LS="morfanalytics.graphs.";
 // vivent côté serveur (MeteoEvents) : source commune avec la page Analyse.
 const METRICS=[
   ["temp","Température","°C",1,mfaColor("--s-temp")],
-  ["hum","Humidité","%",0,mfaColor("--s-hum")],
+  ["hum","Humidité","%",1,mfaColor("--s-hum")],
   ["pres","Pression","hPa",1,mfaColor("--s-pres")]
 ];
 const METRIC_KEYS=METRICS.map(m=>m[0]);
@@ -261,7 +261,7 @@ function eventsBox(list){
       const sg=(v,d)=>(v>0?"+":"")+fmtNum(v,d);
       return '<li>'+cn+'<div class="cev"><div class="ct">'+fmtClock(e.ts)+' - Variation brutale locale</div>'+
         '<div class="cd">En '+Math.max(1,Math.round((e.ts-e.start)/60))+' min : température '+sg(e.dT,1)+' °C, humidité '+
-        sg(e.dH,0)+' %, pression '+sg(e.dP,1)+' hPa, point de rosée '+sg(e.dD,1)+' °C.<br>'+
+        sg(e.dH,1)+' %, pression '+sg(e.dP,1)+' hPa, point de rosée '+sg(e.dD,1)+' °C.<br>'+
         '<span class="muted">Cause indéterminée : '+(e.causes||[]).join(", ")+'.</span></div></div></li>';
     }
     const lines=(e.parts||[]).map(p=>p.metric_name+' : '+p.from+' → '+p.to+'.').join('<br>');

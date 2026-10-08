@@ -268,7 +268,7 @@ Diagnosis diagnose(const QVector<qint64>& ts, const QVector<double>& temp,
     const QString coolTxt = cooling ? QStringLiteral("Température en baisse (%1 °C sur 3 h)").arg(f1(d.tempDelta3h))
                           : night ? QStringLiteral("Nuit ou aube")
                                   : QStringLiteral("Ni refroidissement ni nuit");
-    fac(d.fogFactors, d.hum >= 93, QStringLiteral("Humidité %1 % (seuil 93 %)").arg(qRound(d.hum)));
+    fac(d.fogFactors, d.hum >= 93, QStringLiteral("Humidité %1 % (seuil 93 %)").arg(f1(d.hum)));
     fac(d.fogFactors, d.spread <= 1.5,
         QStringLiteral("Écart au point de rosée %1 °C (seuil 1,5 °C)").arg(f1(d.spread)));
     fac(d.fogFactors, cooling || night, coolTxt);
@@ -276,7 +276,7 @@ Diagnosis diagnose(const QVector<qint64>& ts, const QVector<double>& temp,
     fac(d.precipFactors, sDew.measured && sDew.dir > 0, QStringLiteral("Point de rosée en hausse"));
     fac(d.precipFactors, d.spread <= 2.5,
         QStringLiteral("Écart au point de rosée %1 °C (seuil 2,5 °C)").arg(f1(d.spread)));
-    fac(d.precipFactors, d.hum >= 85, QStringLiteral("Humidité %1 % (seuil 85 %)").arg(qRound(d.hum)));
+    fac(d.precipFactors, d.hum >= 85, QStringLiteral("Humidité %1 % (seuil 85 %)").arg(f1(d.hum)));
     fac(d.precipFactors, presDown, QStringLiteral("Pression en baisse"));
     fac(d.frostFactors, d.temp <= 5.0, QStringLiteral("Température %1 °C (seuil 5 °C)").arg(f1(d.temp)));
     fac(d.frostFactors, cooling || (ok(dT6) && dT6 <= -1.0), QStringLiteral("Température en baisse"));
@@ -304,7 +304,7 @@ Diagnosis diagnose(const QVector<qint64>& ts, const QVector<double>& temp,
 
     // Explication chiffree : chaque phrase renvoie aux valeurs mesurees.
     d.why << QStringLiteral("Température %1 °C, humidité %2 %, point de rosée %3 °C, écart à la saturation %4 °C.")
-                 .arg(f1(d.temp)).arg(qRound(d.hum)).arg(f1(d.dewPoint)).arg(f1(d.spread));
+                 .arg(f1(d.temp)).arg(f1(d.hum)).arg(f1(d.dewPoint)).arg(f1(d.spread));
     for (const DiagSignal& s : d.signalsList) {
         if (!s.measured) continue;
         const QString unit = s.key == "humidity" ? " %" : s.key == "pressure" ? " hPa"
