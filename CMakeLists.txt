@@ -55,6 +55,7 @@ add_library(morfAnalytics STATIC
     src/pages/MeteoHubPage.cpp
     src/pages/MeteoGraphsPage.cpp         # onglet Graphiques du domaine meteo
     src/pages/SiteWatchPage.cpp
+    src/pages/SiteWatchSettingsPage.cpp
     src/pages/PhotoPage.cpp               # page de la specialisation Photo
     src/pages/MonitorPage.cpp             # page du domaine Monitor (historique machines)
     src/pages/GitHubPage.cpp              # page du domaine GitHub
@@ -84,8 +85,12 @@ add_library(morfAnalytics STATIC
     src/analysis/MeteoEvents.cpp          # evenements temporels (croisements, tendances, regimes) - source commune
     src/analysis/MeteoQuality.cpp         # qualification des mesures (bornes, pic isole, exclusion) - non destructive
     src/analysis/MeteoAnalyses.cpp        # jeu d'analyses meteo
+    src/analysis/SiteWatchInsights.cpp    # analyse approfondie SiteWatch (anomalies, comparaisons, alertes) - pure
+    src/data/SiteWatchAlertStore.cpp      # alertes SiteWatch : envoi suivi, reglages, retention (SQLite)
     include/morfanalytics/analysis/IAnalysis.h
     include/morfanalytics/analysis/AnalysisRegistry.h
+    include/morfanalytics/analysis/SiteWatchInsights.h
+    include/morfanalytics/data/SiteWatchAlertStore.h
     include/morfanalytics/analysis/MeteoMath.h
     include/morfanalytics/analysis/ForecastQuality.h
     include/morfanalytics/data/Series.h
@@ -103,6 +108,7 @@ add_library(morfAnalytics STATIC
     include/morfanalytics/pages/MeteoHubPage.h
     include/morfanalytics/pages/MeteoGraphsPage.h
     include/morfanalytics/pages/SiteWatchPage.h
+    include/morfanalytics/pages/SiteWatchSettingsPage.h
     include/morfanalytics/pages/PhotoPage.h
     include/morfanalytics/pages/MonitorPage.h
     include/morfanalytics/pages/GitHubPage.h
@@ -169,6 +175,14 @@ if(MA_BUILD_TESTS)
     add_executable(analyses_test test/analyses_test.cpp)
     target_link_libraries(analyses_test PRIVATE morfAnalytics)
     add_test(NAME analyses COMMAND analyses_test)
+
+    add_executable(sitewatchinsights_test test/sitewatchinsights_test.cpp)
+    target_link_libraries(sitewatchinsights_test PRIVATE morfAnalytics)
+    add_test(NAME sitewatchinsights COMMAND sitewatchinsights_test)
+
+    add_executable(sitewatchalertstore_test test/sitewatchalertstore_test.cpp)
+    target_link_libraries(sitewatchalertstore_test PRIVATE morfAnalytics)
+    add_test(NAME sitewatchalertstore COMMAND sitewatchalertstore_test)
 
     add_executable(meteoevents_test test/meteoevents_test.cpp)
     target_link_libraries(meteoevents_test PRIVATE morfAnalytics)

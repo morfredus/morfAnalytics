@@ -14,6 +14,8 @@
 #include "morfanalytics/pages/MeteoHubPage.h"
 #include "morfanalytics/pages/MeteoGraphsPage.h"
 #include "morfanalytics/pages/SiteWatchPage.h"
+#include "morfanalytics/pages/SiteWatchSettingsPage.h"
+#include "morfanalytics/analysis/SiteWatchInsights.h"
 #include "morfanalytics/pages/PhotoPage.h"
 #include "morfanalytics/pages/MonitorPage.h"
 #include "morfanalytics/PhotoAnalyticsModule.h"
@@ -22,6 +24,10 @@
 #include "morfanalytics/pages/GitHubPage.h"
 #include "morfanalytics/pages/Theme.h"
 
+#include <QEventLoop>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTimer>
@@ -125,6 +131,13 @@ HttpServer::HttpServer(ServiceConfig config, ModuleRegistry* registry, QObject* 
       m_server(new QTcpServer(this)) {
     openSiteWatchStore();
     loadSiteWatchReports();
+    // Alertes SiteWatch : evaluees a chaque rapport recu, mais le SILENCE de SiteWatch ne
+    // produit aucun rapport. Une evaluation periodique est donc la seule facon de le voir.
+    m_alertTimer = new QTimer(this);
+    m_alertTimer->setInterval(60 * 60 * 1000);
+    connect(m_alertTimer, &QTimer::timeout, this, &HttpServer::evaluateAllSiteWatchAlerts);
+    m_alertTimer->start();
+    QTimer::singleShot(20000, this, &HttpServer::evaluateAllSiteWatchAlerts);
     connect(m_server, &QTcpServer::newConnection, this, &HttpServer::onNewConnection);
 }
 
@@ -156,16 +169,10 @@ bool HttpServer::openSiteWatchStore() {
         return false;
     }
 
-    QSqlQuery q(m_siteWatchDb);
-    q.exec(QStringLiteral("PRAGMA journal_mode=WAL"));
-    q.exec(QStringLiteral("PRAGMA synchronous=NORMAL"));
-    if (!q.exec(QStringLiteral("CREATE TABLE IF NOT EXISTS sitewatch_report ("
-                               "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                               "site_id TEXT NOT NULL, site_label TEXT, received_at INTEGER NOT NULL,"
-                               "payload BLOB NOT NULL)")) ||
-        !q.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS idx_sitewatch_report_site_time "
-                               "ON sitewatch_report(site_id, received_at DESC)"))) {
-        m_siteWatchStoreError = q.lastError().text();
+    // Tables, migrations et reglages : tout est dans SiteWatchAlertStore (testable seul).
+    m_alerts = std::make_unique<SiteWatchAlertStore>(m_siteWatchDb);
+    if (!m_alerts->ensureSchema()) {
+        m_siteWatchStoreError = m_alerts->lastError();
         closeSiteWatchStore();
         return false;
     }
@@ -173,6 +180,7 @@ bool HttpServer::openSiteWatchStore() {
 }
 
 void HttpServer::closeSiteWatchStore() {
+    m_alerts.reset();   // avant la fermeture de la connexion qu'il utilise
     if (m_siteWatchDb.isOpen()) m_siteWatchDb.close();
     m_siteWatchDb = QSqlDatabase();
     if (!m_siteWatchConnectionName.isEmpty() && QSqlDatabase::contains(m_siteWatchConnectionName))
@@ -342,6 +350,17 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
     } else if (path == "/github/ingest") {
         if (method != "POST") { code = 405; reason = "Method Not Allowed"; out = "{\"error\":\"use POST /github/ingest\"}"; }
         else out = handleGitHubIngest(body, code, reason);
+    } else if (path == "/sitewatch/config") {
+        if (method == "POST") out = handleSiteWatchConfigPost(body, code, reason);
+        else out = siteWatchConfigJson();
+    } else if (path == "/sitewatch/config/mute") {
+        if (method != "POST") { code = 405; reason = "Method Not Allowed"; out = "{\"error\":\"use POST\"}"; }
+        else out = handleSiteWatchMutePost(body, code, reason);
+    } else if (path == "/sitewatch/config/test") {
+        if (method != "POST") { code = 405; reason = "Method Not Allowed"; out = "{\"error\":\"use POST\"}"; }
+        else out = handleSiteWatchTestPost(body);
+    } else if (path == "/sitewatch/config/targets") {
+        out = siteWatchTargetsJson();
     } else if (path == "/analyze") {
         if (method != "POST") {
             code = 405; reason = "Method Not Allowed";
@@ -593,8 +612,21 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
                             : QJsonObject{{"valid", false},
                                           {"error", QStringLiteral("aucun module 'analytics' configuré")}});
     } else if (path == "/sitewatch") {
-        const QJsonArray reports = siteWatchReports();
-        reply(sock, 200, "OK", pages::Theme::apply(pages::SiteWatchPage::render(siteWatchPage(), reports)), "text/html; charset=utf-8");
+        reply(sock, 200, "OK", pages::Theme::apply(pages::SiteWatchPage::render()), "text/html; charset=utf-8");
+        return;
+    } else if (path == "/sitewatch/settings") {
+        reply(sock, 200, "OK", pages::Theme::apply(pages::SiteWatchSettingsPage::render()), "text/html; charset=utf-8");
+        return;
+    } else if (path == "/sitewatch/insights") {
+        out = siteWatchInsightsJson(rawPath);
+    } else if (path == "/sitewatch/alerts") {
+        out = siteWatchAlertsJson(rawPath);
+    } else if (path == "/sitewatch/overview") {
+        out = siteWatchOverviewJson(rawPath);
+    } else if (path == "/sitewatch/export") {
+        QByteArray type;
+        const QByteArray data = siteWatchExport(rawPath, &type);
+        reply(sock, 200, "OK", data, type);
         return;
     } else if (path == "/photo") {
         // Specialisation Photo : lit l'instantane du module (agregats de morfPhoto
@@ -808,6 +840,8 @@ QByteArray HttpServer::handleSiteWatchPost(const QByteArray& body, int& code, QB
                                   {"detail", m_siteWatchStoreError}});
     }
     m_siteWatchReports.insert(siteId, report);
+    if (m_alerts) m_alerts->pruneReports(siteId, reportsPerSite());
+    evaluateSiteWatchAlerts(report);
     return toJson(QJsonObject{{"ok", true}, {"site_id", siteId}});
 }
 
@@ -833,119 +867,434 @@ QByteArray HttpServer::handleGitHubIngest(const QByteArray& body, int& code, QBy
     return toJson(QJsonObject{{"ok", true}});
 }
 
-QByteArray HttpServer::siteWatchPage() const {
-    const auto formatNumber = [](double value) {
-        return QLocale(QLocale::French, QLocale::France).toString(static_cast<qlonglong>(value));
-    };
-    const auto topEntries = [&formatNumber](const QJsonObject& values) {
-        QVector<QPair<QString, double>> ranked;
-        ranked.reserve(values.size());
-        for (auto it = values.begin(); it != values.end(); ++it)
-            ranked.append({it.key(), it.value().toDouble()});
-        std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) {
-            return a.second != b.second ? a.second > b.second : a.first < b.first;
-        });
-        QStringList result;
-        for (int i = 0; i < ranked.size() && i < 3; ++i)
-            result << QStringLiteral("%1 (%2)").arg(ranked[i].first.toHtmlEscaped(), formatNumber(ranked[i].second));
-        return result.isEmpty() ? QStringLiteral("aucune") : result.join(QStringLiteral(" · "));
-    };
-    const auto sumDaily = [](const QJsonObject& values) {
-        double sum = 0;
-        for (auto it = values.begin(); it != values.end(); ++it) sum += it.value().toDouble();
-        return sum;
-    };
-    const auto peakDay = [&formatNumber](const QJsonObject& values) {
-        QString day;
-        double peak = 0;
-        for (auto it = values.begin(); it != values.end(); ++it) {
-            if (it.value().toDouble() > peak) { day = it.key(); peak = it.value().toDouble(); }
-        }
-        return day.isEmpty() ? QStringLiteral("aucun")
-                             : QStringLiteral("%1 (%2)").arg(day.toHtmlEscaped(), formatNumber(peak));
-    };
-    const auto unusualDays = [&formatNumber](const QJsonObject& values) {
-        QVector<double> samples;
-        for (auto it = values.begin(); it != values.end(); ++it) samples.append(it.value().toDouble());
-        if (samples.size() < 7) return QStringLiteral("pas assez de jours observés");
-        double mean = 0; for (double value : samples) mean += value; mean /= samples.size();
-        double variance = 0; for (double value : samples) variance += (value - mean) * (value - mean);
-        const double threshold = mean + 2.0 * std::sqrt(variance / samples.size());
-        QStringList result;
-        for (auto it = values.begin(); it != values.end(); ++it)
-            if (it.value().toDouble() > threshold)
-                result << QStringLiteral("%1 (%2)").arg(it.key().toHtmlEscaped(), formatNumber(it.value().toDouble()));
-        return result.isEmpty() ? QStringLiteral("aucune journée anormale") : result.join(QStringLiteral(" · "));
-    };
+namespace {
+QUrlQuery queryOf(const QByteArray& rawPath) {
+    const int qm = rawPath.indexOf('?');
+    return QUrlQuery(qm < 0 ? QString() : QString::fromUtf8(rawPath.mid(qm + 1)));
+}
+QDate lastDayOf(const QJsonObject& report) {
+    QDate d = QDate::fromString(report.value(QStringLiteral("source_up_to")).toString(), Qt::ISODate);
+    if (!d.isValid()) d = QDate::fromString(report.value(QStringLiteral("to")).toString(), Qt::ISODate);
+    return d;
+}
+constexpr int kDefaultReportsPerSite = 90;
 
-    const QJsonArray reports = siteWatchReports();
-    QString page = QStringLiteral(R"HTML(<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="30"><!--theme-head--><title>morfAnalytics - SiteWatch</title><style>body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui;padding:2rem}.wrap{max-width:70rem;margin:auto}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1.25rem;margin:1rem 0}h1{margin:0}h2{font-size:1.05rem}.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:1rem}.number{font-size:2rem;font-weight:700}.vb{font-size:.8rem;font-weight:600;vertical-align:middle;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;padding:.1rem .5rem;margin-left:.4rem}</style><body><div class="wrap"><!--nav-back--><h1>Analyse des sites <span class="vb">v%1</span><!--theme-toggle--></h1><p class="muted">Synthèses reçues de SiteWatch · actualisation automatique toutes les 30 secondes.</p>)HTML").arg(morfanalytics::version());
-    if (reports.isEmpty()) {
-        page += QStringLiteral("<section class=\"card\">Aucune synthèse SiteWatch n'est encore enregistrée.</section>");
+bool validUrl(const QString& s) {
+    const QUrl u(s);
+    return u.isValid() && (u.scheme() == QLatin1String("http") || u.scheme() == QLatin1String("https")) && !u.host().isEmpty();
+}
+QString validLevelOr(const QString& v, const QString& def) {
+    return (v == QLatin1String("info") || v == QLatin1String("warning") || v == QLatin1String("error")) ? v : def;
+}
+} // namespace
+
+// ---- Configuration -----------------------------------------------------------
+
+sitewatch::AlertConfig HttpServer::alertConfigFor(const QString& siteId) const {
+    if (!m_alerts) return {};
+    const sitewatch::AlertConfig global = sitewatch::alertConfigFromJson(m_alerts->settings(QStringLiteral("global")));
+    return siteId.isEmpty() ? global
+                            : sitewatch::mergeSiteConfig(global, m_alerts->settings(QStringLiteral("site:") + siteId));
+}
+
+QJsonObject HttpServer::notifySettings() const {
+    const QJsonObject n = m_alerts ? m_alerts->settings(QStringLiteral("global")).value(QStringLiteral("notify")).toObject()
+                                   : QJsonObject{};
+    const QString url = n.value(QStringLiteral("url")).toString().trimmed();
+    return QJsonObject{{"enabled", n.value(QStringLiteral("enabled")).toBool(true)},
+                       {"url", validUrl(url) ? url : QString()},
+                       {"min_level", validLevelOr(n.value(QStringLiteral("min_level")).toString(), QStringLiteral("warning"))},
+                       {"targets", QJsonArray::fromStringList(sitewatch::sanitizeTargets(n.value(QStringLiteral("targets")).toArray()))}};
+}
+
+// Destinations globales (telegram, mail...) ; vide = morfNotify applique les siennes par defaut.
+QStringList HttpServer::notifyTargets() const {
+    QStringList out;
+    for (const QJsonValue& v : notifySettings().value(QStringLiteral("targets")).toArray()) out << v.toString();
+    return out;
+}
+
+int HttpServer::reportsPerSite() const {
+    const QJsonObject r = m_alerts ? m_alerts->settings(QStringLiteral("global")).value(QStringLiteral("retention")).toObject()
+                                   : QJsonObject{};
+    return std::max(5, std::min(1000, r.value(QStringLiteral("reports_per_site")).toInt(kDefaultReportsPerSite)));
+}
+
+// Adresse de morfNotify : reglage de l'interface, sinon variable d'environnement, sinon le port du parc.
+QString HttpServer::notifyUrl() const {
+    const QString configured = notifySettings().value(QStringLiteral("url")).toString();
+    if (!configured.isEmpty()) return configured;
+    const QString env = qEnvironmentVariable("MORFNOTIFY_URL").trimmed();
+    return env.isEmpty() ? QStringLiteral("http://127.0.0.1:8789/notify") : env;
+}
+
+// 127.0.0.1 est exact pour le service (morfNotify sur la meme machine) mais trompeur a l'ecran : dans
+// un navigateur, « 127.0.0.1 » designe le poste de l'utilisateur. On affiche donc le nom de la machine.
+QString HttpServer::notifyUrlDisplay(bool* local) const {
+    QUrl u(notifyUrl());
+    const QString host = u.host().toLower();
+    const bool loop = host == QLatin1String("127.0.0.1") || host == QLatin1String("localhost") || host == QLatin1String("::1");
+    if (local) *local = loop;
+    if (loop) u.setHost(QHostInfo::localHostName());
+    return u.toString();
+}
+
+QByteArray HttpServer::siteWatchConfigJson() const {
+    QJsonObject global = sitewatch::alertConfigToJson(alertConfigFor(QString()));
+    global.insert(QStringLiteral("notify"), notifySettings());
+    global.insert(QStringLiteral("retention"), QJsonObject{{"reports_per_site", reportsPerSite()}});
+    QJsonArray rules;
+    for (const sitewatch::RuleInfo& r : sitewatch::ruleCatalog())
+        rules.append(QJsonObject{{"id", r.id}, {"label", r.label}, {"description", r.description},
+                                 {"default_level", r.defaultLevel}});
+    QJsonArray sites;
+    for (const QJsonValue& v : siteWatchReports()) {
+        const QJsonObject r = v.toObject();
+        const QString id = r.value(QStringLiteral("site_id")).toString();
+        sites.append(QJsonObject{{"site_id", id}, {"site_label", r.value(QStringLiteral("site_label"))},
+            {"overrides", m_alerts ? m_alerts->settings(QStringLiteral("site:") + id) : QJsonObject{}}});
     }
-    for (const QJsonValue& value : reports) {
-        const QJsonObject report = value.toObject();
-        const QJsonObject stats = report.value(QStringLiteral("stats")).toObject();
-        const double errors = stats.value(QStringLiteral("errors_404")).toDouble()
-                            + stats.value(QStringLiteral("errors_403")).toDouble()
-                            + stats.value(QStringLiteral("errors_500")).toDouble();
-        const double requests = stats.value(QStringLiteral("requests")).toDouble();
-        const QString verdict = stats.value(QStringLiteral("errors_500")).toDouble() > 0
-            ? QStringLiteral("À surveiller : erreurs serveur détectées.")
-            : stats.value(QStringLiteral("attacks")).toDouble() > 0
-                ? QStringLiteral("À surveiller : tentatives sensibles détectées.")
-                : QStringLiteral("Activité globalement normale.");
-        const QString site = report.value(QStringLiteral("site_label")).toString(
-            report.value(QStringLiteral("site_id")).toString()).toHtmlEscaped();
-        const QString rate = requests > 0 ? QLocale(QLocale::French, QLocale::France).toString(errors * 100.0 / requests, 'f', 2) : QStringLiteral("0,00");
-        const QString siteId = report.value(QStringLiteral("site_id")).toString();
-        const QJsonArray history = siteWatchHistory(siteId);
-        QJsonObject dailyTraffic = stats.value(QStringLiteral("daily_humans")).toObject();
-        const QJsonObject dailyBots = stats.value(QStringLiteral("daily_bots")).toObject();
-        const QJsonObject dailyAttacks = stats.value(QStringLiteral("daily_attacks")).toObject();
-        for (auto it = dailyBots.begin(); it != dailyBots.end(); ++it)
-            dailyTraffic[it.key()] = dailyTraffic.value(it.key()).toDouble() + it.value().toDouble();
-        int attackDays = 0;
-        for (auto it = dailyAttacks.begin(); it != dailyAttacks.end(); ++it)
-            if (it.value().toDouble() > 0) ++attackDays;
-        page += QStringLiteral("<section class=\"card\"><h2>%1</h2><p>%2</p><div class=\"grid\"><div><span class=\"number\">%3</span><br><span class=\"muted\">requêtes analysées</span></div><div><span class=\"number\">%4</span><br><span class=\"muted\">erreurs HTTP (%5 %)</span></div><div><span class=\"number\">%6</span><br><span class=\"muted\">requêtes de robots</span></div><div><span class=\"number\">%7</span><br><span class=\"muted\">tentatives sensibles</span></div></div><h2>Points à examiner</h2><p>Pages les plus touchées : %8</p><p>Robots les plus actifs : %9</p><p>Pages les plus visitées : %10</p><p class=\"muted\">Période : %11 → %12</p></section>")
-            .arg(site).arg(verdict).arg(formatNumber(requests)).arg(formatNumber(errors)).arg(rate)
-            .arg(formatNumber(stats.value(QStringLiteral("bots")).toDouble()))
-            .arg(formatNumber(stats.value(QStringLiteral("attacks")).toDouble()))
-            .arg(topEntries(stats.value(QStringLiteral("top_attacked")).toObject()))
-            .arg(topEntries(stats.value(QStringLiteral("bot_counts")).toObject()))
-            .arg(topEntries(stats.value(QStringLiteral("top_pages")).toObject()))
-            .arg(report.value(QStringLiteral("from")).toString().toHtmlEscaped())
-            .arg(report.value(QStringLiteral("to")).toString().toHtmlEscaped());
-        if (history.size() < 2) {
-            const int progress = std::min(100, static_cast<int>(history.size()) * 50);
-            page += QStringLiteral("<section class=\"card\"><h2>Analyses approfondies · en apprentissage</h2><p>Une synthèse supplémentaire permettra de comparer l'activité dans le temps.</p><div style=\"background:var(--line);border-radius:5px;height:8px\"><div style=\"background:var(--accent);border-radius:5px;height:8px;width:%1%\"></div></div><p class=\"muted\">%2 synthèse sur 2 nécessaire pour les comparaisons.</p></section>")
-                .arg(progress).arg(history.size());
-        } else {
-            const QJsonObject previousStats = history.at(1).toObject().value(QStringLiteral("stats")).toObject();
-            const double previousRequests = previousStats.value(QStringLiteral("requests")).toDouble();
-            const double requestChange = previousRequests > 0 ? (requests - previousRequests) * 100.0 / previousRequests : 0;
-            const double previousErrors = previousStats.value(QStringLiteral("errors_404")).toDouble()
-                + previousStats.value(QStringLiteral("errors_403")).toDouble() + previousStats.value(QStringLiteral("errors_500")).toDouble();
-            const double previousRate = previousRequests > 0 ? previousErrors * 100.0 / previousRequests : 0;
-            QStringList newBots;
-            const QJsonObject previousBots = previousStats.value(QStringLiteral("bot_counts")).toObject();
-            const QJsonObject currentBots = stats.value(QStringLiteral("bot_counts")).toObject();
-            for (auto it = currentBots.begin(); it != currentBots.end(); ++it)
-                if (!previousBots.contains(it.key())) newBots << it.key().toHtmlEscaped();
-            const QString botNovelty = newBots.isEmpty() ? QStringLiteral("aucun nouveau robot détecté")
-                : newBots.mid(0, 3).join(QStringLiteral(" · "));
-            page += QStringLiteral("<section class=\"card\"><h2>Analyses approfondies</h2><div class=\"grid\"><div><strong>%1 %</strong><br><span class=\"muted\">évolution des requêtes vs analyse précédente</span></div><div><strong>%2 % → %3 %</strong><br><span class=\"muted\">taux d'erreurs HTTP</span></div><div><strong>%4</strong><br><span class=\"muted\">jours avec tentatives sensibles</span></div></div><p>Variation inhabituelle du trafic : %5.</p><p>Pic de trafic : %6. Pic de robots : %7. Pic d'erreurs 404 : %8.</p><p>Nouveaux robots : %9.</p><p>Pages ciblées de façon récurrente : %10.</p></section>")
-                .arg(QLocale(QLocale::French, QLocale::France).toString(requestChange, 'f', 1))
-                .arg(QLocale(QLocale::French, QLocale::France).toString(previousRate, 'f', 2)).arg(rate)
-                .arg(attackDays).arg(unusualDays(dailyTraffic)).arg(peakDay(dailyTraffic))
-                .arg(peakDay(stats.value(QStringLiteral("daily_bots")).toObject()))
-                .arg(peakDay(stats.value(QStringLiteral("daily_404")).toObject())).arg(botNovelty)
-                .arg(topEntries(stats.value(QStringLiteral("top_attacked")).toObject()));
+    return toJson(QJsonObject{{"global", global}, {"defaults", sitewatch::alertConfigToJson(sitewatch::AlertConfig())},
+        {"rules", rules}, {"sites", sites}, {"notify_url_effective", notifyUrlDisplay()},
+        {"notify_url_same_host", [this] { bool l = false; notifyUrlDisplay(&l); return l; }()},
+        {"delivery_backlog", m_alerts ? m_alerts->failedCount() : 0}});
+}
+
+// POST /sitewatch/config {scope, settings} : « global » ou l'identifiant d'un site. Tout est
+// borne a la lecture (alertConfigFromJson) : une saisie aberrante ne coupe jamais la detection.
+QByteArray HttpServer::handleSiteWatchConfigPost(const QByteArray& body, int& code, QByteArray& reason) {
+    const QJsonDocument doc = QJsonDocument::fromJson(body);
+    if (!doc.isObject() || !m_alerts) {
+        code = 400; reason = "Bad Request"; return "{\"error\":\"corps JSON invalide\"}";
+    }
+    const QString scope = doc.object().value(QStringLiteral("scope")).toString();
+    const QJsonObject in = doc.object().value(QStringLiteral("settings")).toObject();
+    if (scope.isEmpty()) { code = 400; reason = "Bad Request"; return "{\"error\":\"scope manquant\"}"; }
+
+    if (scope == QLatin1String("global")) {
+        QJsonObject out = sitewatch::alertConfigToJson(sitewatch::alertConfigFromJson(in));
+        // Les sourdines ne se changent pas depuis ce formulaire : on garde celles en place.
+        if (!in.contains(QStringLiteral("muted")))
+            out.insert(QStringLiteral("muted"),
+                       m_alerts->settings(QStringLiteral("global")).value(QStringLiteral("muted")).toObject());
+        const QJsonObject n = in.value(QStringLiteral("notify")).toObject();
+        const QString url = n.value(QStringLiteral("url")).toString().trimmed();
+        if (!url.isEmpty() && !validUrl(url)) {
+            code = 400; reason = "Bad Request";
+            return "{\"error\":\"adresse morfNotify invalide (http ou https attendu)\"}";
+        }
+        out.insert(QStringLiteral("notify"), QJsonObject{{"enabled", n.value(QStringLiteral("enabled")).toBool(true)},
+            {"url", url}, {"min_level", validLevelOr(n.value(QStringLiteral("min_level")).toString(), QStringLiteral("warning"))},
+            {"targets", QJsonArray::fromStringList(sitewatch::sanitizeTargets(n.value(QStringLiteral("targets")).toArray()))}});
+        out.insert(QStringLiteral("retention"), QJsonObject{{"reports_per_site",
+            std::max(5, std::min(1000, in.value(QStringLiteral("retention")).toObject().value(QStringLiteral("reports_per_site")).toInt(kDefaultReportsPerSite)))}});
+        m_alerts->saveSettings(QStringLiteral("global"), out);
+    } else {
+        // Ecarts propres a un site : seulement les cles connues, le reste est ignore.
+        static const QStringList allowed{"sensitivity", "recent_days", "stale_warn_days", "stale_error_days",
+                                         "bot_share_points", "ai_growth_factor", "e500_error_at", "rules", "muted"};
+        QJsonObject kept;
+        for (const QString& k : allowed)
+            if (in.contains(k)) kept.insert(k, in.value(k));
+        // Normalise les valeurs (bornes) en passant par la lecture, sans fixer d'autres cles.
+        const QJsonObject norm = sitewatch::alertConfigToJson(sitewatch::alertConfigFromJson(kept));
+        QJsonObject out;
+        for (auto it = kept.begin(); it != kept.end(); ++it)
+            out.insert(it.key(), norm.value(it.key()));
+        m_alerts->saveSettings(QStringLiteral("site:") + scope, out);
+    }
+    evaluateAllSiteWatchAlerts();   // les nouveaux reglages s'appliquent tout de suite
+    return siteWatchConfigJson();
+}
+
+// POST /sitewatch/config/mute {site_id?, rule, days} : sourdine d'une regle (« * » = toutes) pour N
+// jours ; days = 0 la leve. Une alerte en sourdine reste enregistree et visible, jamais envoyee.
+QByteArray HttpServer::handleSiteWatchMutePost(const QByteArray& body, int& code, QByteArray& reason) {
+    const QJsonObject in = QJsonDocument::fromJson(body).object();
+    const QString rule = in.value(QStringLiteral("rule")).toString();
+    bool known = rule == QLatin1String("*");
+    for (const sitewatch::RuleInfo& r : sitewatch::ruleCatalog()) if (r.id == rule) known = true;
+    if (!m_alerts || !known) { code = 400; reason = "Bad Request"; return "{\"error\":\"regle inconnue\"}"; }
+    const QString site = in.value(QStringLiteral("site_id")).toString();
+    const QString scope = site.isEmpty() ? QStringLiteral("global") : QStringLiteral("site:") + site;
+    const int days = std::max(0, std::min(365, in.value(QStringLiteral("days")).toInt()));
+    QJsonObject s = m_alerts->settings(scope);
+    QJsonObject muted = s.value(QStringLiteral("muted")).toObject();
+    if (days > 0) muted.insert(rule, QDate::currentDate().addDays(days).toString(Qt::ISODate));
+    else muted.remove(rule);
+    s.insert(QStringLiteral("muted"), muted);
+    m_alerts->saveSettings(scope, s);
+    return siteWatchConfigJson();
+}
+
+// POST /sitewatch/config/test : envoie une notification de test et rend le resultat reel.
+// Appel d'administration rare : on attend la reponse (boucle locale, 6 s au plus).
+QByteArray HttpServer::handleSiteWatchTestPost(const QByteArray& body) {
+    if (!m_notifyNet) m_notifyNet = new QNetworkAccessManager(this);
+    const QString url = notifyUrl();
+    QNetworkRequest req{QUrl(url)};
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QByteArrayLiteral("application/json"));
+    req.setTransferTimeout(5000);
+    // Destinations a tester : celles du formulaire (non enregistrees), sinon les globales.
+    const QJsonObject in = QJsonDocument::fromJson(body).object();
+    const QStringList targets = in.contains(QStringLiteral("targets"))
+        ? sitewatch::sanitizeTargets(in.value(QStringLiteral("targets")).toArray()) : notifyTargets();
+    QJsonObject payload{{"title", QStringLiteral("morfAnalytics : test")},
+        {"message", QStringLiteral("Notification de test depuis la configuration des alertes SiteWatch.")},
+        {"level", QStringLiteral("info")}};
+    if (!targets.isEmpty()) payload.insert(QStringLiteral("targets"), QJsonArray::fromStringList(targets));
+    // morfNotify repond « accepte » (202) AVANT de livrer : une destination mal configuree (jeton
+    // Telegram factice, SMTP d'exemple) n'apparait pas dans cette reponse. On compare donc ses
+    // compteurs d'echecs avant et apres l'envoi pour dire si la livraison a vraiment abouti.
+    const QJsonObject before = notifyMetrics();
+    QNetworkReply* reply = m_notifyNet->post(req, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    timeout.start(6000);
+    loop.exec();
+    const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const bool ok = reply->isFinished() && reply->error() == QNetworkReply::NoError && http >= 200 && http < 300;
+    const QString err = ok ? QString() : (reply->isFinished() ? reply->errorString() : QStringLiteral("delai depasse"));
+    if (!reply->isFinished()) reply->abort();
+    reply->deleteLater();
+
+    int failures = 0;
+    bool checked = false;
+    if (ok && !before.isEmpty()) {
+        // Laisse a morfNotify le temps de tenter les livraisons (un echec reseau prend 1 a 3 s).
+        QEventLoop wait;
+        QTimer::singleShot(3500, &wait, &QEventLoop::quit);
+        wait.exec();
+        const QJsonObject after = notifyMetrics();
+        if (!after.isEmpty()) {
+            checked = true;
+            failures = static_cast<int>(after.value(QStringLiteral("failures_total")).toDouble()
+                                        - before.value(QStringLiteral("failures_total")).toDouble());
         }
     }
-    page += QStringLiteral("</div></body></html>");
-    return page.toUtf8();
+    return toJson(QJsonObject{{"ok", ok}, {"url", notifyUrlDisplay()}, {"http", http}, {"error", err},
+                              {"targets", QJsonArray::fromStringList(targets)},
+                              {"delivery_checked", checked}, {"delivery_failures", std::max(0, failures)}});
+}
+
+// Compteurs de morfNotify (GET /status > metrics) ; objet vide si injoignable.
+QJsonObject HttpServer::notifyMetrics() {
+    if (!m_notifyNet) m_notifyNet = new QNetworkAccessManager(this);
+    QUrl u(notifyUrl());
+    u.setPath(QStringLiteral("/status"));
+    u.setQuery(QString());
+    QNetworkRequest req{u};
+    req.setTransferTimeout(2500);
+    QNetworkReply* reply = m_notifyNet->get(req);
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    timeout.start(3000);
+    loop.exec();
+    QJsonObject metrics;
+    if (reply->isFinished() && reply->error() == QNetworkReply::NoError)
+        metrics = QJsonDocument::fromJson(reply->readAll()).object().value(QStringLiteral("metrics")).toObject();
+    if (!reply->isFinished()) reply->abort();
+    reply->deleteLater();
+    return metrics;
+}
+
+// GET /sitewatch/config/targets : les destinations configurees dans morfNotify (nom et type),
+// pour les proposer a l'utilisateur. morfAnalytics ne les invente pas : morfNotify en est l'autorite.
+QByteArray HttpServer::siteWatchTargetsJson() {
+    if (!m_notifyNet) m_notifyNet = new QNetworkAccessManager(this);
+    QUrl u(notifyUrl());
+    u.setPath(QStringLiteral("/targets"));
+    u.setQuery(QString());
+    QNetworkRequest req{u};
+    req.setTransferTimeout(4000);
+    QNetworkReply* reply = m_notifyNet->get(req);
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    timeout.start(5000);
+    loop.exec();
+    const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const bool ok = reply->isFinished() && reply->error() == QNetworkReply::NoError && http == 200;
+    QJsonArray targets;
+    if (ok) targets = QJsonDocument::fromJson(reply->readAll()).object().value(QStringLiteral("targets")).toArray();
+    const QString err = ok ? QString() : (reply->isFinished() ? reply->errorString() : QStringLiteral("delai depasse"));
+    if (!reply->isFinished()) reply->abort();
+    reply->deleteLater();
+    return toJson(QJsonObject{{"ok", ok}, {"url", u.toString()}, {"targets", targets}, {"error", err}});
+}
+
+// ---- Lecture : analyses, vue d'ensemble, export, alertes -----------------------
+
+// Fenetre demandee : `from`+`to` (dates ISO) ou `days` (N ou « all »), 30 jours par defaut.
+static void windowOf(const QUrlQuery& q, const QJsonObject& report, QDate* from, QDate* to) {
+    *from = QDate::fromString(q.queryItemValue(QStringLiteral("from")), Qt::ISODate);
+    *to = QDate::fromString(q.queryItemValue(QStringLiteral("to")), Qt::ISODate);
+    const QString days = q.queryItemValue(QStringLiteral("days"));
+    if (!from->isValid() && !days.isEmpty()) {
+        const QDate end = to->isValid() ? *to : (lastDayOf(report).isValid() ? lastDayOf(report) : QDate::currentDate());
+        *to = end;
+        *from = days == QLatin1String("all") ? QDate(2000, 1, 1)
+                                             : end.addDays(-(std::max(1, std::min(3650, days.toInt())) - 1));
+    }
+}
+
+static QJsonObject findReport(const QJsonArray& reports, const QString& site) {
+    for (const QJsonValue& v : reports) {
+        const QJsonObject r = v.toObject();
+        if (r.value(QStringLiteral("site_id")).toString() == site || r.value(QStringLiteral("site_label")).toString() == site)
+            return r;
+    }
+    return {};
+}
+
+// GET /sitewatch/insights : sans `site`, la liste des sites ; avec `site` (id), l'analyse complete.
+QByteArray HttpServer::siteWatchInsightsJson(const QByteArray& rawPath) const {
+    const QJsonArray reports = siteWatchReports();
+    const QUrlQuery q = queryOf(rawPath);
+    const QString site = q.queryItemValue(QStringLiteral("site"));
+    const QDate today = QDate::currentDate();
+    if (site.isEmpty()) {
+        QJsonArray sites;
+        for (const QJsonValue& v : reports) {
+            const QJsonObject r = v.toObject();
+            const QDate up = lastDayOf(r);
+            sites.append(QJsonObject{{"site_id", r.value(QStringLiteral("site_id"))},
+                {"site_label", r.value(QStringLiteral("site_label"))},
+                {"up_to", up.isValid() ? up.toString(Qt::ISODate) : QString()},
+                {"lag_days", up.isValid() ? static_cast<int>(std::max<qint64>(0, up.daysTo(today))) : 0}});
+        }
+        return toJson(QJsonObject{{"sites", sites}});
+    }
+    const QJsonObject r = findReport(reports, site);
+    if (r.isEmpty()) return toJson(QJsonObject{{"error", QStringLiteral("site inconnu")}});
+    QDate from, to;
+    windowOf(q, r, &from, &to);
+    return toJson(sitewatch::insights(r, from, to, today, alertConfigFor(r.value(QStringLiteral("site_id")).toString())));
+}
+
+// GET /sitewatch/overview?days=N : une ligne par site, pour voir l'etat du parc d'un coup d'oeil.
+QByteArray HttpServer::siteWatchOverviewJson(const QByteArray& rawPath) const {
+    const QUrlQuery q = queryOf(rawPath);
+    const QDate today = QDate::currentDate();
+    QJsonArray rows;
+    for (const QJsonValue& v : siteWatchReports()) {
+        const QJsonObject r = v.toObject();
+        QDate from, to;
+        windowOf(q, r, &from, &to);
+        const QString id = r.value(QStringLiteral("site_id")).toString();
+        const QJsonObject ins = sitewatch::insights(r, from, to, today, alertConfigFor(id));
+        if (!ins.value(QStringLiteral("has_data")).toBool()) continue;
+        const QJsonObject k = ins.value(QStringLiteral("kpis")).toObject();
+        int errors = 0, warnings = 0, muted = 0;
+        for (const QJsonValue& a : ins.value(QStringLiteral("alerts")).toArray()) {
+            const QJsonObject ao = a.toObject();
+            if (ao.value(QStringLiteral("muted")).toBool()) { ++muted; continue; }
+            if (ao.value(QStringLiteral("level")).toString() == QLatin1String("error")) ++errors;
+            else if (ao.value(QStringLiteral("level")).toString() == QLatin1String("warning")) ++warnings;
+        }
+        rows.append(QJsonObject{{"site_id", id}, {"site_label", ins.value(QStringLiteral("site_label"))},
+            {"window", ins.value(QStringLiteral("window"))}, {"freshness", ins.value(QStringLiteral("freshness"))},
+            {"kpis", QJsonObject{{"humans", k.value(QStringLiteral("humans"))}, {"requests", k.value(QStringLiteral("requests"))},
+                {"bots", k.value(QStringLiteral("bots"))}, {"e500", k.value(QStringLiteral("e500"))},
+                {"attacks", k.value(QStringLiteral("attacks"))}, {"bot_share_pct", k.value(QStringLiteral("bot_share_pct"))},
+                {"error_rate_pct", k.value(QStringLiteral("error_rate_pct"))}}},
+            {"alerts", QJsonObject{{"error", errors}, {"warning", warnings}, {"muted", muted},
+                                   {"total", ins.value(QStringLiteral("alerts")).toArray().size()}}},
+            {"anomalies", ins.value(QStringLiteral("anomalies")).toArray().size()}});
+    }
+    return toJson(QJsonObject{{"sites", rows}});
+}
+
+// GET /sitewatch/export?site=&format=csv|json&days=|from=&to= : les series quotidiennes de la fenetre.
+QByteArray HttpServer::siteWatchExport(const QByteArray& rawPath, QByteArray* contentType) const {
+    const QUrlQuery q = queryOf(rawPath);
+    const QJsonObject r = findReport(siteWatchReports(), q.queryItemValue(QStringLiteral("site")));
+    if (r.isEmpty()) { *contentType = "application/json; charset=utf-8"; return "{\"error\":\"site inconnu\"}"; }
+    QDate from, to;
+    windowOf(q, r, &from, &to);
+    const QJsonObject ins = sitewatch::insights(r, from, to, QDate::currentDate(),
+                                                alertConfigFor(r.value(QStringLiteral("site_id")).toString()));
+    const QJsonObject series = ins.value(QStringLiteral("series")).toObject();
+    if (q.queryItemValue(QStringLiteral("format")) == QLatin1String("json")) {
+        *contentType = "application/json; charset=utf-8";
+        return toJson(QJsonObject{{"site", ins.value(QStringLiteral("site_label"))}, {"window", ins.value(QStringLiteral("window"))},
+                                  {"series", series}});
+    }
+    static const QStringList cols{"humans", "bots", "ai", "seo", "e404", "e403", "e500", "attacks", "normal"};
+    QString csv = QStringLiteral("date;") + cols.join(QLatin1Char(';')) + QLatin1Char('\n');
+    const QJsonArray dates = series.value(QStringLiteral("dates")).toArray();
+    for (int i = 0; i < dates.size(); ++i) {
+        csv += dates[i].toString();
+        for (const QString& c : cols) csv += QLatin1Char(';') + QString::number(series.value(c).toArray().at(i).toDouble(), 'f', 0);
+        csv += QLatin1Char('\n');
+    }
+    *contentType = "text/csv; charset=utf-8";
+    return csv.toUtf8();
+}
+
+QByteArray HttpServer::siteWatchAlertsJson(const QByteArray& rawPath) const {
+    const QUrlQuery q = queryOf(rawPath);
+    const int asked = q.queryItemValue(QStringLiteral("limit")).toInt();
+    return toJson(QJsonObject{{"alerts", m_alerts ? m_alerts->history(q.queryItemValue(QStringLiteral("site")), asked > 0 ? asked : 100) : QJsonArray{}}});
+}
+
+// ---- Alertes : evaluation, envoi suivi, nouvelles tentatives ---------------------
+
+// Enregistre les alertes d'un rapport et envoie les NOUVELLES. La cle (regle|site|jour)
+// garantit un seul envoi par situation ; l'envoi est suivi (voir sendNotification).
+void HttpServer::evaluateSiteWatchAlerts(const QJsonObject& report) {
+    if (!m_alerts) return;
+    const QString siteId = report.value(QStringLiteral("site_id")).toString();
+    if (siteId.isEmpty()) return;
+    auto alerts = sitewatch::evaluateAlerts(report, QDate::currentDate(), alertConfigFor(siteId));
+    // Destination d'une alerte : celle de sa regle, sinon la liste globale (vide = defaut de morfNotify).
+    const QStringList globalTargets = notifyTargets();
+    for (sitewatch::Alert& a : alerts)
+        if (a.targets.isEmpty()) a.targets = globalTargets;
+    const QJsonObject n = notifySettings();
+    const auto pending = m_alerts->record(siteId, alerts, n.value(QStringLiteral("min_level")).toString(),
+                                          n.value(QStringLiteral("enabled")).toBool());
+    for (const auto& p : pending) sendNotification(p);
+}
+
+void HttpServer::evaluateAllSiteWatchAlerts() {
+    for (const QJsonValue& v : siteWatchReports())
+        evaluateSiteWatchAlerts(v.toObject());
+    // Echecs d'envoi precedents (morfNotify arrete, reseau coupe) : on retente a chaque passage.
+    if (m_alerts)
+        for (const auto& p : m_alerts->due()) sendNotification(p);
+}
+
+// Envoi a morfNotify, asynchrone : une notification lente ne bloque jamais le service. Le
+// resultat REEL (2xx ou non) est enregistre : un echec reste a retenter, il n'est pas perdu.
+// Pas de destinataires : morfNotify applique les siens.
+void HttpServer::sendNotification(const SiteWatchAlertStore::Pending& p) {
+    if (!m_alerts || m_notifyInflight.contains(p.key)) return;
+    if (!m_notifyNet) m_notifyNet = new QNetworkAccessManager(this);
+    m_notifyInflight.insert(p.key);
+    QNetworkRequest req{QUrl(notifyUrl())};
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QByteArrayLiteral("application/json"));
+    req.setTransferTimeout(5000);
+    QJsonObject payload{{"title", p.title}, {"message", p.message}, {"level", p.level}};
+    if (!p.targets.isEmpty()) payload.insert(QStringLiteral("targets"), QJsonArray::fromStringList(p.targets));
+    QNetworkReply* reply = m_notifyNet->post(req, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    const QString key = p.key;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, key] {
+        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool ok = reply->error() == QNetworkReply::NoError && http >= 200 && http < 300;
+        if (m_alerts)
+            m_alerts->markDelivery(key, ok, ok ? QString() : (http ? QStringLiteral("HTTP %1").arg(http) : reply->errorString()));
+        m_notifyInflight.remove(key);
+        reply->deleteLater();
+    });
 }
 
 QByteArray HttpServer::landingPage() {
@@ -2477,7 +2826,20 @@ QByteArray HttpServer::buildStatusJson() const {
     o["state"]    = m_registry ? m_registry->state() : QStringLiteral("ok");
     o["uptime_s"] = static_cast<double>(m_uptime.isValid() ? m_uptime.elapsed() / 1000 : 0);
     o["ts"]       = static_cast<double>(QDateTime::currentSecsSinceEpoch());
-    o["metrics"]  = m_registry ? m_registry->metrics() : QJsonObject{};
+    QJsonObject metrics = m_registry ? m_registry->metrics() : QJsonObject{};
+    // SiteWatch : de quoi voir depuis morfMonitor qu'il est muet ou que des alertes n'arrivent pas.
+    if (m_alerts) {
+        qint64 maxLag = 0;
+        for (const QJsonObject& r : m_siteWatchReports) {
+            const QDate up = QDate::fromString(r.value(QStringLiteral("source_up_to")).toString(), Qt::ISODate);
+            if (up.isValid()) maxLag = std::max<qint64>(maxLag, up.daysTo(QDate::currentDate()));
+        }
+        metrics["sitewatch_sites"] = m_siteWatchReports.size();
+        metrics["sitewatch_max_lag_days"] = static_cast<double>(maxLag);
+        metrics["sitewatch_alerts_24h"] = m_alerts->createdSince(QDateTime::currentSecsSinceEpoch() - 86400);
+        metrics["sitewatch_alert_delivery_backlog"] = m_alerts->failedCount();
+    }
+    o["metrics"]  = metrics;
 
     // Detail annonce (interface web + API). morfAnalytics sert son PROPRE
     // /status plutot que le StatusServer de morfBeacon ; il appelle donc le

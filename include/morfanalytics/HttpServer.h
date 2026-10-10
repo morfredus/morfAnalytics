@@ -9,11 +9,17 @@
 #include <QElapsedTimer>
 #include <QByteArray>
 #include <QHash>
+#include <QSet>
 #include <QSqlDatabase>
+#include <memory>
+#include "morfanalytics/analysis/SiteWatchInsights.h"
+#include "morfanalytics/data/SiteWatchAlertStore.h"
 #include "morfanalytics/ServiceConfig.h"
 
 class QTcpServer;
 class QTcpSocket;
+class QTimer;
+class QNetworkAccessManager;
 
 namespace morfanalytics {
 
@@ -61,7 +67,26 @@ private:
     void reply(QTcpSocket* sock, int code, const QByteArray& reason, const QByteArray& body,
                const QByteArray& contentType = "application/json; charset=utf-8");
     static QByteArray landingPage();
-    QByteArray siteWatchPage() const;
+    // Analyse approfondie SiteWatch : lecture, configuration, alertes (envoi suivi vers morfNotify).
+    QByteArray siteWatchInsightsJson(const QByteArray& rawPath) const;
+    QByteArray siteWatchOverviewJson(const QByteArray& rawPath) const;
+    QByteArray siteWatchExport(const QByteArray& rawPath, QByteArray* contentType) const;
+    QByteArray siteWatchAlertsJson(const QByteArray& rawPath) const;
+    QByteArray siteWatchConfigJson() const;
+    QByteArray handleSiteWatchConfigPost(const QByteArray& body, int& code, QByteArray& reason);
+    QByteArray handleSiteWatchMutePost(const QByteArray& body, int& code, QByteArray& reason);
+    QByteArray handleSiteWatchTestPost(const QByteArray& body);
+    QByteArray siteWatchTargetsJson();
+    sitewatch::AlertConfig alertConfigFor(const QString& siteId) const;
+    QJsonObject notifySettings() const;
+    QString notifyUrl() const;
+    QString notifyUrlDisplay(bool* local = nullptr) const;   // adresse lisible (nom de la machine au lieu de 127.0.0.1)
+    QJsonObject notifyMetrics();                              // compteurs de morfNotify (GET /status), {} si injoignable
+    QStringList notifyTargets() const;
+    int reportsPerSite() const;
+    void evaluateSiteWatchAlerts(const QJsonObject& report);
+    void evaluateAllSiteWatchAlerts();
+    void sendNotification(const SiteWatchAlertStore::Pending& p);
 
     ServiceConfig   m_config;
     ModuleRegistry* m_registry;
@@ -71,6 +96,10 @@ private:
     QSqlDatabase    m_siteWatchDb;
     QString         m_siteWatchConnectionName;
     QString         m_siteWatchStoreError;
+    QTimer*         m_alertTimer = nullptr;
+    QNetworkAccessManager* m_notifyNet = nullptr;
+    std::unique_ptr<SiteWatchAlertStore> m_alerts;
+    QSet<QString> m_notifyInflight;   // alertes dont l'envoi est en cours (pas de doublon)
 };
 
 } // namespace morfanalytics

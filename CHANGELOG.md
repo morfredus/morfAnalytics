@@ -3,6 +3,88 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.72.2] - 2026-10-11
+
+### Fixed
+
+- Settings page: the notification test no longer says "accepted" when the delivery failed.
+  morfNotify answers 202 before delivering, so a destination left on its example values
+  (placeholder Telegram token, example SMTP server) looked fine. The test now compares
+  morfNotify's failure counter before and after, and says when the delivery really failed.
+- The proposed morfNotify address showed `127.0.0.1`, which is right for the service but reads as
+  the user's own PC in a browser. It now shows the machine name and says it is the same machine
+  as morfAnalytics.
+
+### Added
+
+- Unsaved changes are flagged in the settings bar and the browser warns before leaving the page.
+  Muting a rule while there are unsaved edits is refused (it reloads the page).
+
+## [0.72.1] - 2026-10-11
+
+### Fixed
+
+- Build on Debian/Raspberry Pi OS: `HttpServer.cpp` used `QEventLoop` without including it (the
+  header came in indirectly with Qt on Windows, not with the Debian packages). 0.72.0 did not
+  compile on the Pi.
+
+## [0.72.0] - 2026-10-11
+
+### Added
+
+- Settings page `/sitewatch/settings`: no JSON to edit. Notifications (on/off, morfNotify
+  address, minimum level, destinations, test button), detection (sensitivity, days judged,
+  lateness thresholds, 500-error threshold, bot-share and AI-growth thresholds, reports kept
+  per site), per-rule settings (active, level, sending, destinations, mute) and per-site
+  overrides. All values are bounded when saved.
+- Destinations: the list comes from morfNotify (`GET /targets`); global destinations and
+  per-rule destinations (Telegram, mail...). Empty means morfNotify's own defaults.
+- Reliable alert delivery: the real result of each send to morfNotify is recorded (sent,
+  failed, pending, skipped, muted) and failures are retried every hour (5 attempts, 3 days).
+- Mute (rule or all rules, for N days) from the settings page or from an alert card.
+- Overview of all sites, CSV/JSON export of the daily series, likely broken links, hourly
+  profile, rising and falling pages, new bots, and a `new_bot` alert rule.
+- `/status` metrics: `sitewatch_sites`, `sitewatch_max_lag_days`, `sitewatch_alerts_24h`,
+  `sitewatch_alert_delivery_backlog`.
+- Report history is pruned to a configurable number per site (90 by default).
+- `SiteWatchAlertStore` (persistence, tested on an in-memory database) and configurable
+  `AlertConfig` in the pure `SiteWatchInsights` module.
+
+### Changed
+
+- Alert tables are created and migrated by `SiteWatchAlertStore`. Older alert rows keep their
+  state (sent or skipped).
+
+## [0.71.0] - 2026-10-10
+
+### Added
+
+- SiteWatch deep analysis page (`/sitewatch`), rewritten: filters (site, period presets or
+  free dates, series, robot family, text), indicators compared with the previous period of
+  the same length, daily chart with anomaly markers, anomalous days, weekday profile, HTTP
+  status families and rankings. Filters live in the URL.
+- `SiteWatchInsights`: pure, tested module (robust anomaly detection by median and MAD,
+  window and previous-period comparison, robot families, alert rules).
+- Alerts: rules on the last three complete days (silence of SiteWatch, 500 errors, attack
+  and 404/403 spikes, traffic drop or surge, bot share, AI growth). Each situation has a
+  stable key and is recorded and notified once. Warnings and errors go to morfNotify
+  (`MORFNOTIFY_URL`, default `http://127.0.0.1:8789/notify`). The first evaluation of a site
+  is a silent baseline. An hourly timer catches the silence of SiteWatch.
+- Endpoints `GET /sitewatch/insights` and `GET /sitewatch/alerts`.
+- Documentation: `docs/fr/SITEWATCH-ANALYSES.md`.
+
+### Changed
+
+- The old server-rendered SiteWatch page is removed (replaced by the new page).
+
+## [0.70.0] - 2026-10-10
+
+### Added
+
+- SiteWatch page: each site card shows data freshness ("data up to <day>", number of days
+  late from two days on, and when the report was received), from the new `source_up_to`
+  field sent by SiteWatch 1.21.0. Older reports without it still display.
+
 ## [0.69.5] - 2026-10-10
 
 ### Changed
