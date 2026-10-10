@@ -3,6 +3,18 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.69.0] - 2026-10-10
+
+### Added
+
+- **CSV export from the Graphs page.** Two buttons: "Exporter la période (CSV)" (displayed
+  period and source) and "Export complet (CSV)" (whole cache, indoor + outdoor). New route
+  `GET /meteohub/export?ctx=in|out|both&(hours=|from=&to=|all=1)`. One row per sample and source:
+  local and UTC timestamps, Unix time, source, then for temperature, humidity and pressure the RAW
+  value, its state (`valide`, `ecarte_auto`, `ecarte_manuel`, `reintegre`) and reason (`pic`,
+  `bornes`, `demarrage`, `exclusion`, combinable with `+`), plus the source cold-boot mark and
+  the types of overlapping weather annotations. Same qualification rules as the graphs.
+
 ## [0.68.3] - 2026-10-08
 
 ### Changed

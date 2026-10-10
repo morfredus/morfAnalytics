@@ -94,6 +94,13 @@ une barre en haut de page :
     page Analyses : l'effet est immédiat. La liste complète (date, source,
     grandeur, valeur d'origine, motif) se consulte sur la page Analyses, menu
     **Maintenance avancée** > **Points écartés** (0.61.0), sur 24 h, 7 ou 30 jours.
+    Depuis 0.69.0, deux boutons exportent en **CSV** : « Exporter la période » (période
+    et source affichées) et « Export complet » (tout le cache, intérieur et extérieur).
+    Une ligne par mesure et par source : horodatage local et UTC, temps Unix, puis pour
+    chaque grandeur la valeur **brute**, son état (`valide`, `ecarte_auto`,
+    `ecarte_manuel`, `reintegre`) et son motif (`pic`, `bornes`, `demarrage`,
+    `exclusion`, cumulables avec `+`), la marque de démarrage à froid de la source et
+    les types d'annotations qui recouvrent l'instant. Route : `/meteohub/export`.
     Depuis 0.62.0, un point jugé réel se **réintègre** (bouton par ligne) : il
     rejoint courbes et analyses aussitôt, et se ré-écarte depuis la liste des
     points réintégrés. La liste vit dans l'état du service

@@ -354,6 +354,88 @@ QJsonObject AnalyticsModule::seriesJson(const QString& ctx, const QString& metri
     return o;
 }
 
+QByteArray AnalyticsModule::exportCsv(const QString& ctx, qint64 from, qint64 to) const {
+    // Une ligne par mesure et par source. Les valeurs sont BRUTES (jamais NaN-isees
+    // comme pour les analyses) : le motif et l'etat disent ce que la qualification
+    // en fait, et l'utilisateur peut refaire son propre tri.
+    QByteArray out =
+        "horodatage_local,horodatage_utc,ts_unix,source,"
+        "temp,temp_etat,temp_motif,hum,hum_etat,hum_motif,pres,pres_etat,pres_motif,"
+        "marque_source,annotations\n";
+
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    if (from <= 0) { from = 0; to = now; }
+
+    // Annotations meteo (types) recouvrant l'instant : contexte d'interpretation.
+    struct Ann { qint64 from, to; QString types; };
+    QVector<Ann> anns;
+    if (m_annotations)
+        for (const QJsonValue& v : m_annotations->all()) {
+            const QJsonObject a = v.toObject();
+            QStringList t;
+            for (const QJsonValue& x : a.value(QStringLiteral("types")).toArray()) t << x.toString();
+            anns.push_back({static_cast<qint64>(a.value(QStringLiteral("start")).toDouble()),
+                            static_cast<qint64>(a.value(QStringLiteral("end")).toDouble()),
+                            t.join(QLatin1Char('|'))});
+        }
+
+    auto fmt = [](double v) { return std::isnan(v) ? QByteArray() : QByteArray::number(v, 'g', 8); };
+
+    const QStringList ctxs = ctx == QLatin1String("both")
+        ? QStringList{QStringLiteral("in"), QStringLiteral("out")} : QStringList{ctx};
+    for (const QString& c : ctxs) {
+        const SampleStore* store = (c == QLatin1String("in")) ? m_store.get() : m_storeOut.get();
+        if (!store || !store->isOpen()) continue;
+
+        // Lecture elargie : les pics se jugent sur les voisins, aussi au bord.
+        const Series s = store->rangeRaw(from - SampleStore::kQualifyPadS, to + SampleStore::kQualifyPadS);
+        const QVector<qint64>& ts = s.timestamps();
+        QVector<quint32> src(ts.size());
+        for (int i = 0; i < ts.size(); ++i) src[i] = s.sourceFlags(i);
+
+        const meteo::KeptPoints kept = keptFor(c);
+        const QVector<meteo::TimeRange> excl = (c == QLatin1String("out"))
+            ? outExclusions() : QVector<meteo::TimeRange>();
+        QHash<QString, QVector<quint8>> flags;
+        for (const QString& ch : kChannels)
+            if (const QVector<double>* col = s.channel(ch))
+                flags[ch] = meteo::qualifyChannel(ch, ts, *col, excl, {}, kept.value(ch), src);
+
+        for (int i = 0; i < ts.size(); ++i) {
+            if (ts[i] < from || ts[i] > to) continue;
+            const QDateTime loc = QDateTime::fromSecsSinceEpoch(ts[i]);
+            const QDateTime utc = loc.toUTC();
+            QByteArray row = loc.toOffsetFromUtc(loc.offsetFromUtc()).toString(Qt::ISODate).toUtf8()
+                + ',' + utc.toString(Qt::ISODate).toUtf8() + ',' + QByteArray::number(ts[i])
+                + ',' + c.toUtf8();
+            for (const QString& ch : kChannels) {
+                const double v = s.channel(ch) ? (*s.channel(ch))[i] : Series::missing();
+                const quint8 f = flags.value(ch).value(i, meteo::QualityOk);
+                QByteArray etat = "valide", motif;
+                if (f != meteo::QualityOk) {
+                    // Exclusion = decision humaine (annotation) ; le reste = regle automatique.
+                    etat = (f & meteo::QualityExcluded) ? "ecarte_manuel" : "ecarte_auto";
+                    if (f & meteo::QualityExcluded) motif += "exclusion+";
+                    if (f & meteo::QualityColdBoot) motif += "demarrage+";
+                    if (f & meteo::QualityBounds)   motif += "bornes+";
+                    if (f & meteo::QualitySpike)    motif += "pic+";
+                    motif.chop(1);
+                } else if (kept.value(ch).contains(ts[i])) {
+                    etat = "reintegre";
+                }
+                row += ',' + fmt(v) + ',' + etat + ',' + motif;
+            }
+            QStringList ann;
+            for (const Ann& a : anns)
+                if (ts[i] >= a.from && ts[i] <= a.to) ann << a.types;
+            row += (src[i] & Series::kSourceColdBoot ? ",demarrage_a_froid," : ",")
+                + ann.join(QLatin1Char('|')).toUtf8() + '\n';
+            out += row;
+        }
+    }
+    return out;
+}
+
 QJsonObject AnalyticsModule::diagnosisJson(qint64 to) const {
     if (to <= 0) to = QDateTime::currentSecsSinceEpoch();
     const SampleStore* out = m_storeOut ? m_storeOut.get() : nullptr;

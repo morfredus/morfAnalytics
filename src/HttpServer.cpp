@@ -538,6 +538,31 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         } else {
             out = toJson(module->seriesJson(ctx, metric, from, to, 400));
         }
+    } else if (path == "/meteohub/export") {
+        // Export CSV de la période affichée (même fenêtre que les Graphiques) ou, avec
+        // all=1, de tout l'historique du cache. Le nom du fichier est choisi côté page
+        // (attribut download) : reply() ne porte pas d'en-tête Content-Disposition.
+        auto* module = m_registry
+            ? qobject_cast<AnalyticsModule*>(m_registry->firstOfType(QStringLiteral("analytics")))
+            : nullptr;
+        QString ctx = QStringLiteral("both");
+        bool all = false;
+        const int qm = rawPath.indexOf('?');
+        if (qm >= 0) {
+            const QUrlQuery q(QString::fromUtf8(rawPath.mid(qm + 1)));
+            const QString c = q.queryItemValue(QStringLiteral("ctx"));
+            if (c == QLatin1String("in") || c == QLatin1String("out")) ctx = c;
+            all = q.queryItemValue(QStringLiteral("all")) == QLatin1String("1");
+        }
+        qint64 from = 0, to = 0;
+        if (!all) resolveWindow(rawPath, &from, &to);
+        if (!module) {
+            reply(sock, 503, "Service Unavailable", "aucun module 'analytics' configure\n",
+                  "text/plain; charset=utf-8");
+        } else {
+            reply(sock, 200, "OK", module->exportCsv(ctx, from, to), "text/csv; charset=utf-8");
+        }
+        return;
     } else if (path == "/meteohub/events") {
         // Événements temporels de la fenêtre affichée (croisements IN/OUT,
         // changements de tendance et de régime). Source COMMUNE avec les analyses :

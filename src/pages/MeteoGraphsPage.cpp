@@ -128,6 +128,10 @@ select{background:var(--field);border:1px solid var(--line);color:var(--ink);bor
     <span class="err" id="cerr"></span>
   </div>
   <span class="rangelbl" id="rangelbl"></span>
+  <span class="periods">
+    <button class="pbtn" id="expview" type="button" title="CSV de la période et de la source affichées : valeurs brutes, état de chaque point (valide, écarté auto/manuel, réintégré) et motif">Exporter la période (CSV)</button>
+    <button class="pbtn" id="expall" type="button" title="CSV de tout l'historique du cache, intérieur et extérieur">Export complet (CSV)</button>
+  </span>
 </div>
 </div></div></div>
 <div class="wrap">
@@ -601,6 +605,16 @@ function syncPeriodUI(){
     S.range ? x.dataset.h==="custom" : +x.dataset.h===S.hours));
   $("#rangelbl").textContent = S.range ? "Période affichée : "+fmtRange(S.range) : "";
 }
+// Export CSV : lien temporaire avec attribut download (nom de fichier horodaté).
+function exportCsv(all){
+  const ctx=all?"both":S.source, stamp=new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
+  const a=document.createElement("a");
+  a.href="/meteohub/export?ctx="+ctx+"&"+(all?"all=1":windowQuery());
+  a.download="meteo-"+(all?"complet":ctx)+"-"+stamp+".csv";
+  document.body.appendChild(a);a.click();a.remove();
+}
+$("#expview").addEventListener("click",()=>exportCsv(false));
+$("#expall").addEventListener("click",()=>exportCsv(true));
 function applyCustom(){
   const f=fromLocalInput($("#cfrom").value), t=fromLocalInput($("#cto").value);
   const err=$("#cerr");

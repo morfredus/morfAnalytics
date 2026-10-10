@@ -9,6 +9,7 @@
 #include "morfanalytics/analysis/AnalysisRegistry.h"
 #include "morfanalytics/data/AnnotationStore.h"
 #include "morfanalytics/analysis/MeteoQuality.h"
+#include <QByteArray>
 #include <QString>
 #include <QJsonArray>
 #include <memory>
@@ -87,6 +88,12 @@ public:
     // vide donne null (trou préservé, jamais comblé). ~maxPoints points au plus.
     QJsonObject seriesJson(const QString& ctx, const QString& metric,
                            qint64 from, qint64 to, int maxPoints) const;
+
+    // Export CSV (UTF-8, virgule, point décimal) de la période [from, to], valeurs
+    // BRUTES avec l'état de qualification de chaque canal (valide / ecarte_auto /
+    // ecarte_manuel / reintegre) et son motif. `ctx` = "in" | "out" | "both" (une
+    // ligne par source et par mesure). from <= 0 : tout l'historique du cache.
+    QByteArray exportCsv(const QString& ctx, qint64 from, qint64 to) const;
 
     // Événements temporels de la fenêtre [from, to] (secondes epoch : période
     // glissante ou période de consultation libre), calculés par la SOURCE
