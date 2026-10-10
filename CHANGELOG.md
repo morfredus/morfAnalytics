@@ -3,6 +3,18 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.69.4] - 2026-10-10
+
+### Changed
+
+- Resync the vendored morfDeploy (0.21.2): `config push` skips identical files.
+
+## [0.69.3] - 2026-10-10
+
+### Changed
+
+- Resync the vendored morfDeploy (0.21.1): `install`/`update` now copy `VERSION` next to the binary.
+
 ## [0.69.2] - 2026-10-10
 
 ### Changed
