@@ -3,6 +3,21 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.69.2] - 2026-10-10
+
+### Changed
+
+- **Docs**: the CSV export columns (names, units, states, reasons) and file names are now
+  described in `docs/fr/INTERFACE-WEB.md`.
+
+## [0.69.1] - 2026-10-10
+
+### Changed
+
+- **CSV export file names** now carry a local timestamp down to the second (several exports on
+  the same day no longer collide) and say what was exported: `meteo-ensemble-<date>_<hhmmss>.csv`
+  for the whole history, `meteo-periode-<source>-<date>_<hhmmss>.csv` for the displayed period.
+
 ## [0.69.0] - 2026-10-10
 
 ### Added

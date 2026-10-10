@@ -607,10 +607,13 @@ function syncPeriodUI(){
 }
 // Export CSV : lien temporaire avec attribut download (nom de fichier horodaté).
 function exportCsv(all){
-  const ctx=all?"both":S.source, stamp=new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
+  // Horodatage LOCAL à la seconde : plusieurs exports dans la journée ne s'écrasent pas.
+  const ctx=all?"both":S.source, d=new Date(), p=n=>String(n).padStart(2,"0"),
+    stamp=d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"_"+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds());
   const a=document.createElement("a");
   a.href="/meteohub/export?ctx="+ctx+"&"+(all?"all=1":windowQuery());
-  a.download="meteo-"+(all?"complet":ctx)+"-"+stamp+".csv";
+  // ensemble = tout l'historique ; periode = fenêtre affichée (source dans le nom).
+  a.download="meteo-"+(all?"ensemble":"periode-"+ctx)+"-"+stamp+".csv";
   document.body.appendChild(a);a.click();a.remove();
 }
 $("#expview").addEventListener("click",()=>exportCsv(false));
