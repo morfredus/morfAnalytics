@@ -28,5 +28,14 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
+# Durcissement (valide sur morfNotify, 2026-10-10) : systeme de fichiers en lecture
+# seule. morfAnalytics n'ecrit que sous son StateDirectory (bases SQLite et leurs WAL,
+# annotations, points reintegres) ; son PrivateTmp couvre les fichiers temporaires de
+# SQLite (VACUUM). Il ne lance aucun processus.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
 [Install]
 WantedBy=multi-user.target

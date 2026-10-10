@@ -3,6 +3,14 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.69.5] - 2026-10-10
+
+### Changed
+
+- **Hardened systemd unit**: `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`,
+  `NoNewPrivileges=yes`. The service only writes under its `StateDirectory` (checked on pi4fred:
+  every open file is there), and starts no process.
+
 ## [0.69.4] - 2026-10-10
 
 ### Changed
