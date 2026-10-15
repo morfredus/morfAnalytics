@@ -2988,6 +2988,14 @@ QByteArray HttpServer::buildStatusJson() const {
     }
     o["metrics"]  = metrics;
 
+    // Activite EN COURS (contrat generique `activity/1`) : optionnelle, absente
+    // quand rien ne tourne. Lue en temps reel par morfMonitor.
+    if (m_registry) {
+        const QJsonObject activity = m_registry->activity();
+        if (!activity.isEmpty())
+            o["activity"] = activity;
+    }
+
     // Detail annonce (interface web + API). morfAnalytics sert son PROPRE
     // /status plutot que le StatusServer de morfBeacon ; il appelle donc le
     // MEME point unique (fillAnnouncedDetail + describeService) pour que son

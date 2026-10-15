@@ -46,6 +46,11 @@ public:
     // meme avant toute activite. Format libre, propre a votre metier.
     virtual QJsonObject statusJson() const = 0;
 
+    // Activite EN COURS du module (contrat generique `activity/1`, voir
+    // morfSystem/docs/CONTRAT-ACTIVITE.md). Rien en cours => objet vide (defaut).
+    // Exposee de facon optionnelle dans /status, lue en temps reel par morfMonitor.
+    virtual QJsonObject activityJson() const { return {}; }
+
 signals:
     // Emis quand l'etat du module change (facultatif a exploiter).
     void updated(const QString& id);

@@ -232,6 +232,26 @@ void AnalyticsModule::stop() {
         m_forecastStore->close();
 }
 
+QJsonObject AnalyticsModule::activityJson() const {
+    // Contrat `activity/1` : une collecte (pull des mesures MeteoHub IN/OUT ou de la
+    // prevision) est en vol. Les cycles sont courts mais, sur un hub lent ou apres
+    // une longue absence, ils durent assez pour etre observes.
+    const bool inRun   = m_collector && m_collector->isRunning();
+    const bool outRun  = m_collectorOut && m_collectorOut->isRunning();
+    const bool fcRun   = m_forecastCollector && m_forecastCollector->isRunning();
+    if (!inRun && !outRun && !fcRun)
+        return {};
+    QStringList what;
+    if (inRun)  what << QStringLiteral("mesures IN");
+    if (outRun) what << QStringLiteral("mesures OUT");
+    if (fcRun)  what << QStringLiteral("prévisions");
+    QJsonObject a;
+    a["type"]   = QStringLiteral("collecte");
+    a["state"]  = QStringLiteral("running");
+    a["detail"] = what.join(QStringLiteral(", "));
+    return a;
+}
+
 QJsonObject AnalyticsModule::statusJson() const {
     QJsonObject o;
     o["running"]        = m_running;

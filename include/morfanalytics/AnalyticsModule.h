@@ -70,6 +70,7 @@ public:
     bool start() override;
     void stop() override;
     QJsonObject statusJson() const override;
+    QJsonObject activityJson() const override;
 
     // Analyse À LA DEMANDE. Travaille uniquement sur le cache local (lecture seule)
     // et renvoie un résultat synthétique. `request` décrit l'analyse demandée

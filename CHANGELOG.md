@@ -3,6 +3,17 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.75.0] - 2026-10-15
+
+### Added
+
+- `/status` declares the running collection (MeteoHub IN/OUT measures, forecasts) as the
+  generic `activity/1` object, so morfMonitor shows it in "Activités en cours".
+
+### Changed
+
+- Resync the vendored morfBeacon (0.8.0).
+
 ## [0.74.0] - 2026-10-15
 
 ### Added

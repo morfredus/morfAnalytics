@@ -47,6 +47,10 @@ public:
     QJsonObject metrics() const override;            // resume pour /status
     QString     state() const override;              // ok | warning | starting
 
+    // Activite EN COURS agregee (contrat `activity/1`) : le premier module qui en
+    // declare une l'emporte (une activite courante par service).
+    QJsonObject activity() const;
+
 signals:
     void updated(const QString& id);
 

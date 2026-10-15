@@ -84,4 +84,13 @@ QString ModuleRegistry::state() const {
     return QStringLiteral("ok");
 }
 
+QJsonObject ModuleRegistry::activity() const {
+    for (IModule* m : m_modules) {
+        const QJsonObject a = m->activityJson();
+        if (!a.isEmpty())
+            return a;
+    }
+    return {};
+}
+
 } // namespace morfanalytics
