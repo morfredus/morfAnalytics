@@ -169,8 +169,22 @@ des activités et compilations.
 
 ## Analyses GitHub
 
-Mémoire des métriques publiées par SiteWatch : vues, clones, téléchargements,
-évolution quotidienne et classement des dépôts.
+Mémoire des métriques publiées par SiteWatch. La vue d'ensemble donne les
+indicateurs de la période (comparés à la période précédente), les alertes
+récentes, la courbe quotidienne vues / clones, le tableau des dépôts (tendance,
+téléchargements, étoiles, fraîcheur de la publication), le profil de la semaine,
+les téléchargements par plateforme, les pages populaires et l'origine du trafic.
+Un clic sur un dépôt ouvre son détail (assets, visiteurs uniques, alertes).
+
+Le menu « ⋮ » en bout de ligne propose « Mettre à jour », la sourdine des
+alertes du dépôt (7 jours) et « Supprimer le dépôt et ses données » (confirmation
+demandée, les autres dépôts ne sont pas touchés ; un dépôt que SiteWatch publie
+encore réapparaît).
+
+Les **alertes** réutilisent le moteur de SiteWatch (stockage, suivi d'envoi,
+nouvelles tentatives, sourdine, morfNotify) : chute des vues, pic de vues, pic de
+clones, publication en retard, nouvelle release. Seuils, niveau et destinations
+de chaque règle se règlent sur `/github/settings`.
 
 ![Analyses GitHub (données d'exemple)](pictures/interface-github.png)
 

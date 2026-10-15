@@ -158,6 +158,22 @@ bool GitHubAnalyticsModule::ingestAuthority(const QJsonObject& payload) {
     return true;
 }
 
+bool GitHubAnalyticsModule::deleteRepository(const QString& fullName) {
+    if (!m_store || !m_store->deleteRepository(fullName)) {
+        if (m_store) m_lastError = m_store->lastError();
+        return false;
+    }
+    return true;
+}
+
+QStringList GitHubAnalyticsModule::repositoryNames() const {
+    QStringList out;
+    if (!m_store) return out;
+    for (const QJsonValue& v : m_store->overview().value(QStringLiteral("repos")).toArray())
+        out << v.toObject().value(QStringLiteral("full_name")).toString();
+    return out;
+}
+
 void GitHubAnalyticsModule::importFrom(const QString& baseUrl) {
     if (!m_store)
         return;

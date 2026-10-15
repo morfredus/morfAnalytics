@@ -43,6 +43,10 @@ tr.row{cursor:pointer}tr.row:hover{background:color-mix(in srgb,var(--accent) 8%
 .err{background:var(--err);border:1px solid var(--err-line);padding:.8rem;border-radius:10px}
 .cells{display:grid;grid-template-columns:repeat(7,1fr);gap:.4rem;align-items:end;height:8rem}.cells div{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;font-size:.72rem;color:var(--muted);height:100%}.cells i{display:block;width:70%;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px}
 .hours{width:100%;height:6rem;display:block}
+.kebab{position:relative;width:2rem;text-align:center}.kebab>button{padding:.1rem .45rem;line-height:1;font-size:1.1rem;background:none;border-color:transparent}
+.kebab>button:hover{border-color:var(--line)}
+.menu{position:absolute;right:0;top:100%;z-index:20;min-width:15rem;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:0 4px 14px #0003;padding:.25rem;text-align:left}
+.menu button{display:block;width:100%;text-align:left;background:none;border:0}.menu button:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}.menu button.danger{color:#d6453d}
 </style></head><body><div class="wrap">
 <!--nav-back-->
 <h1>Analyses SiteWatch <span id="vb" class="vb"></span><!--theme-toggle--></h1>
@@ -98,15 +102,27 @@ async function overview(){
   if(!r.sites.length){$("app").innerHTML='<div class="card">Aucune synthèse SiteWatch reçue pour l\'instant.</div>';return}
   const w=r.sites[0].window;
   $("from").value=w.from;$("to").value=w.to;
-  let h=`<h2>Vue d'ensemble · ${esc(w.from)} → ${esc(w.to)}</h2><div class="card"><table><thead><tr><th>Site</th><th>Données</th><th class="num">Visites humaines</th><th class="num">Part des robots</th><th class="num">Erreurs 500</th><th class="num">Attaques</th><th class="num">Taux d'erreur</th><th>Alertes</th></tr></thead><tbody>`;
+  let h=`<h2>Vue d'ensemble · ${esc(w.from)} → ${esc(w.to)}</h2><div class="card"><table><thead><tr><th>Site</th><th>Données</th><th class="num">Visites humaines</th><th class="num">Part des robots</th><th class="num">Erreurs 500</th><th class="num">Attaques</th><th class="num">Taux d'erreur</th><th>Alertes</th><th></th></tr></thead><tbody>`;
   for(const s of r.sites){
     const k=s.kpis,fr=s.freshness,al=s.alerts;
     const lag=fr.lag_days>=2?`<span class="pill ${fr.lag_days>=3?"err":"warn"}">${fr.lag_days} j de retard</span>`:`<span class="muted">${esc(fr.up_to)}</span>`;
     const badges=(al.error?`<span class="pill err">${al.error} erreur</span>`:"")+(al.warning?`<span class="pill warn">${al.warning} avert.</span>`:"")+(al.muted?`<span class="pill">${al.muted} en sourdine</span>`:"")+(!al.error&&!al.warning&&!al.muted?'<span class="muted">aucune</span>':"");
-    h+=`<tr class="row" data-site="${esc(s.site_id)}"><td><b>${esc(s.site_label)}</b></td><td>${lag}</td><td class="num">${fmt(k.humans.value)} ${delta(k,"humans")}</td><td class="num">${fmt(k.bot_share_pct.value)} %</td><td class="num ${k.e500.value>0?"bad":""}">${fmt(k.e500.value)}</td><td class="num">${fmt(k.attacks.value)}</td><td class="num">${fmt(k.error_rate_pct.value)} %</td><td>${badges}</td></tr>`;
+    h+=`<tr class="row" data-site="${esc(s.site_id)}"><td><b>${esc(s.site_label)}</b></td><td>${lag}</td><td class="num">${fmt(k.humans.value)} ${delta(k,"humans")}</td><td class="num">${fmt(k.bot_share_pct.value)} %</td><td class="num ${k.e500.value>0?"bad":""}">${fmt(k.e500.value)}</td><td class="num">${fmt(k.attacks.value)}</td><td class="num">${fmt(k.error_rate_pct.value)} %</td><td>${badges}</td><td class="kebab"><button class="small" data-menu title="Actions" aria-label="Actions pour ${esc(s.site_label)}">⋮</button></td></tr>`;
   }
   $("app").innerHTML=h+`</tbody></table></div><p class="muted">Cliquer sur un site pour ouvrir son analyse détaillée.</p>`;
   $("app").querySelectorAll("tr.row").forEach(tr=>tr.onclick=()=>{$("site").value=tr.dataset.site;setQs({site:tr.dataset.site});load()});
+  // Menu d'actions de la ligne : un seul ouvert a la fois, sans declencher l'ouverture du site.
+  const closeMenus=()=>document.querySelectorAll(".menu").forEach(m=>m.remove());
+  $("app").querySelectorAll("button[data-menu]").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();const open=b.parentElement.querySelector(".menu");closeMenus();if(open)return;
+    const tr=b.closest("tr"),id=tr.dataset.site,label=tr.querySelector("b").textContent,m=document.createElement("div");
+    m.className="menu";m.innerHTML=`<button data-act="refresh">Mettre à jour</button><button data-act="delete" class="danger">Supprimer le site et ses données</button>`;
+    m.onclick=async ev=>{ev.stopPropagation();const a=ev.target.dataset.act;if(!a)return;closeMenus();
+      if(a==="refresh")return overview();
+      if(!confirm(`Supprimer « ${label} » et TOUTES ses données (rapports, alertes, réglages) ?\nLes autres sites ne sont pas touchés. Action irréversible.`))return;
+      try{await jpost("/sitewatch/delete",{site_id:id});await loadSites();await overview()}catch(err){alert("Suppression impossible : "+err.message)}};
+    b.parentElement.appendChild(m)});
+  document.onclick=closeMenus;
 }
 
 // ---- Graphique quotidien -----------------------------------------------------
@@ -193,6 +209,11 @@ function render(){
   $("hist").onclick=async e=>{e.preventDefault();const r=await jget("/sitewatch/alerts?site="+encodeURIComponent($("site").value)+"&limit=50");
     $("histbox").innerHTML=r.alerts.length?r.alerts.map(a=>alertHtml(a,false)+`<div class="muted" style="font-size:.75rem;margin:-.2rem 0 .4rem .8rem">${new Date(a.created_at*1000).toLocaleString("fr-FR")} · ${esc(DELIV[a.delivery]||a.delivery)}${a.attempts?" ("+a.attempts+" essai(s))":""}${a.last_error?" · "+esc(a.last_error):""}</div>`).join(""):'<p class="muted">Aucune alerte enregistrée.</p>'};
 }
+// Liste des sites suivis -> sélecteur (appelée au départ et après une suppression).
+async function loadSites(){
+  const l=await jget("/sitewatch/insights");sites=l.sites||[];
+  $("site").innerHTML='<option value="">Tous les sites</option>'+sites.map(s=>`<option value="${esc(s.site_id)}">${esc(s.site_label)}${s.lag_days>=2?" ("+s.lag_days+" j de retard)":""}</option>`).join("");
+}
 async function load(){
   const site=$("site").value;
   document.querySelectorAll("#presets button").forEach(b=>b.classList.toggle("on",!qs().get("from")&&!qs().get("to")&&(b.dataset.d===(qs().get("days")||"30"))));
@@ -210,9 +231,8 @@ async function load(){
   $("apply").onclick=()=>{setQs({from:$("from").value,to:$("to").value,days:""});load()};
   $("site").onchange=()=>{setQs({site:$("site").value});load()};
   try{
-    const l=await jget("/sitewatch/insights");sites=l.sites||[];
+    await loadSites();
     if(!sites.length){$("app").innerHTML='<div class="card">Aucune synthèse SiteWatch reçue pour l\'instant.</div>';return}
-    $("site").innerHTML='<option value="">Tous les sites</option>'+sites.map(s=>`<option value="${esc(s.site_id)}">${esc(s.site_label)}${s.lag_days>=2?" ("+s.lag_days+" j de retard)":""}</option>`).join("");
     if(p.get("site")&&sites.some(s=>s.site_id===p.get("site")))$("site").value=p.get("site");
     load();
   }catch(e){$("app").innerHTML='<div class="err">'+esc(e.message)+"</div>"}

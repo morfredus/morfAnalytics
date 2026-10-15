@@ -41,6 +41,8 @@ public:
     QJsonObject overview(const QString& repo = {}, const QString& fromDay = {},
                          const QString& toDay = {}) const;
     QJsonObject repository(const QString& fullName) const;
+    // Efface un depot et TOUTES ses donnees (une transaction) ; les autres depots sont intacts.
+    bool deleteRepository(const QString& fullName);
 
 private:
     bool exec(const QString& sql);

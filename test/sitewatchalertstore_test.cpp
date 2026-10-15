@@ -103,6 +103,17 @@ int main(int argc, char** argv) {
     q.exec("SELECT COUNT(*) FROM sitewatch_report WHERE site_id='s2'"); q.next();
     check(q.value(0).toInt() == 1, "retention : les autres sites ne sont pas touches");
 
+    // Suppression d'un site : tout part pour s1, rien ne bouge pour s2.
+    check(store.deleteSite("s1"), "suppression : site efface");
+    q.exec("SELECT COUNT(*) FROM sitewatch_report WHERE site_id='s1'"); q.next();
+    check(q.value(0).toInt() == 0, "suppression : rapports du site effaces");
+    check(store.history("s1", 10).isEmpty(), "suppression : alertes du site effacees");
+    check(store.settings("site:s1").isEmpty(), "suppression : reglages du site effaces");
+    check(store.settings("global").value("sensitivity").toDouble() == 5.0, "suppression : reglage global intact");
+    q.exec("SELECT COUNT(*) FROM sitewatch_report WHERE site_id='s2'"); q.next();
+    check(q.value(0).toInt() == 1, "suppression : les autres sites ne sont pas touches");
+    check(!store.deleteSite(""), "suppression : identifiant vide refuse");
+
     std::printf(failures ? "ECHEC (%d)\n" : "Tout est conforme.\n", failures);
     return failures ? 1 : 0;
 }

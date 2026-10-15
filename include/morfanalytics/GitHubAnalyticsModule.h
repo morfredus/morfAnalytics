@@ -38,6 +38,8 @@ public:
                          const QString& toDay = {}) const;
     QJsonObject repository(const QString& fullName) const;
     bool ingestAuthority(const QJsonObject& payload);
+    bool deleteRepository(const QString& fullName);
+    QStringList repositoryNames() const;
 
 private slots:
     void poll();

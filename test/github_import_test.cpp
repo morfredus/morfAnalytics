@@ -155,6 +155,29 @@ int main(int argc, char** argv) {
     if (ovWindow.value(QStringLiteral("views_total")).toDouble() != 7)
         return fail("filtre from/to");
 
+    // Suppression : un depot part avec toutes ses donnees, l'autre n'est pas touche.
+    QJsonObject second = authority;
+    QJsonObject r2 = second.value(QStringLiteral("repositories")).toArray().first().toObject();
+    r2[QStringLiteral("full_name")] = QStringLiteral("morfredus/Autre");
+    QJsonArray both = second.value(QStringLiteral("repositories")).toArray();
+    both.append(r2);
+    second[QStringLiteral("repositories")] = both;
+    if (!ingestStore.ingestAuthority(second))
+        return fail(qPrintable(ingestStore.lastError()));
+    if (ingestStore.overview().value(QStringLiteral("repositories")).toInt() != 2)
+        return fail("deux depots attendus avant suppression");
+    if (!ingestStore.deleteRepository(QStringLiteral("morfredus/SiteWatch")))
+        return fail("suppression d'un depot");
+    const QJsonObject after = ingestStore.overview();
+    if (after.value(QStringLiteral("repositories")).toInt() != 1)
+        return fail("un seul depot attendu apres suppression");
+    if (after.value(QStringLiteral("views_total")).toDouble() != 7)
+        return fail("le trafic de l'autre depot doit rester intact");
+    if (!ingestStore.repository(QStringLiteral("morfredus/SiteWatch")).isEmpty())
+        return fail("le depot supprime ne doit plus exister");
+    if (ingestStore.deleteRepository(QString()))
+        return fail("identifiant vide refuse");
+
     std::fprintf(stdout, "ok\n");
     return 0;
 }

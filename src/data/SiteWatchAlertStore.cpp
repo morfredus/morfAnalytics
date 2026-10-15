@@ -148,14 +148,26 @@ void SiteWatchAlertStore::markDelivery(const QString& key, bool ok, const QStrin
 
 QJsonArray SiteWatchAlertStore::history(const QString& siteId, int limit) const {
     QJsonArray out;
+    // « github:* » = tous les identifiants commencant par « github: » (alertes GitHub).
+    const bool prefix = siteId.endsWith(QLatin1Char('*'));
     QSqlQuery q(m_db);
     // Pas de parametres numerotes : le pilote SQLite les melange avec les positionnels.
     q.prepare(QStringLiteral(
         "SELECT key, site_id, rule, level, day, title, message, created_at, delivery, attempts, last_error "
         "FROM sitewatch_alert ")
-        + (siteId.isEmpty() ? QString() : QStringLiteral("WHERE site_id = ? "))
+        + (siteId.isEmpty() ? QString()
+           : QStringLiteral("WHERE site_id ") + (prefix ? QStringLiteral("LIKE ? ESCAPE '\\' ") : QStringLiteral("= ? ")))
         + QStringLiteral("ORDER BY created_at DESC, day DESC LIMIT ?"));
-    if (!siteId.isEmpty()) q.addBindValue(siteId);
+    if (!siteId.isEmpty()) {
+        QString v = siteId;
+        if (prefix) {
+            v.chop(1);
+            v.replace(QLatin1Char('\\'), QStringLiteral("\\\\")).replace(QLatin1Char('%'), QStringLiteral("\\%"))
+                .replace(QLatin1Char('_'), QStringLiteral("\\_"));
+            v += QLatin1Char('%');
+        }
+        q.addBindValue(v);
+    }
     q.addBindValue(std::max(1, std::min(500, limit)));
     if (q.exec())
         while (q.next())
@@ -192,6 +204,25 @@ void SiteWatchAlertStore::pruneReports(const QString& siteId, int keep) {
     q.addBindValue(siteId);
     q.addBindValue(keep);
     q.exec();
+}
+
+bool SiteWatchAlertStore::deleteSite(const QString& siteId) {
+    if (siteId.isEmpty()) return false;
+    if (!m_db.transaction()) { m_error = m_db.lastError().text(); return false; }
+    // Une requete par table : la cle de rattachement n'a pas le meme nom partout.
+    const std::pair<const char*, QString> stmts[] = {
+        {"DELETE FROM sitewatch_report WHERE site_id=?", siteId},
+        {"DELETE FROM sitewatch_alert WHERE site_id=?", siteId},
+        {"DELETE FROM sitewatch_alert_baseline WHERE site_id=?", siteId},
+        {"DELETE FROM sitewatch_setting WHERE scope=?", QStringLiteral("site:") + siteId},
+    };
+    for (const auto& [sql, value] : stmts) {
+        QSqlQuery q(m_db);
+        q.prepare(QLatin1String(sql));
+        q.addBindValue(value);
+        if (!q.exec()) { m_error = q.lastError().text(); m_db.rollback(); return false; }
+    }
+    return m_db.commit();
 }
 
 } // namespace morfanalytics

@@ -11,7 +11,9 @@ conservé ici (ils restent souverains dans SiteWatch).
 
 - **Vue d'ensemble** (choix « Tous les sites ») : une ligne par site avec fraîcheur des
   données, visites humaines et leur variation, part des robots, erreurs 500, attaques,
-  taux d'erreur et alertes actives. Un clic ouvre l'analyse détaillée.
+  taux d'erreur et alertes actives. Un clic ouvre l'analyse détaillée. Le menu « ⋮ » en bout de ligne
+  propose « Mettre à jour » et « Supprimer le site et ses données » (confirmation demandée,
+  les autres sites ne sont pas touchés).
 - **Filtres** : site, période (7, 30, 60, 90, 180 jours, tout, ou dates libres), séries
   du graphique, famille de robots, filtre texte sur les classements. Les filtres vivent
   dans l'adresse : une vue se partage par simple lien.
@@ -96,6 +98,7 @@ l'enregistrement.
 | `GET /sitewatch/config` | Réglages, valeurs par défaut, règles et réglages par site. |
 | `POST /sitewatch/config` | `{scope, settings}` : `scope` vaut `global` ou l'identifiant d'un site. |
 | `POST /sitewatch/config/mute` | `{site_id?, rule, days}` : sourdine (`days` 0 la lève, `rule` `*` = toutes). |
+| `POST /sitewatch/delete` | `{site_id}` : supprime un site et toutes ses données (rapports, alertes, réglages du site). Irréversible. |
 | `GET /sitewatch/config/targets` | Destinations de morfNotify (nom et type). |
 | `POST /sitewatch/config/test` | Notification de test (`{targets?}`). |
 | `GET /sitewatch/reports` | Derniers rapports bruts reçus. |

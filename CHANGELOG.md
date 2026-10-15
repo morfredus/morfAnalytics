@@ -3,6 +3,41 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.74.0] - 2026-10-15
+
+### Added
+
+- GitHub analysis page rebuilt: period presets (7, 14, 30, 90 days, all, or free dates) with
+  comparison to the previous period, KPI tiles, a daily views/clones chart with tooltip, a
+  repository table with sparklines, publication freshness and sortable columns, weekday profile,
+  downloads per platform, top pages and traffic origins, and a per-repository detail view
+  (assets, unique visitors window, forks).
+- Configurable GitHub alerts, same engine as SiteWatch (shared storage, delivery tracking,
+  retry, mute and morfNotify settings): views drop, views spike, clones spike, stale publication
+  and new release. Thresholds, per-rule level/destinations and mutes live on the new
+  `/github/settings` page. New `GET|POST /github/config`, `POST /github/config/mute`,
+  `GET /github/alerts`.
+- A "⋮" menu on each repository row: refresh, mute alerts for 7 days, and "Supprimer le dépôt et
+  ses données" (`POST /github/delete`). Deletion removes traffic, releases, downloads, alerts and
+  mutes of that repository in one transaction; other repositories are untouched. A repository
+  reappears if SiteWatch keeps publishing it.
+- `/github/data` now also returns per-repository downloads, daily uniques, sparkline series and
+  aggregated top pages/referrers.
+
+### Fixed
+
+- Downloads and platform totals ignored the repository filter.
+
+## [0.73.0] - 2026-10-15
+
+### Added
+
+- SiteWatch overview: a "⋮" menu at the end of each site row with "Mettre à jour" (reload) and
+  "Supprimer le site et ses données". Deletion asks for confirmation, then removes the site's
+  reports, alerts, alert baseline and per-site settings in one transaction; other sites are
+  untouched. New `POST /sitewatch/delete` `{site_id}`. A site reappears if SiteWatch keeps
+  publishing for it, so stop it on the SiteWatch side first.
+
 ## [0.72.2] - 2026-10-11
 
 ### Fixed

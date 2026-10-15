@@ -61,6 +61,10 @@ public:
     // ---- Retention des rapports ----
     void pruneReports(const QString& siteId, int keep);
 
+    // Efface TOUT ce qui concerne un site (rapports, alertes, etat des lieux, reglages
+    // propres) en une transaction ; les autres sites ne sont pas touches.
+    bool deleteSite(const QString& siteId);
+
 private:
     QSqlDatabase m_db;
     QString m_error;

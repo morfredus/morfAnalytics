@@ -22,6 +22,7 @@
 #include "morfanalytics/MonitorModule.h"
 #include "morfanalytics/GitHubAnalyticsModule.h"
 #include "morfanalytics/pages/GitHubPage.h"
+#include "morfanalytics/pages/GitHubSettingsPage.h"
 #include "morfanalytics/pages/Theme.h"
 
 #include <QEventLoop>
@@ -356,6 +357,18 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
     } else if (path == "/sitewatch/config/mute") {
         if (method != "POST") { code = 405; reason = "Method Not Allowed"; out = "{\"error\":\"use POST\"}"; }
         else out = handleSiteWatchMutePost(body, code, reason);
+    } else if (path == "/github/config") {
+        if (method == "POST") out = handleGitHubConfigPost(body, code, reason);
+        else out = githubConfigJson();
+    } else if (path == "/github/config/mute") {
+        if (method != "POST") { code = 405; reason = "Method Not Allowed"; out = "{\"error\":\"use POST\"}"; }
+        else out = handleGitHubMutePost(body, code, reason);
+    } else if (path == "/github/delete") {
+        if (method != "POST") { code = 405; reason = "Method Not Allowed"; out = "{\"error\":\"use POST\"}"; }
+        else out = handleGitHubDeletePost(body, code, reason);
+    } else if (path == "/sitewatch/delete") {
+        if (method != "POST") { code = 405; reason = "Method Not Allowed"; out = "{\"error\":\"use POST\"}"; }
+        else out = handleSiteWatchDeletePost(body, code, reason);
     } else if (path == "/sitewatch/config/test") {
         if (method != "POST") { code = 405; reason = "Method Not Allowed"; out = "{\"error\":\"use POST\"}"; }
         else out = handleSiteWatchTestPost(body);
@@ -726,6 +739,18 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
     } else if (path == "/github") {
         reply(sock, 200, "OK", pages::Theme::apply(pages::GitHubPage::render()), "text/html; charset=utf-8");
         return;
+    } else if (path == "/github/settings") {
+        reply(sock, 200, "OK", pages::Theme::apply(pages::GitHubSettingsPage::render()), "text/html; charset=utf-8");
+        return;
+    } else if (path == "/github/alerts") {
+        // Historique des alertes GitHub : d'un depot (?repo=) ou de tous (identifiants « github:* »).
+        const int qm = rawPath.indexOf('?');
+        const QUrlQuery q(qm < 0 ? QString() : QString::fromUtf8(rawPath.mid(qm + 1)));
+        const QString repo = q.queryItemValue(QStringLiteral("repo"), QUrl::FullyDecoded);
+        const int asked = q.queryItemValue(QStringLiteral("limit")).toInt();
+        out = toJson(QJsonObject{{"alerts", m_alerts ? m_alerts->history(
+            repo.isEmpty() ? QStringLiteral("github:*") : QStringLiteral("github:") + repo, asked > 0 ? asked : 50)
+            : QJsonArray{}}});
     } else if (path == "/github/data") {
         auto* module = m_registry
             ? qobject_cast<GitHubAnalyticsModule*>(m_registry->firstOfType(QStringLiteral("github")))
@@ -864,6 +889,7 @@ QByteArray HttpServer::handleGitHubIngest(const QByteArray& body, int& code, QBy
         return toJson(QJsonObject{{"error", "ingestion refusee"},
                                   {"detail", module->statusJson().value(QStringLiteral("last_error")).toString()}});
     }
+    evaluateGitHubAlerts();
     return toJson(QJsonObject{{"ok", true}});
 }
 
@@ -1025,6 +1051,20 @@ QByteArray HttpServer::handleSiteWatchMutePost(const QByteArray& body, int& code
     s.insert(QStringLiteral("muted"), muted);
     m_alerts->saveSettings(scope, s);
     return siteWatchConfigJson();
+}
+
+// POST /sitewatch/delete {site_id} : supprime un site suivi et toutes ses donnees (rapports,
+// alertes, reglages du site). Irreversible. Si SiteWatch publie de nouveau pour ce site, il
+// reapparaitra : l'arreter cote SiteWatch avant de le supprimer ici.
+QByteArray HttpServer::handleSiteWatchDeletePost(const QByteArray& body, int& code, QByteArray& reason) {
+    const QString siteId = QJsonDocument::fromJson(body).object().value(QStringLiteral("site_id")).toString();
+    if (!m_alerts || siteId.isEmpty()) { code = 400; reason = "Bad Request"; return "{\"error\":\"site_id requis\"}"; }
+    if (!m_alerts->deleteSite(siteId)) {
+        code = 500; reason = "Internal Server Error";
+        return toJson(QJsonObject{{"error", "suppression impossible"}, {"detail", m_alerts->lastError()}});
+    }
+    m_siteWatchReports.remove(siteId);   // instantane memoire de repli
+    return toJson(QJsonObject{{"deleted", siteId}});
 }
 
 // POST /sitewatch/config/test : envoie une notification de test et rend le resultat reel.
@@ -1268,6 +1308,7 @@ void HttpServer::evaluateSiteWatchAlerts(const QJsonObject& report) {
 void HttpServer::evaluateAllSiteWatchAlerts() {
     for (const QJsonValue& v : siteWatchReports())
         evaluateSiteWatchAlerts(v.toObject());
+    evaluateGitHubAlerts();
     // Echecs d'envoi precedents (morfNotify arrete, reseau coupe) : on retente a chaque passage.
     if (m_alerts)
         for (const auto& p : m_alerts->due()) sendNotification(p);
@@ -1295,6 +1336,112 @@ void HttpServer::sendNotification(const SiteWatchAlertStore::Pending& p) {
         m_notifyInflight.remove(key);
         reply->deleteLater();
     });
+}
+
+// ---- Alertes GitHub ------------------------------------------------------------
+
+// Configuration : seuils et regles dans la portee « github » ; sourdines par depot dans
+// « site:github:<depot> » (meme schema que SiteWatch, donc deleteSite() efface tout d'un coup).
+github::AlertConfig HttpServer::githubAlertConfigFor(const QString& repo) const {
+    if (!m_alerts) return {};
+    github::AlertConfig cfg = github::alertConfigFromJson(m_alerts->settings(QStringLiteral("github")));
+    if (!repo.isEmpty()) {
+        const QJsonObject muted = m_alerts->settings(QStringLiteral("site:github:") + repo)
+                                      .value(QStringLiteral("muted")).toObject();
+        for (auto it = muted.begin(); it != muted.end(); ++it)
+            if (QDate::fromString(it.value().toString(), Qt::ISODate).isValid())
+                cfg.muted.insert(it.key(), it.value().toString());
+    }
+    return cfg;
+}
+
+QByteArray HttpServer::githubConfigJson() const {
+    QJsonArray rules;
+    for (const sitewatch::RuleInfo& r : github::ruleCatalog())
+        rules.append(QJsonObject{{"id", r.id}, {"label", r.label}, {"description", r.description},
+                                 {"default_level", r.defaultLevel}});
+    QJsonArray repos;
+    auto* module = m_registry
+        ? qobject_cast<GitHubAnalyticsModule*>(m_registry->firstOfType(QStringLiteral("github"))) : nullptr;
+    if (module)
+        for (const QString& name : module->repositoryNames())
+            repos.append(QJsonObject{{"full_name", name}, {"muted",
+                m_alerts ? m_alerts->settings(QStringLiteral("site:github:") + name).value(QStringLiteral("muted")).toObject()
+                         : QJsonObject{}}});
+    const QJsonObject n = notifySettings();
+    return toJson(QJsonObject{{"global", github::alertConfigToJson(githubAlertConfigFor(QString()))},
+        {"defaults", github::alertConfigToJson(github::AlertConfig())}, {"rules", rules}, {"repos", repos},
+        {"notify", QJsonObject{{"enabled", n.value(QStringLiteral("enabled"))}, {"min_level", n.value(QStringLiteral("min_level"))},
+                               {"targets", n.value(QStringLiteral("targets"))}}},
+        {"delivery_backlog", m_alerts ? m_alerts->failedCount() : 0}});
+}
+
+// POST /github/config {settings} : seuils et regles. Tout est borne a la lecture ; les sourdines
+// ne se changent pas depuis ce formulaire (elles ont leur propre appel).
+QByteArray HttpServer::handleGitHubConfigPost(const QByteArray& body, int& code, QByteArray& reason) {
+    const QJsonDocument doc = QJsonDocument::fromJson(body);
+    if (!doc.isObject() || !m_alerts) {
+        code = 400; reason = "Bad Request"; return "{\"error\":\"corps JSON invalide\"}";
+    }
+    QJsonObject out = github::alertConfigToJson(github::alertConfigFromJson(doc.object().value(QStringLiteral("settings")).toObject()));
+    out.insert(QStringLiteral("muted"), m_alerts->settings(QStringLiteral("github")).value(QStringLiteral("muted")).toObject());
+    m_alerts->saveSettings(QStringLiteral("github"), out);
+    evaluateGitHubAlerts();   // les nouveaux reglages s'appliquent tout de suite
+    return githubConfigJson();
+}
+
+// POST /github/config/mute {repo?, rule, days} : sourdine d'une regle (« * » = toutes), globale ou
+// pour un depot ; days = 0 la leve. Une alerte en sourdine reste enregistree, jamais envoyee.
+QByteArray HttpServer::handleGitHubMutePost(const QByteArray& body, int& code, QByteArray& reason) {
+    const QJsonObject in = QJsonDocument::fromJson(body).object();
+    const QString rule = in.value(QStringLiteral("rule")).toString();
+    bool known = rule == QLatin1String("*");
+    for (const sitewatch::RuleInfo& r : github::ruleCatalog()) if (r.id == rule) known = true;
+    if (!m_alerts || !known) { code = 400; reason = "Bad Request"; return "{\"error\":\"regle inconnue\"}"; }
+    const QString repo = in.value(QStringLiteral("repo")).toString();
+    const QString scope = repo.isEmpty() ? QStringLiteral("github") : QStringLiteral("site:github:") + repo;
+    const int days = std::max(0, std::min(365, in.value(QStringLiteral("days")).toInt()));
+    QJsonObject s = m_alerts->settings(scope);
+    QJsonObject muted = s.value(QStringLiteral("muted")).toObject();
+    if (days > 0) muted.insert(rule, QDate::currentDate().addDays(days).toString(Qt::ISODate));
+    else muted.remove(rule);
+    s.insert(QStringLiteral("muted"), muted);
+    m_alerts->saveSettings(scope, s);
+    return githubConfigJson();
+}
+
+// POST /github/delete {repo} : supprime un depot et toutes ses donnees (trafic, releases, telechargements,
+// alertes, sourdines). Irreversible. Si SiteWatch publie de nouveau pour ce depot, il reapparaitra.
+QByteArray HttpServer::handleGitHubDeletePost(const QByteArray& body, int& code, QByteArray& reason) {
+    const QString repo = QJsonDocument::fromJson(body).object().value(QStringLiteral("repo")).toString();
+    auto* module = m_registry
+        ? qobject_cast<GitHubAnalyticsModule*>(m_registry->firstOfType(QStringLiteral("github"))) : nullptr;
+    if (!module || repo.isEmpty()) { code = 400; reason = "Bad Request"; return "{\"error\":\"depot requis\"}"; }
+    if (!module->deleteRepository(repo) || (m_alerts && !m_alerts->deleteSite(QStringLiteral("github:") + repo))) {
+        code = 500; reason = "Internal Server Error";
+        return toJson(QJsonObject{{"error", "suppression impossible"},
+                                  {"detail", module->statusJson().value(QStringLiteral("last_error")).toString()}});
+    }
+    return toJson(QJsonObject{{"deleted", repo}});
+}
+
+// Evalue les regles de chaque depot et envoie les NOUVELLES alertes (cle stable : un seul envoi par
+// situation). Le premier passage sur un depot est un etat des lieux silencieux.
+void HttpServer::evaluateGitHubAlerts() {
+    auto* module = m_registry
+        ? qobject_cast<GitHubAnalyticsModule*>(m_registry->firstOfType(QStringLiteral("github"))) : nullptr;
+    if (!m_alerts || !module) return;
+    const QStringList globalTargets = notifyTargets();
+    const QJsonObject n = notifySettings();
+    for (const QString& name : module->repositoryNames()) {
+        auto alerts = github::evaluateAlerts(module->repository(name), QDate::currentDate(), githubAlertConfigFor(name));
+        for (sitewatch::Alert& a : alerts)
+            if (a.targets.isEmpty()) a.targets = globalTargets;
+        const auto pending = m_alerts->record(QStringLiteral("github:") + name, alerts,
+                                              n.value(QStringLiteral("min_level")).toString(),
+                                              n.value(QStringLiteral("enabled")).toBool());
+        for (const auto& p : pending) sendNotification(p);
+    }
 }
 
 QByteArray HttpServer::landingPage() {

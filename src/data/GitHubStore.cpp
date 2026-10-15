@@ -426,8 +426,11 @@ QJsonObject GitHubStore::overview(const QString& repo, const QString& fromDay,
     q.exec();
     o[QStringLiteral("clones_total")] = q.next() ? q.value(0).toLongLong() : 0;
 
-    q.exec(QStringLiteral("SELECT SUM(CASE WHEN delta IS NULL THEN 0 ELSE delta END) "
-                          "FROM github_asset_download_snapshots"));
+    q.prepare(QStringLiteral("SELECT SUM(CASE WHEN delta IS NULL THEN 0 ELSE delta END) "
+                             "FROM github_asset_download_snapshots WHERE 1=1")
+              + (repo.isEmpty() ? QString() : QStringLiteral(" AND full_name=?")));
+    if (!repo.isEmpty()) q.addBindValue(repo);
+    q.exec();
     o[QStringLiteral("downloads_delta")] = q.next() ? q.value(0).toLongLong() : 0;
 
     q.prepare(QStringLiteral(
@@ -462,7 +465,10 @@ QJsonObject GitHubStore::overview(const QString& repo, const QString& fromDay,
         "(SELECT SUM(count) FROM github_traffic_daily d WHERE d.full_name=r.full_name "
         " AND d.metric='clones'");
     repoSql += trafficAnd(false);
-    repoSql += QStringLiteral(") AS clones FROM github_repositories r");
+    repoSql += QStringLiteral(") AS clones, "
+        "(SELECT SUM(CASE WHEN s.delta IS NULL THEN 0 ELSE s.delta END) "
+        " FROM github_asset_download_snapshots s WHERE s.full_name=r.full_name) AS downloads, "
+        "r.forks, r.last_imported_at FROM github_repositories r");
     if (!repo.isEmpty())
         repoSql += QStringLiteral(" WHERE r.full_name=?");
     repoSql += QStringLiteral(" ORDER BY views DESC");
@@ -479,14 +485,34 @@ QJsonObject GitHubStore::overview(const QString& repo, const QString& fromDay,
             {QStringLiteral("last_release"), q.value(2).toString()},
             {QStringLiteral("views"), q.value(3).toLongLong()},
             {QStringLiteral("clones"), q.value(4).toLongLong()},
+            {QStringLiteral("downloads"), q.value(5).toLongLong()},
+            {QStringLiteral("forks"), q.value(6).toInt()},
+            {QStringLiteral("last_imported_at"), static_cast<double>(q.value(7).toLongLong())},
         });
     }
     o[QStringLiteral("repos")] = repos;
 
+    // Vues quotidiennes par depot (petites courbes du tableau), sur la meme fenetre.
+    QJsonObject repoDaily;
+    q.prepare(QStringLiteral("SELECT full_name, day, SUM(count) FROM github_traffic_daily "
+                             "WHERE metric='views'") + trafficAnd(true)
+              + QStringLiteral(" GROUP BY full_name, day ORDER BY day"));
+    bindTraffic(q, true);
+    q.exec();
+    while (q.next()) {
+        const QString key = q.value(0).toString();
+        QJsonArray a = repoDaily.value(key).toArray();
+        a.append(QJsonArray{q.value(1).toString(), q.value(2).toLongLong()});
+        repoDaily.insert(key, a);
+    }
+    o[QStringLiteral("repo_daily")] = repoDaily;
+
     QJsonArray daily;
     q.prepare(QStringLiteral(
         "SELECT day, SUM(CASE WHEN metric='views' THEN count ELSE 0 END), "
-        "SUM(CASE WHEN metric='clones' THEN count ELSE 0 END) "
+        "SUM(CASE WHEN metric='clones' THEN count ELSE 0 END), "
+        "SUM(CASE WHEN metric='views' THEN uniques ELSE 0 END), "
+        "SUM(CASE WHEN metric='clones' THEN uniques ELSE 0 END) "
         "FROM github_traffic_daily WHERE 1=1") + trafficAnd(true)
               + QStringLiteral(" GROUP BY day ORDER BY day"));
     bindTraffic(q, true);
@@ -496,15 +522,21 @@ QJsonObject GitHubStore::overview(const QString& repo, const QString& fromDay,
             {QStringLiteral("day"), q.value(0).toString()},
             {QStringLiteral("views"), q.value(1).toLongLong()},
             {QStringLiteral("clones"), q.value(2).toLongLong()},
+            {QStringLiteral("views_uniques"), q.value(3).toLongLong()},
+            {QStringLiteral("clones_uniques"), q.value(4).toLongLong()},
         });
     }
     o[QStringLiteral("daily")] = daily;
 
     QJsonArray platforms;
-    q.exec(QStringLiteral(
+    q.prepare(QStringLiteral(
         "SELECT a.platform, SUM(s.delta) FROM github_asset_download_snapshots s "
         "JOIN github_release_assets a ON a.full_name=s.full_name AND a.asset_id=s.asset_id "
-        "WHERE s.delta IS NOT NULL GROUP BY a.platform"));
+        "WHERE s.delta IS NOT NULL")
+              + (repo.isEmpty() ? QString() : QStringLiteral(" AND s.full_name=?"))
+              + QStringLiteral(" GROUP BY a.platform"));
+    if (!repo.isEmpty()) q.addBindValue(repo);
+    q.exec();
     while (q.next()) {
         platforms.append(QJsonObject{
             {QStringLiteral("platform"), q.value(0).toString()},
@@ -512,6 +544,26 @@ QJsonObject GitHubStore::overview(const QString& repo, const QString& fromDay,
         });
     }
     o[QStringLiteral("platforms")] = platforms;
+
+    // Classements glissants de 14 jours : on additionne le DERNIER instantane de chaque depot.
+    auto ranking = [&](const QString& table, const QString& col) {
+        QJsonArray out;
+        QSqlQuery r(m_db);
+        r.prepare(QStringLiteral("SELECT %1, SUM(count) AS c FROM %2 WHERE object_id IN ("
+                                 "SELECT object_id FROM github_collection_runs r WHERE r.collected_at="
+                                 "(SELECT MAX(collected_at) FROM github_collection_runs WHERE full_name=r.full_name))")
+                      .arg(col, table)
+                  + (repo.isEmpty() ? QString() : QStringLiteral(" AND full_name=?"))
+                  + QStringLiteral(" GROUP BY %1 ORDER BY c DESC LIMIT 12").arg(col));
+        if (!repo.isEmpty()) r.addBindValue(repo);
+        if (r.exec())
+            while (r.next())
+                out.append(QJsonObject{{QStringLiteral("name"), r.value(0).toString()},
+                                       {QStringLiteral("count"), r.value(1).toLongLong()}});
+        return out;
+    };
+    o[QStringLiteral("top_paths")] = ranking(QStringLiteral("github_popular_paths"), QStringLiteral("path"));
+    o[QStringLiteral("top_referrers")] = ranking(QStringLiteral("github_referrers"), QStringLiteral("referrer"));
     o[QStringLiteral("uniques_note")] = QStringLiteral(
         "Les visiteurs uniques quotidiens ne s'additionnent pas en un unique de periode.");
     o[QStringLiteral("filter_repo")] = repo;
@@ -523,7 +575,7 @@ QJsonObject GitHubStore::overview(const QString& repo, const QString& fromDay,
 QJsonObject GitHubStore::repository(const QString& fullName) const {
     QJsonObject o;
     QSqlQuery q(m_db);
-    q.prepare(QStringLiteral("SELECT owner, name, stars, forks, watchers, last_release_tag "
+    q.prepare(QStringLiteral("SELECT owner, name, stars, forks, watchers, last_release_tag, last_imported_at "
                              "FROM github_repositories WHERE full_name=?"));
     q.addBindValue(fullName);
     if (!q.exec() || !q.next())
@@ -535,6 +587,7 @@ QJsonObject GitHubStore::repository(const QString& fullName) const {
     o[QStringLiteral("forks")] = q.value(3).toInt();
     o[QStringLiteral("watchers")] = q.value(4).toInt();
     o[QStringLiteral("last_release")] = q.value(5).toString();
+    o[QStringLiteral("last_imported_at")] = static_cast<double>(q.value(6).toLongLong());
 
     QJsonArray daily;
     q.prepare(QStringLiteral(
@@ -786,6 +839,23 @@ bool GitHubStore::ingestAuthority(const QJsonObject& payload) {
         m_lastError = m_db.lastError().text();
         return false;
     }
+    return true;
+}
+
+bool GitHubStore::deleteRepository(const QString& fullName) {
+    if (!isOpen() || fullName.isEmpty()) return false;
+    if (!m_db.transaction()) { m_lastError = m_db.lastError().text(); return false; }
+    // Toutes les tables portent `full_name` : une requete par table, dans une transaction.
+    const char* tables[] = {"github_repositories", "github_collection_runs", "github_traffic_daily",
+                            "github_traffic_snapshots", "github_popular_paths", "github_referrers",
+                            "github_releases", "github_release_assets", "github_asset_download_snapshots"};
+    for (const char* t : tables) {
+        QSqlQuery q(m_db);
+        q.prepare(QStringLiteral("DELETE FROM %1 WHERE full_name=?").arg(QLatin1String(t)));
+        q.addBindValue(fullName);
+        if (!q.exec()) { m_lastError = q.lastError().text(); m_db.rollback(); return false; }
+    }
+    if (!m_db.commit()) { m_lastError = m_db.lastError().text(); m_db.rollback(); return false; }
     return true;
 }
 

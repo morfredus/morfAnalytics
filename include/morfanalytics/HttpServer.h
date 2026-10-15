@@ -13,6 +13,7 @@
 #include <QSqlDatabase>
 #include <memory>
 #include "morfanalytics/analysis/SiteWatchInsights.h"
+#include "morfanalytics/analysis/GitHubInsights.h"
 #include "morfanalytics/data/SiteWatchAlertStore.h"
 #include "morfanalytics/ServiceConfig.h"
 
@@ -57,6 +58,13 @@ private:
     QByteArray handleCleanupPost(const QByteArray& body, int& code, QByteArray& reason) const;
     QByteArray handleSiteWatchPost(const QByteArray& body, int& code, QByteArray& reason);
     QByteArray handleGitHubIngest(const QByteArray& body, int& code, QByteArray& reason);
+    // Alertes GitHub : memes stockage, suivi d'envoi et sourdine que SiteWatch (identifiant « github:<depot> »).
+    QByteArray githubConfigJson() const;
+    QByteArray handleGitHubConfigPost(const QByteArray& body, int& code, QByteArray& reason);
+    QByteArray handleGitHubMutePost(const QByteArray& body, int& code, QByteArray& reason);
+    QByteArray handleGitHubDeletePost(const QByteArray& body, int& code, QByteArray& reason);
+    github::AlertConfig githubAlertConfigFor(const QString& repo) const;
+    void evaluateGitHubAlerts();
     bool openSiteWatchStore();
     void loadSiteWatchReports();
     bool saveSiteWatchReport(const QJsonObject& report);
@@ -75,6 +83,7 @@ private:
     QByteArray siteWatchConfigJson() const;
     QByteArray handleSiteWatchConfigPost(const QByteArray& body, int& code, QByteArray& reason);
     QByteArray handleSiteWatchMutePost(const QByteArray& body, int& code, QByteArray& reason);
+    QByteArray handleSiteWatchDeletePost(const QByteArray& body, int& code, QByteArray& reason);
     QByteArray handleSiteWatchTestPost(const QByteArray& body);
     QByteArray siteWatchTargetsJson();
     sitewatch::AlertConfig alertConfigFor(const QString& siteId) const;
