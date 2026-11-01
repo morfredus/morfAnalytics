@@ -3,6 +3,12 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.75.1] - 2026-11-02
+
+### Fixed
+
+- No functional change. The release tag has to land after the repository cleanup (tracked SQLite cache files, local `config/morfanalytics.json` and `scripts/linux/deploy-config.sh` removed from git), otherwise the packaging step refuses the artifacts ("artifact commit does not match source tag"); this is also the first version published with its arm64 package.
+
 ## [0.75.0] - 2026-10-15
 
 ### Added
