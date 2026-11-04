@@ -181,6 +181,7 @@ function globalView(ov,prev,alerts,per){
     tile("Clones",fmt(ov.clones_total),delta(ov.clones_total,prev&&prev.clones_total,true))+
     tile("Téléchargements",fmt(ov.downloads_delta),"depuis le suivi (écarts entre relevés)")+
     tile("Étoiles",fmt(stars),rs.length+" dépôt(s)")+
+    tile("Forks",fmt(rs.reduce((a,r)=>a+(r.forks||0),0)),"tous dépôts confondus")+
     tile("Dépôts actifs",active+" / "+rs.length,"au moins une vue ou un clone")+
     tile("Moyenne de vues / jour",fmt(ov.avg_views_per_day),ov.days_known+" jour(s) connus")+
     tile("Jour le plus actif",esc(ov.busiest_day||"-"),fmt(ov.busiest_views||0)+" vues")+`</div>`;

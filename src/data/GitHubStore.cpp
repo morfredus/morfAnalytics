@@ -694,16 +694,23 @@ bool GitHubStore::ingestAuthority(const QJsonObject& payload) {
         q.prepare(QStringLiteral(
             "INSERT INTO github_repositories(full_name, owner, name, source_id, stars, forks, "
             "watchers, archived, private, last_release_tag, last_imported_at) "
-            "VALUES(?,?,?,?,?,0,0,0,0,?,?) "
+            "VALUES(?,?,?,?,?,COALESCE(?,0),0,0,0,?,?) "
             "ON CONFLICT(full_name) DO UPDATE SET last_release_tag=excluded.last_release_tag, "
-            "stars=excluded.stars, last_imported_at=excluded.last_imported_at"));
+            "stars=excluded.stars, last_imported_at=excluded.last_imported_at, "
+            // Ancien SiteWatch sans "forks" : valeur NULL, on garde le dernier compte connu.
+            "forks=COALESCE(?, forks)"));
         q.addBindValue(full);
         q.addBindValue(owner);
         q.addBindValue(name);
         q.addBindValue(QStringLiteral("sitewatch:github:") + full);
         q.addBindValue(static_cast<qint64>(repo.value(QStringLiteral("stars")).toDouble()));
+        const QVariant forks = repo.contains(QStringLiteral("forks"))
+            ? QVariant(static_cast<qint64>(repo.value(QStringLiteral("forks")).toDouble()))
+            : QVariant(QMetaType(QMetaType::LongLong));
+        q.addBindValue(forks);
         q.addBindValue(repo.value(QStringLiteral("last_release")).toString());
         q.addBindValue(QDateTime::currentSecsSinceEpoch());
+        q.addBindValue(forks);
         if (!q.exec()) { m_lastError = q.lastError().text(); m_db.rollback(); return false; }
 
         for (const QJsonValue& dv : repo.value(QStringLiteral("daily")).toArray()) {

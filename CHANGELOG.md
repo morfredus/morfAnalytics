@@ -3,6 +3,16 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.76.0] - 2026-11-04
+
+### Fixed
+
+- GitHub forks were always 0 for repositories received from SiteWatch (the publication did not carry them). They are now read from the payload; an older SiteWatch keeps the last known count.
+
+### Added
+
+- A "Forks" tile in the GitHub global view.
+
 ## [0.75.1] - 2026-11-02
 
 ### Fixed
