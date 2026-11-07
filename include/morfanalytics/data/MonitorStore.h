@@ -123,7 +123,8 @@ public:
     // Oubli DÉFINITIF d'une machine : supprime sa ligne de registre ET tout son
     // historique (relevés machine, relevés service, activités). Irréversible, à
     // réserver à une machine réellement partie. Renvoie le nombre de lignes
-    // effacées (toutes tables), ou -1 si la machine était inconnue.
+    // effacées (toutes tables), -1 si la machine était inconnue, -2 si la suppression
+    // a échoué (transaction annulée, base inchangée ; voir lastError()).
     qint64 forgetMachine(const QString& key);
 
 private:

@@ -101,6 +101,8 @@ private:
     ModuleRegistry* m_registry;
     QTcpServer*     m_server;
     QElapsedTimer   m_uptime;
+    int             m_openSockets = 0;   // connexions ouvertes (plafonnees)
+    bool            m_heavyBusy = false; // une route a boucle imbriquee est en cours
     QHash<QString, QJsonObject> m_siteWatchReports;
     QSqlDatabase    m_siteWatchDb;
     QString         m_siteWatchConnectionName;

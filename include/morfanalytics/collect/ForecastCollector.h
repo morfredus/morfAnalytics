@@ -33,6 +33,7 @@ public:
 
     void sync();
     bool isRunning() const { return m_running; }
+    void abort();   // annule la requete en vol (arret du module)
     QJsonObject statusJson() const;
 
 signals:

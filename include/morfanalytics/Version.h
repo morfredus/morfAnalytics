@@ -16,7 +16,7 @@ namespace morfanalytics {
 
 inline QString version() { return QStringLiteral(MORFANALYTICS_VERSION); }
 
-// Version du protocole HTTP/JSON expose. >>> A ADAPTER si l'API change. <<<
+// Version du protocole HTTP/JSON expose (a incrementer si l'API change).
 inline constexpr const char* kProtocol = "morfanalytics/1";
 
 } // namespace morfanalytics

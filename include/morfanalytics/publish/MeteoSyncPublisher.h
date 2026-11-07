@@ -11,6 +11,11 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QtGlobal>
+#include <QVector>
+#include <QPair>
+
+class QNetworkAccessManager;
+class QNetworkReply;
 
 namespace morfanalytics {
 
@@ -55,10 +60,22 @@ public:
 
     MeteoSyncPublisher(SampleStore* store, Config cfg, QObject* parent = nullptr);
 
-    // Publie les jours dont la synthese a change depuis le dernier envoi reussi.
-    // Best-effort : renvoie le nombre de jours publies (0 si rien a faire, hub
-    // injoignable, ou erreur -- l'erreur est lisible via statusJson()).
-    int publish();
+    // Jours par requete : assez peu pour tenir dans le delai, assez pour qu'un
+    // rattrapage complet (~1 an) ne demande qu'une dizaine de requetes.
+    static constexpr int kBatchDays = 40;
+
+    // Choix PUR (testable) du prochain lot : jours dont la revision a avance,
+    // du plus ancien au plus recent, plafonnes a `maxDays`.
+    static QVector<quint32> selectBatch(const QHash<quint32, quint32>& perDay,
+                                        const QHash<quint32, quint32>& published, int maxDays);
+
+    // Publie, de facon ASYNCHRONE et par lots, les jours dont la synthese a change
+    // depuis le dernier envoi reussi. Best-effort : sans effet si une requete est
+    // deja en vol ; l'erreur est lisible via statusJson().
+    void publish();
+
+    // Annule la requete en vol (arret du module, avant la fermeture des bases).
+    void abort();
 
     bool enabled() const { return !m_cfg.baseUrl.isEmpty(); }
     QJsonObject statusJson() const;
@@ -66,6 +83,12 @@ public:
 private:
     SampleStore* m_store;
     Config       m_cfg;
+    void onReply(QNetworkReply* reply);
+
+    QNetworkAccessManager*  m_net = nullptr;
+    bool                    m_inflight = false;
+    bool                    m_stopped = false;
+    QVector<QPair<quint32, quint32>> m_batch; // (day_key, rev) du lot en vol
     QHash<quint32, quint32> m_publishedRev; // day_key -> dernier rev publie (en memoire)
     qint64  m_lastPublishTs = 0;
     int     m_lastPublished = 0;

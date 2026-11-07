@@ -141,20 +141,36 @@ qint64 MonitorStore::forgetMachine(const QString& key) {
 
     // Le hostname sert de clé aux activités (elles sont signalées par nom d'hôte,
     // pas par id interne). Ici key == hostname (voir upsertMachine côté collecte).
+    // UNE transaction : un oubli à moitié fait (relevés effacés mais machine encore
+    // au registre, ou l'inverse) laisserait une base incohérente. Au premier échec,
+    // rollback complet et code -2 (distinct de -1, machine inconnue).
+    if (!m_db.transaction()) {
+        m_lastError = m_db.lastError().text();
+        return -2;
+    }
     qint64 removed = 0;
     auto del = [&](const QString& sql, const QVariant& bind) {
         QSqlQuery q(m_db);
         q.prepare(sql);
         q.addBindValue(bind);
-        if (q.exec()) {
-            const int n = q.numRowsAffected();
-            if (n > 0) removed += n;
+        if (!q.exec()) {
+            m_lastError = q.lastError().text();
+            return false;
         }
+        const int n = q.numRowsAffected();
+        if (n > 0) removed += n;
+        return true;
     };
-    del(QStringLiteral("DELETE FROM sample_machine WHERE machine_id = ?"), mid);
-    del(QStringLiteral("DELETE FROM sample_service WHERE machine_id = ?"), mid);
-    del(QStringLiteral("DELETE FROM activity WHERE machine = ?"), key);
-    del(QStringLiteral("DELETE FROM machine WHERE id = ?"), mid);
+    const bool ok =
+        del(QStringLiteral("DELETE FROM sample_machine WHERE machine_id = ?"), mid)
+        && del(QStringLiteral("DELETE FROM sample_service WHERE machine_id = ?"), mid)
+        && del(QStringLiteral("DELETE FROM activity WHERE machine = ?"), key)
+        && del(QStringLiteral("DELETE FROM machine WHERE id = ?"), mid);
+    if (!ok || !m_db.commit()) {
+        if (ok) m_lastError = m_db.lastError().text();
+        m_db.rollback();
+        return -2;
+    }
     return removed;
 }
 

@@ -10,6 +10,8 @@
 #include <QJsonObject>
 #include <QQueue>
 #include <QPair>
+#include <QHash>
+#include <QJsonArray>
 
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -54,7 +56,11 @@ public:
     void sync();
 
     bool isRunning() const { return m_running; }
+    void abort();   // annule la requete en vol (arret du module)
     QJsonObject statusJson() const;
+
+    // Canaux temp/hum/pres d'une ligne [ts, t, h, p, ...] ; null ou hors plage = NaN (manquant).
+    static QHash<QString, double> channelsFromRow(const QJsonArray& row);
 
 signals:
     // Emis en fin de cycle. `imported` = nombre de mesures reellement ajoutees.

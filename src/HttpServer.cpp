@@ -5,6 +5,7 @@
  */
 
 #include "morfanalytics/HttpServer.h"
+#include "morfanalytics/HttpGuards.h"
 #include "morfanalytics/ModuleRegistry.h"
 #include "morfanalytics/AnalyticsModule.h"
 #include "morfanalytics/StatePaths.h"
@@ -64,6 +65,9 @@ namespace {
 // journalières. Une limite d'un mégaoctet reste protectrice sur le réseau local
 // tout en acceptant les rapports produits par les versions antérieures.
 constexpr int kMaxRequestBytes = 1024 * 1024;
+// Plafond de connexions ouvertes et delai pour recevoir une requete complete.
+constexpr int kMaxConnections = 64;
+constexpr int kRequestTimeoutMs = 15000;
 
 QByteArray toJson(const QJsonObject& o) {
     return QJsonDocument(o).toJson(QJsonDocument::Compact);
@@ -287,6 +291,21 @@ quint16 HttpServer::port() const   { return m_server->isListening() ? m_server->
 void HttpServer::onNewConnection() {
     while (m_server->hasPendingConnections()) {
         QTcpSocket* sock = m_server->nextPendingConnection();
+        // Plafond de connexions simultanees : des sockets ouverts sans rien envoyer
+        // (ou en-tetes jamais finis) ne doivent pas epuiser les descripteurs du Pi.
+        if (m_openSockets >= kMaxConnections) {
+            sock->abort();
+            sock->deleteLater();
+            continue;
+        }
+        ++m_openSockets;
+        connect(sock, &QObject::destroyed, this, [this]() { --m_openSockets; });
+        // Delai d'inactivite : une requete doit arriver COMPLETE dans ce delai, sinon
+        // la connexion est coupee (client lent ou malveillant, en-tetes partiels).
+        // `sock` sert de contexte : socket detruit => timer annule.
+        QTimer::singleShot(kRequestTimeoutMs, sock, [sock]() {
+            if (!sock->property("started").toBool()) sock->abort();
+        });
         connect(sock, &QTcpSocket::readyRead, this, [this, sock]() { onSocketReadyRead(sock); });
         // Destruction différée si une requête est EN COURS sur ce socket. Certaines
         // routes attendent le réseau dans une boucle d'événements imbriquée
@@ -303,6 +322,10 @@ void HttpServer::onNewConnection() {
 }
 
 void HttpServer::onSocketReadyRead(QTcpSocket* sock) {
+    // Requete deja en cours de traitement sur ce socket (boucle imbriquee d'une route
+    // lourde) : ne rien lire ni relancer, la reponse partira a la fin du traitement.
+    if (sock->property("busy").toBool() || sock->property("started").toBool())
+        return;
     QByteArray buf = sock->property("buf").toByteArray();
     buf += sock->readAll();
 
@@ -330,9 +353,30 @@ void HttpServer::onSocketReadyRead(QTcpSocket* sock) {
     const QByteArray body   = buf.mid(bodyStart, needed);
 
     sock->setProperty("buf", QByteArray());
+    sock->setProperty("started", true);   // requete complete : le delai d'inactivite ne s'applique plus
+
+    // CSRF : refuser une ecriture venue d'une autre origine (voir HttpGuards.h).
+    if (isCrossOriginWrite(method, headerBlock)) {
+        reply(sock, 403, "Forbidden", "{\"error\":\"cross_origin_forbidden\"}");
+        return;
+    }
+
+    // Routes LOURDES : elles attendent le reseau dans une boucle d'evenements imbriquee
+    // (test de notification, destinations morfNotify, dataset morfPhoto). Pendant cette
+    // attente le serveur traite d'autres requetes ; en empiler plusieurs imbriquerait les
+    // boucles sans borne. Une seule a la fois, les suivantes recoivent 503 + Retry-After.
+    const QByteArray canon = canonicalPath(path);
+    const bool heavy = canon == "/sitewatch/config/test" || canon == "/sitewatch/config/targets"
+        || (canon == "/photo/data" && path.contains("source"));
+    if (heavy && m_heavyBusy) {
+        reply(sock, 503, "Service Unavailable", "{\"error\":\"busy\",\"retry\":true}");
+        return;
+    }
+    if (heavy) m_heavyBusy = true;
     sock->setProperty("busy", true);
     handleRequest(sock, method, path, body);
     sock->setProperty("busy", false);
+    if (heavy) m_heavyBusy = false;
     // Client parti pendant le traitement : la destruction avait été différée.
     if (sock->property("closed").toBool()) sock->deleteLater();
 }
@@ -442,9 +486,14 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             } else if (key.isEmpty()) {
                 code = 400; reason = "Bad Request";
                 out = "{\"error\":\"champ 'machine' obligatoire\"}";
-            } else if (!module->forgetMachine(key)) {
-                code = 404; reason = "Not Found";
-                out = "{\"forgotten\":false,\"error\":\"machine inconnue\"}";
+            } else if (bool failed = false; !module->forgetMachine(key, &failed)) {
+                if (failed) {
+                    code = 500; reason = "Internal Server Error";
+                    out = "{\"forgotten\":false,\"error\":\"suppression annulee\"}";
+                } else {
+                    code = 404; reason = "Not Found";
+                    out = "{\"forgotten\":false,\"error\":\"machine inconnue\"}";
+                }
             } else {
                 out = toJson(QJsonObject{{"forgotten", true}, {"machine", key}});
             }
@@ -3015,7 +3064,8 @@ void HttpServer::reply(QTcpSocket* sock, int code, const QByteArray& reason, con
     resp += "HTTP/1.1 " + QByteArray::number(code) + " " + reason + "\r\n";
     resp += "Content-Type: " + contentType + "\r\n";
     resp += "Content-Length: " + QByteArray::number(body.size()) + "\r\n";
-    resp += "Access-Control-Allow-Origin: *\r\n";
+    // Pas d'Access-Control-Allow-Origin : aucun client navigateur cross-origin dans le
+    // parc (les pages sont servies par ce service lui-meme), et `*` ouvrait les ecritures.
     resp += "Connection: close\r\n\r\n";
     resp += body;
     sock->write(resp);

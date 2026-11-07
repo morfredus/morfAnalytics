@@ -73,7 +73,9 @@ public:
     // et tout son historique. Geste explicite, réservé à une machine réellement
     // partie. Retire aussi sa source découverte pour ne pas la réintégrer aussitôt.
     // Renvoie false si la machine était inconnue.
-    bool forgetMachine(const QString& key);
+    // `failed` (optionnel) passe à true si la base a refusé la suppression (annulée) :
+    // l'appelant distingue ainsi « machine inconnue » (404) d'une erreur (500).
+    bool forgetMachine(const QString& key, bool* failed = nullptr);
 
     // Ingestion d'une activité signalée par un composant métier (morfDeploy pour
     // les compilations, morfPhoto pour les indexations…). Renvoie l'id, ou -1.

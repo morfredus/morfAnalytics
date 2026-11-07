@@ -219,12 +219,15 @@ void MonitorModule::onBeaconDatagram() {
     }
 }
 
-bool MonitorModule::forgetMachine(const QString& key) {
+bool MonitorModule::forgetMachine(const QString& key, bool* failed) {
+    if (failed) *failed = false;
     if (!m_store)
         return false;
     const qint64 removed = m_store->forgetMachine(key);
+    if (removed == -2 && failed)
+        *failed = true;   // erreur SQL : rien n'a été supprimé
     if (removed < 0)
-        return false;   // machine inconnue
+        return false;   // machine inconnue ou suppression annulée
 
     // Retirer aussi la ou les sources découvertes qui pointaient vers cette machine,
     // pour ne pas la réintégrer au prochain cycle. On les reconnaît via l'état de

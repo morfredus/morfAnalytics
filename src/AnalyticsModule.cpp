@@ -224,6 +224,12 @@ bool AnalyticsModule::start() {
 void AnalyticsModule::stop() {
     m_running = false;
     m_timer->stop();
+    // Annuler les requetes en vol AVANT de fermer les bases : une reponse tardive
+    // ne doit ni ecrire dans un store ferme, ni relancer un lot de publication.
+    if (m_collector)         m_collector->abort();
+    if (m_collectorOut)      m_collectorOut->abort();
+    if (m_forecastCollector) m_forecastCollector->abort();
+    if (m_publisher)         m_publisher->abort();
     if (m_store)
         m_store->close();
     if (m_storeOut)

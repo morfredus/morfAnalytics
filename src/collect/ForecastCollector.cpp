@@ -11,6 +11,7 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QJsonDocument>
+#include <QJsonParseError>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDateTime>
@@ -59,8 +60,16 @@ void ForecastCollector::onReply(QNetworkReply* reply) {
         return;
     }
 
-    const QJsonObject root = QJsonDocument::fromJson(reply->readAll()).object();
-    const QJsonArray data  = root.value(QStringLiteral("data")).toArray();
+    // Un 200 non-JSON (page d'erreur, proxy, firmware en cours de redemarrage) n'est
+    // pas un succes : sans cette garde, le cycle passait pour reussi avec 0 import.
+    QJsonParseError pe{};
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll(), &pe);
+    if (!m_store->isOpen() || pe.error != QJsonParseError::NoError || !doc.isObject()
+        || !doc.object().value(QStringLiteral("data")).isArray()) {
+        finish(QStringLiteral("reponse invalide"));
+        return;
+    }
+    const QJsonArray data = doc.object().value(QStringLiteral("data")).toArray();
 
     for (const QJsonValue& v : data) {
         const QJsonObject o = v.toObject();
@@ -78,10 +87,20 @@ void ForecastCollector::onReply(QNetworkReply* reply) {
     finish(QString());
 }
 
+void ForecastCollector::abort() {
+    // Appele par stop() AVANT la fermeture des bases : une reponse tardive ne doit
+    // jamais ecrire dans un store ferme. abort() termine la reponse en erreur.
+    for (QNetworkReply* r : m_net->findChildren<QNetworkReply*>())
+        r->abort();
+}
+
 void ForecastCollector::finish(const QString& error) {
     m_lastError    = error;
     m_running      = false;
-    m_lastSyncTs   = QDateTime::currentSecsSinceEpoch();
+    // Date de la derniere synchro REUSSIE : un echec (reseau, reponse invalide)
+    // ne doit pas faire croire que le cache est a jour.
+    if (error.isEmpty())
+        m_lastSyncTs = QDateTime::currentSecsSinceEpoch();
     m_lastImported = m_imported;
     emit finished(m_imported);
 }

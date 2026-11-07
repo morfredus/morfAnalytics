@@ -8,6 +8,7 @@
 
 #include <QTimer>
 #include <QEventLoop>
+#include <QSaveFile>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -503,11 +504,17 @@ bool PhotoAnalyticsModule::savePractice() const {
         {"owned_cameras", arr},
         {"updated_at", nowIso()},
     };
-    QFile f(practicePath());
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    // QSaveFile : écriture dans un fichier temporaire puis renommage atomique. Un disque
+    // plein ou un arrêt en cours d'écriture laisse l'ancien fichier intact au lieu d'un
+    // JSON tronqué lu ensuite comme « aucun boîtier ». commit() est vérifié.
+    QSaveFile f(practicePath());
+    if (!f.open(QIODevice::WriteOnly))
         return false;
-    f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
-    return true;
+    if (f.write(QJsonDocument(o).toJson(QJsonDocument::Indented)) < 0) {
+        f.cancelWriting();
+        return false;
+    }
+    return f.commit();
 }
 
 bool PhotoAnalyticsModule::setOwnedCameras(QStringList names) {

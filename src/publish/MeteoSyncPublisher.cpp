@@ -11,7 +11,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
-#include <QEventLoop>
+#include <algorithm>
 #include <QTimer>
 #include <QUrl>
 #include <QJsonDocument>
@@ -80,26 +80,49 @@ QString trimSlash(QString u) {
 MeteoSyncPublisher::MeteoSyncPublisher(SampleStore* store, Config cfg, QObject* parent)
     : QObject(parent), m_store(store), m_cfg(std::move(cfg)) {}
 
-int MeteoSyncPublisher::publish() {
-    if (!enabled() || !m_store)
-        return 0;
+QVector<quint32> MeteoSyncPublisher::selectBatch(const QHash<quint32, quint32>& perDay,
+                                                 const QHash<quint32, quint32>& published,
+                                                 int maxDays) {
+    // Jours a publier = ceux dont la revision a avance, en ordre CHRONOLOGIQUE (le
+    // QHash n'a pas d'ordre) : les plus anciens partent d'abord, un rattrapage
+    // complet progresse donc de facon previsible lot apres lot.
+    QVector<quint32> due;
+    for (auto it = perDay.constBegin(); it != perDay.constEnd(); ++it) {
+        if (it.key() == 0 || it.value() == 0)
+            continue;
+        if (it.value() <= published.value(it.key(), 0))
+            continue; // inchange depuis le dernier envoi reussi
+        due.append(it.key());
+    }
+    std::sort(due.begin(), due.end());
+    if (maxDays > 0 && due.size() > maxDays)
+        due.resize(maxDays);
+    return due;
+}
+
+void MeteoSyncPublisher::publish() {
+    if (!enabled() || !m_store || m_inflight || m_stopped)
+        return;
 
     // Nombre d'echantillons par jour = revision de la synthese du jour. Un jour
     // dont le compte n'a pas bouge depuis le dernier envoi n'est pas republie.
     const QHash<quint32, quint32> perDay = m_store->samplesPerDay();
 
+    // PAR LOTS : apres un redemarrage m_publishedRev est vide et tout l'historique
+    // serait du. Un seul POST geant (plusieurs centaines de jours) depassait le delai
+    // et echouait en boucle, sans jamais rien valider. Un lot court passe, est valide,
+    // et le suivant part aussitot (voir onReply). Pas de persistance du repere : la
+    // publication est idempotente (meme id + meme rev = aucune ecriture cote morfSync).
+    const QVector<quint32> days = selectBatch(perDay, m_publishedRev, kBatchDays);
+    if (days.isEmpty())
+        return;
+
     QJsonArray changes;
-    QVector<QPair<quint32, quint32>> pushed; // (day_key, rev) a valider si l'envoi reussit
+    m_batch.clear();
     const QString now = nowIso8601Utc();
 
-    for (auto it = perDay.constBegin(); it != perDay.constEnd(); ++it) {
-        const quint32 dayKey = it.key();
-        const quint32 rev    = it.value();
-        if (dayKey == 0 || rev == 0)
-            continue;
-        if (rev <= m_publishedRev.value(dayKey, 0))
-            continue; // inchange depuis le dernier envoi reussi
-
+    for (quint32 dayKey : days) {
+        const quint32 rev = perDay.value(dayKey);
         const Series s = m_store->rangeForDay(dayKey);
         const QVector<qint64>& ts = s.timestamps();
 
@@ -126,59 +149,64 @@ int MeteoSyncPublisher::publish() {
         env["updatedAt"] = now;
         env["data"]      = data;
         changes.append(env);
-        pushed.append(qMakePair(dayKey, rev));
+        m_batch.append(qMakePair(dayKey, rev));
     }
 
-    if (changes.isEmpty())
-        return 0;
-
-    // POST /api/{domain}/changes -- envoi bloquant borne par un delai. Le service
-    // a une boucle d'evenements ; une boucle imbriquee courte est acceptable pour
-    // une publication periodique, et le timeout garantit qu'elle rend la main.
+    // POST /api/{domain}/changes, ASYNCHRONE : plus de boucle d'evenements imbriquee
+    // (elle gelait le serveur HTTP et le heartbeat jusqu'a 4 s par cycle).
     QJsonObject root;
     root["deviceId"] = m_cfg.deviceId;
     root["changes"]  = changes;
     const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Compact);
 
-    QNetworkAccessManager mgr;
+    if (!m_net)
+        m_net = new QNetworkAccessManager(this);
     QNetworkRequest req(QUrl(trimSlash(m_cfg.baseUrl) + "/api/" + m_cfg.domain + "/changes"));
     req.setHeader(QNetworkRequest::ContentTypeHeader,
                   QStringLiteral("application/json; charset=utf-8"));
+    req.setTransferTimeout(m_cfg.timeoutMs > 0 ? m_cfg.timeoutMs : 4000);
     if (!m_cfg.token.isEmpty())
         req.setRawHeader("Authorization", "Bearer " + m_cfg.token.toUtf8());
 
-    QNetworkReply* reply = mgr.post(req, payload);
-    QEventLoop loop;
-    QTimer timer;
-    timer.setSingleShot(true);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
-    timer.start(m_cfg.timeoutMs > 0 ? m_cfg.timeoutMs : 4000);
-    loop.exec();
+    m_inflight = true;
+    QNetworkReply* reply = m_net->post(req, payload);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] { onReply(reply); });
+}
 
-    int published = 0;
-    if (!reply->isFinished()) {
-        reply->abort();
-        m_lastError = QStringLiteral("delai depasse en joignant morfSync");
-    } else if (reply->error() != QNetworkReply::NoError) {
+void MeteoSyncPublisher::onReply(QNetworkReply* reply) {
+    reply->deleteLater();
+    m_inflight = false;
+    bool more = false;
+    if (reply->error() != QNetworkReply::NoError) {
         m_lastError = reply->errorString();
     } else {
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (status == 200) {
-            // Envoi accepte : on avance les reperes en memoire pour ne pas
-            // republier ces jours inchanges au prochain cycle.
-            for (const auto& p : pushed)
+            // Lot accepte : valider UNIQUEMENT ses jours. Un echec ulterieur ne
+            // remet donc jamais en cause ce qui est deja parti.
+            for (const auto& p : m_batch)
                 m_publishedRev[p.first] = p.second;
-            published        = pushed.size();
-            m_lastPublished  = published;
-            m_lastPublishTs  = QDateTime::currentSecsSinceEpoch();
+            m_lastPublished = m_batch.size();
+            m_lastPublishTs = QDateTime::currentSecsSinceEpoch();
             m_lastError.clear();
+            more = m_batch.size() >= kBatchDays;
         } else {
             m_lastError = QStringLiteral("morfSync a repondu HTTP %1").arg(status);
         }
     }
-    reply->deleteLater();
-    return published;
+    m_batch.clear();
+    // Lot plein = il reste probablement des jours : enchainer, via la boucle
+    // d'evenements (pas de recursion). Un echec s'arrete la, le prochain cycle reprend.
+    if (more && !m_stopped)
+        QTimer::singleShot(0, this, [this] { publish(); });
+}
+
+void MeteoSyncPublisher::abort() {
+    // Arret du module : plus de requete en vol, plus d'enchainement.
+    m_stopped = true;
+    if (m_net)
+        for (QNetworkReply* r : m_net->findChildren<QNetworkReply*>())
+            r->abort();
 }
 
 QJsonObject MeteoSyncPublisher::statusJson() const {

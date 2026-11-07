@@ -3,6 +3,34 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.77.2] - 2026-11-07
+
+### Changed
+
+- Removed leftover references to the service skeleton (docs, comments, scripts).
+
+## [0.77.1] - 2026-11-07
+
+### Fixed
+
+- MeteoHub collector: a `null` humidity or pressure (MeteoHub 1.62.0+) is stored as missing instead of being read as 0. An exact 0 % humidity (older hubs) is also discarded as implausible. Covered by the new `meteohubrow` test.
+
+## [0.77.0] - 2026-11-07
+
+### Security
+
+- Write requests (POST, PUT, PATCH, DELETE) whose `Origin` header differs from `Host` are now refused with `403 {"error":"cross_origin_forbidden"}`, so a web page visited from the LAN can no longer purge data, forget a machine or change the alert settings. Clients without an `Origin` header (SiteWatch, morfMonitor, scripts, curl) are unaffected.
+- `Access-Control-Allow-Origin: *` is no longer sent; no cross-origin browser client existed in the fleet.
+
+### Fixed
+
+- morfSync publication runs in batches of 40 days (oldest first), asynchronously and with a transfer timeout, instead of one blocking POST of the whole history after a restart; each batch is validated on its own.
+- MeteoHub and forecast collectors treat a non-JSON or incomplete reply as `invalid response` (cursor not advanced, `last_sync_ts` kept) instead of a successful empty cycle. `last_sync_ts` now dates the last successful sync.
+- `stop()` aborts in-flight collector and publisher requests before closing the databases, and late replies are ignored when the store is closed.
+- Forgetting a machine is one SQL transaction with rollback; a database error now returns 500 instead of a partial deletion reported as success.
+- The Photo practice file is written atomically (`QSaveFile`, `commit()` checked).
+- HTTP server: connections that do not deliver a complete request within 15 s are dropped, at most 64 connections are kept open, and only one heavy route using a nested event loop (notification test, notification targets, Photo dataset) runs at a time (others get 503).
+
 ## [0.76.0] - 2026-11-04
 
 ### Fixed

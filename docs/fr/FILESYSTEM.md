@@ -1,7 +1,7 @@
 # Emplacements des fichiers - morfAnalytics
 
 morfAnalytics suit la doctrine du parc morfSystem (référence complète :
-`morfTemplateService/docs/fr/FILESYSTEM.md`). Ce document précise sa disposition.
+`morfSystem/docs/FILESYSTEM.md`). Ce document précise sa disposition.
 
 ## Les trois zones
 

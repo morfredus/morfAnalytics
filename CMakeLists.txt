@@ -214,4 +214,12 @@ if(MA_BUILD_TESTS)
     add_executable(samplestore_generations_test test/samplestore_generations_test.cpp)
     target_link_libraries(samplestore_generations_test PRIVATE morfAnalytics)
     add_test(NAME samplestore_generations COMMAND samplestore_generations_test)
+
+    add_executable(httpguards_test test/httpguards_test.cpp)
+    target_link_libraries(httpguards_test PRIVATE morfAnalytics)
+    add_test(NAME httpguards COMMAND httpguards_test)
+
+    add_executable(meteohubrow_test test/meteohubrow_test.cpp)
+    target_link_libraries(meteohubrow_test PRIVATE morfAnalytics)
+    add_test(NAME meteohubrow COMMAND meteohubrow_test)
 endif()

@@ -11,6 +11,7 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QJsonDocument>
+#include <QJsonParseError>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDateTime>
@@ -48,7 +49,38 @@ constexpr double kHumMin  = 0.0,    kHumMax  = 100.0;  // %
 double plausible(double v, double lo, double hi) {
     return (v < lo || v > hi) ? std::numeric_limits<double>::quiet_NaN() : v;
 }
+
+// Une cellule JSON devient NaN (donc NULL en base) si elle est null, non numerique ou non
+// finie. Sans cela, toDouble() transformerait le null de MeteoHub >= 1.62.0 en 0.0, que
+// l'humidite accepterait comme une vraie mesure.
+double cell(const QJsonValue& v) {
+    const double d = v.isDouble() ? v.toDouble() : std::numeric_limits<double>::quiet_NaN();
+    return std::isfinite(d) ? d : std::numeric_limits<double>::quiet_NaN();
+}
 } // namespace
+
+QHash<QString, double> MeteoHubCollector::channelsFromRow(const QJsonArray& row) {
+    // Filtre de plausibilite AVANT insertion : une valeur physiquement
+    // impossible devient "manquante" au lieu de polluer les analyses.
+    double temp = plausible(cell(row.at(1)), kTempMin, kTempMax);
+    double hum  = plausible(cell(row.at(2)), kHumMin,  kHumMax);
+    // 0 % exact : sentinelle des anciens hubs (avant le null de 1.62.0), jamais une vraie mesure.
+    if (hum == 0.0)
+        hum = std::numeric_limits<double>::quiet_NaN();
+    const double pres = plausible(cell(row.at(3)), kPresMin, kPresMax);
+    if (std::isnan(pres)) {
+        // Pression impossible = capteur hors service au moment du releve :
+        // le 0 °C et le 0 % qui l'accompagnent ne sont pas des mesures,
+        // toute la ligne est marquee manquante.
+        temp = std::numeric_limits<double>::quiet_NaN();
+        hum  = std::numeric_limits<double>::quiet_NaN();
+    }
+    QHash<QString, double> channels;
+    channels.insert(QStringLiteral("temp"), temp);
+    channels.insert(QStringLiteral("hum"),  hum);
+    channels.insert(QStringLiteral("pres"), pres);
+    return channels;
+}
 
 MeteoHubCollector::MeteoHubCollector(QString baseUrl, SampleStore* store,
                                      QString ctx, QObject* parent)
@@ -94,8 +126,17 @@ void MeteoHubCollector::onDaysReply(QNetworkReply* reply) {
         return;
     }
 
-    const QJsonObject root = QJsonDocument::fromJson(reply->readAll()).object();
-    const QJsonArray days  = root.value(QStringLiteral("days")).toArray();
+    // Reponse non-JSON ou sans la cle attendue : ce n'est pas un jour vide, c'est une
+    // reponse invalide (un 200 d'un proxy ou d'un firmware en panne). On s'arrete
+    // sans rien avancer.
+    QJsonParseError pe{};
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll(), &pe);
+    if (!m_store->isOpen() || pe.error != QJsonParseError::NoError || !doc.isObject()
+        || !doc.object().value(QStringLiteral("days")).isArray()) {
+        finish(QStringLiteral("reponse invalide"));
+        return;
+    }
+    const QJsonArray days = doc.object().value(QStringLiteral("days")).toArray();
 
     for (const QJsonValue& v : days) {
         const QJsonObject d = v.toObject();
@@ -167,7 +208,15 @@ void MeteoHubCollector::onChunkReply(QNetworkReply* reply) {
         return;
     }
 
-    const QJsonObject root = QJsonDocument::fromJson(reply->readAll()).object();
+    QJsonParseError pe{};
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll(), &pe);
+    if (!m_store->isOpen() || pe.error != QJsonParseError::NoError || !doc.isObject()
+        || !doc.object().value(QStringLiteral("data")).isArray()
+        || !doc.object().value(QStringLiteral("total")).isDouble()) {
+        finish(QStringLiteral("reponse invalide"));   // le curseur n'avance pas
+        return;
+    }
+    const QJsonObject root = doc.object();
     const QJsonArray data  = root.value(QStringLiteral("data")).toArray();
     const auto total = static_cast<quint32>(root.value(QStringLiteral("total")).toDouble());
 
@@ -188,25 +237,9 @@ void MeteoHubCollector::onChunkReply(QNetworkReply* reply) {
         timestamps.push_back(static_cast<qint64>(row.at(0).toDouble()));
         flags.push_back(row.size() >= 5 ? static_cast<quint32>(row.at(4).toDouble()) : 0u);
 
-        // Filtre de plausibilite AVANT insertion : une valeur physiquement
-        // impossible devient "manquante" au lieu de polluer les analyses. On
-        // stocke tout de meme la ligne (avec des NULL) pour que la position de
-        // reprise reste exacte - la ligne existe bien sur l'appareil.
-        double temp = plausible(row.at(1).toDouble(), kTempMin, kTempMax);
-        double hum  = plausible(row.at(2).toDouble(), kHumMin,  kHumMax);
-        const double pres = plausible(row.at(3).toDouble(), kPresMin, kPresMax);
-        if (std::isnan(pres)) {
-            // Pression impossible = capteur hors service au moment du releve :
-            // le 0 °C et le 0 % qui l'accompagnent ne sont pas des mesures,
-            // toute la ligne est marquee manquante.
-            temp = std::numeric_limits<double>::quiet_NaN();
-            hum  = std::numeric_limits<double>::quiet_NaN();
-        }
-
-        QHash<QString, double> channels;
-        channels.insert(QStringLiteral("temp"), temp);
-        channels.insert(QStringLiteral("hum"),  hum);
-        channels.insert(QStringLiteral("pres"), pres);
+        // La ligne est stockee meme avec des NULL : la position de reprise reste
+        // exacte, la ligne existe bien sur l'appareil.
+        const QHash<QString, double> channels = channelsFromRow(row);
         values.push_back(channels);
     }
 
@@ -231,11 +264,20 @@ void MeteoHubCollector::onChunkReply(QNetworkReply* reply) {
     requestNextChunk();
 }
 
+void MeteoHubCollector::abort() {
+    // Appele par stop() AVANT la fermeture des bases : une reponse tardive ne doit
+    // jamais ecrire dans un store ferme. abort() termine la reponse en erreur.
+    for (QNetworkReply* r : m_net->findChildren<QNetworkReply*>())
+        r->abort();
+}
+
 void MeteoHubCollector::finish(const QString& error) {
     m_lastError    = error;
     m_running      = false;
     m_pending.clear();
-    m_lastSyncTs   = QDateTime::currentSecsSinceEpoch();
+    // Date de la derniere synchro REUSSIE (un echec ne doit pas faire croire a un cache a jour).
+    if (error.isEmpty())
+        m_lastSyncTs = QDateTime::currentSecsSinceEpoch();
     m_lastImported = m_imported;
     emit finished(m_imported);
 }
