@@ -3,6 +3,12 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.78.0] - 2026-11-16
+
+### Added
+
+- **Site watch, referrers**: the "Provenance (référents)" table shows the type of each referrer (direct, search engine, social network, webmail, other site), the share of requests that were only resources (images, styles and scripts, fonts...), and a mail hint with its confidence. A new card lists the images loaded by mail clients. These fields come from SiteWatch 1.32.0; reports from an older SiteWatch still display, without them.
+
 ## [0.77.2] - 2026-11-07
 
 ### Changed

@@ -136,6 +136,33 @@ QJsonArray rankedList(const QJsonObject& obj, bool withCategory = false) {
     return out;
 }
 
+// Referents classes, avec leur type de provenance (direct, search, social, mail, site) et
+// la part de requetes qui ne sont que des ressources (image, CSS...). Un rapport d'un
+// SiteWatch plus ancien n'a pas ces champs : type et ressources restent alors absents.
+QJsonArray referersList(const QJsonObject& stats) {
+    QJsonArray list = rankedList(stats.value(QStringLiteral("referers")).toObject());
+    const QJsonObject assets = stats.value(QStringLiteral("referer_assets")).toObject();
+    const QJsonObject kinds = stats.value(QStringLiteral("referer_kinds")).toObject();
+    const QJsonObject assetKinds = stats.value(QStringLiteral("referer_asset_kinds")).toObject();
+    const QJsonObject confidence = stats.value(QStringLiteral("referer_mail_confidence")).toObject();
+    for (int i = 0; i < list.size(); ++i) {
+        QJsonObject e = list[i].toObject();
+        const QString name = e.value(QStringLiteral("name")).toString();
+        if (kinds.contains(name)) e.insert(QStringLiteral("kind"), kinds.value(name));
+        if (assets.contains(name)) e.insert(QStringLiteral("assets"), assets.value(name));
+        if (confidence.contains(name)) e.insert(QStringLiteral("mail_confidence"), confidence.value(name));
+        if (assetKinds.contains(name)) {
+            const QJsonObject k = assetKinds.value(name).toObject();
+            QString best; double bestN = -1;
+            for (auto it = k.begin(); it != k.end(); ++it)
+                if (it.value().toDouble() > bestN) { bestN = it.value().toDouble(); best = it.key(); }
+            e.insert(QStringLiteral("assets_main"), best);
+        }
+        list[i] = e;
+    }
+    return list;
+}
+
 QVector<double> hourly(const QJsonObject& stats, const char* key) {
     QVector<double> v(24, 0.0);
     const QJsonArray a = stats.value(QStringLiteral("hourly")).toObject().value(QLatin1String(key)).toArray();
@@ -412,7 +439,8 @@ QJsonObject insights(const QJsonObject& report, const QDate& fromIn, const QDate
         {"attacked", rankedList(stats.value(QStringLiteral("top_attacked")).toObject())},
         {"broken", rankedList(stats.value(QStringLiteral("top_404")).toObject())},
         {"bots", bots},
-        {"referers", rankedList(stats.value(QStringLiteral("referers")).toObject())},
+        {"referers", referersList(stats)},
+        {"mail_agents", rankedList(stats.value(QStringLiteral("mail_agents")).toObject())},
         {"attack_activity", rankedList(stats.value(QStringLiteral("attack_activity")).toObject())},
         {"normal_activity", rankedList(stats.value(QStringLiteral("normal_activity")).toObject())}});
     out.insert(QStringLiteral("status_classes"), stats.value(QStringLiteral("status_classes")).toObject());

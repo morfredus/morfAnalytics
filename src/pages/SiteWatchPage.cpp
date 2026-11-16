@@ -168,6 +168,25 @@ function topTable(title,list,opts={}){
     rows.slice(0,25).map(r=>`<tr><td style="word-break:break-all">${esc(r.name)}</td>${opts.cat?`<td>${esc(CAT[r.category]||r.category)}</td>`:""}<td class="num">${fmt(r.count)}</td><td class="num">${total?fmt(r.count*100/total)+" %":""}</td></tr>`).join("")+
     `</tbody></table></div>`;
 }
+const ASSET={image:"images",style_script:"styles/scripts",font:"polices",icon:"icônes",media:"médias",other:"autres"};
+const CONF={high:"indice fort de mail",medium:"indice de mail"};
+const KIND={direct:"Direct",search:"Moteur de recherche",social:"Réseau social",mail:"Messagerie / webmail",site:"Autre site"};
+function referersTable(list){
+  const f=textFilter.toLowerCase();
+  const rows=(list||[]).filter(r=>!f||r.name.toLowerCase().includes(f));
+  const total=rows.reduce((a,r)=>a+r.count,0);
+  const hasKind=rows.some(r=>r.kind);
+  const note="Une image ou un fichier chargé depuis une autre page (signature d'e-mail, webmail) compte comme « ressource », pas comme une visite.";
+  return`<div class="card"><b>Provenance (référents)</b> <span class="muted">(${rows.length})</span><div class="muted" style="font-size:.8rem">${note}</div><table><thead><tr><th>Nom</th>${hasKind?"<th>Type</th>":""}<th class="num">Nombre</th><th class="num">Dont ressources</th><th class="num">Part</th></tr></thead><tbody>`+
+    rows.slice(0,25).map(r=>{const a=r.assets||0,only=a>0&&a>=r.count;
+      return`<tr><td style="word-break:break-all">${esc(r.name)}</td>${hasKind?`<td>${esc(KIND[r.kind]||"")}${only?' <span class="muted">(ressources seules)</span>':""}${r.mail_confidence?` <span class="muted">· ${CONF[r.mail_confidence]}</span>`:""}</td>`:""}<td class="num">${fmt(r.count)}</td><td class="num">${a?fmt(a)+(r.assets_main?` <span class="muted">(${esc(ASSET[r.assets_main]||"")})</span>`:""):""}</td><td class="num">${total?fmt(r.count*100/total)+" %":""}</td></tr>`;}).join("")+
+    `</tbody></table></div>`;
+}
+function mailAgentsCard(list){
+  if(!(list||[]).length)return"";
+  return`<div class="card"><b>Images chargées par des clients de messagerie</b><div class="muted" style="font-size:.8rem">Indice, pas une preuve d'ouverture : un proxy (Gmail, Apple Mail) peut précharger l'image sans que le message soit lu, et recharger une image déjà vue.</div><table><thead><tr><th>Client</th><th class="num">Requêtes</th></tr></thead><tbody>`+
+    list.map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${fmt(r.count)}</td></tr>`).join("")+`</tbody></table></div>`;
+}
 function moversTable(title,list,sign){
   return`<div class="card"><b>${title}</b><table><thead><tr><th>Page</th><th class="num">7 derniers jours</th><th class="num">7 précédents</th><th class="num">Écart</th></tr></thead><tbody>`+
     ((list||[]).length?list.map(r=>`<tr><td style="word-break:break-all">${esc(r.name)}</td><td class="num">${fmt(r.recent)}</td><td class="num">${fmt(r.prior)}</td><td class="num ${sign>0?"good":"bad"}">${r.delta>0?"+":""}${fmt(r.delta)}</td></tr>`).join(""):'<tr><td colspan="4" class="muted">Aucun mouvement notable.</td></tr>')+`</tbody></table></div>`;
@@ -199,7 +218,7 @@ function render(){
   h+=`<h2>Classements · rapport du ${esc(d.report_period.from)} au ${esc(d.report_period.to)}</h2><div class="bar" style="position:static;border:0;padding:0"><label>Filtrer les noms<input id="tf" value="${esc(textFilter)}" placeholder="texte…"></label><div><div class="muted" style="font-size:.8rem;margin-bottom:.2rem">Familles de robots</div>`+Object.keys(CAT).map(c=>`<button data-c="${c}" class="${catFilter.has(c)?"on":""}">${CAT[c]}</button>`).join(" ")+`</div></div>`;
   const t=d.tops,bc=t.bots.by_category||{};
   h+=`<p class="muted">Robots par famille : `+Object.keys(CAT).filter(c=>bc[c]).map(c=>`${CAT[c]} ${fmt(bc[c])}`).join(" · ")+`</p>`;
-  h+=`<div class="two">`+topTable("Liens cassés probables",t.broken,{note:"Pages introuvables (404) qui ne sont pas des scans : à corriger ou rediriger."})+topTable("Pages les plus visitées",t.pages)+topTable("URL les plus attaquées",t.attacked)+topTable("Robots",t.bots.list,{cat:1})+topTable("Provenance (référents)",t.referers)+topTable("Types d'attaque",t.attack_activity)+topTable("Activité WordPress",t.normal_activity)+`</div>`;
+  h+=`<div class="two">`+topTable("Liens cassés probables",t.broken,{note:"Pages introuvables (404) qui ne sont pas des scans : à corriger ou rediriger."})+topTable("Pages les plus visitées",t.pages)+topTable("URL les plus attaquées",t.attacked)+topTable("Robots",t.bots.list,{cat:1})+referersTable(t.referers)+mailAgentsCard(t.mail_agents)+topTable("Types d'attaque",t.attack_activity)+topTable("Activité WordPress",t.normal_activity)+`</div>`;
   app.innerHTML=h;
   bindChart(d);
   app.querySelectorAll("input[data-s]").forEach(i=>i.onchange=()=>{i.checked?visible.add(i.dataset.s):visible.delete(i.dataset.s);setQs({s:[...visible].join(",")});render()});
