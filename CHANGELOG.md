@@ -3,6 +3,12 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.78.2] - 2026-11-18
+
+### Fixed
+
+- Debian package: it now depends on `libqt6sql6-sqlite`. The SQLite driver of Qt is a plugin loaded at run time, so the automatic dependency detection (`dpkg-shlibdeps`) missed it and the package only pulled `libqt6sql6`. On a machine without the driver, the SQLite storage failed with "Driver not loaded". Declared as a runtime system dependency in `service.json` (not blocking: on Windows the driver is shipped by `windeployqt`).
+
 ## [0.78.1] - 2026-11-17
 
 ### Changed

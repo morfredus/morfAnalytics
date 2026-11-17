@@ -48,5 +48,24 @@
       "default_dir": "cache",
       "paths": ["sitewatch-history.sqlite"]
     }
+  ],
+  "_comment_system_dependencies": "Pilote SQLite de Qt (plugin sqldrivers/qsqlite) : charge a l'execution, donc invisible pour dpkg-shlibdeps ; sans lui le stockage SQLite echoue (« Driver not loaded »). Declare ici pour entrer dans le Depends du .deb. Marque non bloquant : sous Windows il est embarque par windeployqt et aucun gestionnaire de paquets n'est reconnu, un besoin « required » y bloquerait l'installation.",
+  "system_dependencies": [
+    {
+      "id": "qt-sqlite-driver",
+      "label": "Pilote SQLite de Qt",
+      "required_for": [
+        "storage"
+      ],
+      "packages": {
+        "debian": {
+          "build": [],
+          "runtime": [
+            "libqt6sql6-sqlite"
+          ]
+        }
+      },
+      "required": false
+    }
   ]
 }
