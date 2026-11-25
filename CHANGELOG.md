@@ -3,6 +3,12 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.78.3] - 2026-11-18
+
+### Changed
+
+- README (en, fr): the Qt SQLite driver (`libqt6sql6-sqlite`) is listed with the runtime prerequisites.
+
 ## [0.78.2] - 2026-11-18
 
 ### Fixed

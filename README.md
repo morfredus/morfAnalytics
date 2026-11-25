@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.78.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.78.3-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -240,7 +240,8 @@ component) can use them directly.
 
 ## Build
 
-Only needs **Qt 6** (Core, Network, Sql). morfBeacon is vendored under
+Only needs **Qt 6** (Core, Network, Sql) and, at runtime, the **Qt SQLite driver** (`libqt6sql6-sqlite`
+on Debian: the `.deb` pulls it in, a source install needs it by hand). morfBeacon is vendored under
 `third_party/morf/beacon`.
 
 ```sh
