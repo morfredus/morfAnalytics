@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.84.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.85.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -135,7 +135,8 @@ crosses context and subject with edit rate, reject rate and mean rating, and dra
 mean rating, share edited and rejected, and the share of photos carrying each of the ten most used keywords.
 
 When morfPhoto provides positions (0.21.0 and later), an "Où - lieux" section draws a heat map of the photos
-(no map background: nothing is loaded from outside, the positions stay on the fleet). A cell of the grid
+on a background of country outlines embedded in the service (Natural Earth 1:110m, public domain; coarse on purpose, it places the
+clusters, it does not survey): nothing is loaded from outside, the positions stay on the fleet. A cell of the grid
 (1, 0.1 or 0.01 degree) is a filter like the others, so a click filters the whole page and several cells add up.
 
 ## Machine history (morfMonitor)

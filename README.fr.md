@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.84.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.85.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -158,8 +158,8 @@ source de vérité reste MeteoHub.
   avec le taux de retouche, le taux de rejet et la note moyenne, et dessine la dérive année après année :
 note moyenne, part retouchée et part rejetée, part des photos portant chacun des dix mots-clés les plus utilisés.
   Quand morfPhoto fournit les positions (0.21.0 et suivantes), une section « Où - lieux » dessine une carte de
-chaleur des photos (sans fond de carte : rien n'est chargé depuis l'extérieur, les positions restent dans le
-parc). Une case de la grille (1, 0,1 ou 0,01 degré) est un filtre comme les autres : un clic filtre toute la page
+chaleur des photos sur un fond de contours de pays embarqué dans le service (Natural Earth 1:110m, domaine public ; grossier à
+dessein : il situe les amas, il ne cadastre pas) : rien n'est chargé depuis l'extérieur, les positions restent dans le parc. Une case de la grille (1, 0,1 ou 0,01 degré) est un filtre comme les autres : un clic filtre toute la page
 et plusieurs cases se cumulent.
 - `/monitor` historise les métriques des machines du parc remontées par
   **morfMonitor** (CPU, mémoire, température, charge, services actifs) et les

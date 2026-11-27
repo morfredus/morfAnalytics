@@ -58,6 +58,7 @@ add_library(morfAnalytics STATIC
     src/pages/SiteWatchSettingsPage.cpp
     src/pages/GitHubSettingsPage.cpp
     src/pages/PhotoPage.cpp               # page de la specialisation Photo
+    src/pages/WorldOutline.cpp            # contours des pays (genere), fond de la carte de /photo
     src/pages/MonitorPage.cpp             # page du domaine Monitor (historique machines)
     src/pages/GitHubPage.cpp              # page du domaine GitHub
     src/pages/Theme.cpp                   # palette et bascule clair / sombre communes
@@ -114,6 +115,7 @@ add_library(morfAnalytics STATIC
     include/morfanalytics/pages/SiteWatchSettingsPage.h
     include/morfanalytics/pages/GitHubSettingsPage.h
     include/morfanalytics/pages/PhotoPage.h
+    include/morfanalytics/pages/WorldOutline.h
     include/morfanalytics/pages/MonitorPage.h
     include/morfanalytics/pages/GitHubPage.h
     include/morfanalytics/pages/Theme.h

@@ -991,6 +991,30 @@ function computePlaces(){
 function mapIdx(){const F=snapFilters();F.place=new Set();return filteredWith(F);}
 function mapCells(idx){const m=new Map();for(const i of idx){const k=D.placeKeys?D.placeKeys[i]:null;if(k===null||k===undefined)continue;m.set(k,(m.get(k)||0)+1);}return m;}
 let MAPST=null;
+// Contours des pays (Natural Earth 1:110m, embarqués dans le service) : le fond de la carte, sans aucun
+// appel extérieur. Grossier à dessein (dizaines de km d'erreur) : il situe les amas, il ne cadastre rien.
+let OUTLINE=null, OUTLINE_REQ=false;
+function loadOutline(){
+  if(OUTLINE||OUTLINE_REQ)return; OUTLINE_REQ=true;
+  fetch("/photo/outline.json").then(r=>r.json()).then(rings=>{
+    OUTLINE=rings.map(r=>{let a=1e9,b=-1e9,c=1e9,d=-1e9;
+      for(let i=0;i<r.length;i+=2){a=Math.min(a,r[i]);b=Math.max(b,r[i]);c=Math.min(c,r[i+1]);d=Math.max(d,r[i+1]);}
+      return {p:r,lon0:a,lon1:b,lat0:c,lat1:d};});
+    if(document.getElementById("map"))drawMap();
+  }).catch(()=>{OUTLINE=[];});
+}
+function drawOutline(ctx,X,Y,W,H,pad,lat0,lat1,lon0,lon1,color){
+  if(!OUTLINE)return;
+  ctx.save(); ctx.beginPath(); ctx.rect(pad,pad,W-2*pad,H-2*pad); ctx.clip();
+  ctx.strokeStyle=color; ctx.lineWidth=1;
+  for(const r of OUTLINE){
+    if(r.lon1<lon0||r.lon0>lon1||r.lat1<lat0||r.lat0>lat1)continue;   // contour hors de la vue
+    ctx.beginPath(); ctx.moveTo(X(r.p[0]),Y(r.p[1]));
+    for(let i=2;i<r.p.length;i+=2)ctx.lineTo(X(r.p[i]),Y(r.p[i+1]));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 function mapPanel(){
   const idx=mapIdx(), cells=mapCells(idx); let located=0; cells.forEach(v=>{located+=v;});
   const steps=[[1,"1° (≈ 110 km)"],[0.1,"0,1° (≈ 11 km)"],[0.01,"0,01° (≈ 1 km)"]];
@@ -1002,7 +1026,7 @@ function mapPanel(){
     (cells.size?'<canvas id="map" width="900" height="380"></canvas>':'<p class="muted">aucune photo géolocalisée dans ce périmètre</p>')+
     '<div class="note" id="mapinfo">Un clic sur une case filtre toute la page sur ce lieu ; plusieurs cases se cumulent.</div>'+
     '<h3>Lieux les plus photographiés</h3><div class="card">'+bars(top.rows.slice(0,12),{filterKey:"place",isOn:r=>S.place.has(r.key)})+'</div>'+
-    '<p class="note">Carte de chaleur sans fond de carte : aucune image n\'est chargée depuis l\'extérieur. '+
+    '<p class="note">Carte de chaleur avec un fond de contours de pays embarqué (grossier : il situe, il ne cadastre pas) : aucune image n\'est chargée depuis l\'extérieur. '+
     'La position vient du fichier (EXIF) ou, à défaut, d\'un sidecar. Une case est désignée par son coin sud-ouest.</p>';
 }
 function drawMap(){
@@ -1018,6 +1042,8 @@ function drawMap(){
   const sc=Math.min((W-2*pad)/wDeg,(H-2*pad)/hDeg), ox=(W-wDeg*sc)/2, oy=(H-hDeg*sc)/2;
   const X=lon=>ox+(lon-lon0)*kx*sc, Y=lat=>oy+(lat1-lat)*sc;
   MAPST={cells,lat1,lon0,kx,sc,ox,oy};
+  loadOutline();
+  drawOutline(ctx,X,Y,W,H,pad,lat0,lat1,lon0,lon1,col("--muted","#888"));
   // graduations : le pas le plus fin qui laisse au moins 70 px entre deux traits
   const nice=[0.01,0.02,0.05,0.1,0.2,0.5,1,2,5,10,20,30]; let gs=nice[nice.length-1];
   for(const g of nice)if(g*sc>=70&&g*sc*kx>=70){gs=g;break;}

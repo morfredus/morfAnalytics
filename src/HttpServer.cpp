@@ -18,6 +18,7 @@
 #include "morfanalytics/pages/SiteWatchSettingsPage.h"
 #include "morfanalytics/analysis/SiteWatchInsights.h"
 #include "morfanalytics/pages/PhotoPage.h"
+#include "morfanalytics/pages/WorldOutline.h"
 #include "morfanalytics/pages/MonitorPage.h"
 #include "morfanalytics/PhotoAnalyticsModule.h"
 #include "morfanalytics/MonitorModule.h"
@@ -699,6 +700,10 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         const QJsonObject snap = module ? module->snapshot() : QJsonObject{{"reachable", false},
             {"last_error", QStringLiteral("aucun module 'photo' configure")}};
         reply(sock, 200, "OK", pages::Theme::apply(pages::PhotoPage::render(snap)), "text/html; charset=utf-8");
+        return;
+    } else if (path == "/photo/outline.json") {
+        // Fond de la carte des lieux : contours des pays, embarques (aucun appel exterieur).
+        reply(sock, 200, "OK", pages::worldOutlineJson(), "application/json; charset=utf-8");
         return;
     } else if (path == "/photo/sources") {
         // Postes morfPhoto connus (déclarés + découverts par beacon), pour que la page
