@@ -63,6 +63,11 @@ QByteArray PhotoPage::render(const QJsonObject& /*snapshot*/) {
 .btn:hover{border-color:var(--accent);color:var(--ink)}
 .denom{font-size:.78rem;color:var(--muted);margin:.1rem 0 .5rem}
 .mono{font-variant-numeric:tabular-nums}
+#map{width:100%;height:auto;border:1px solid var(--line);border-radius:8px;background:var(--card);cursor:crosshair}
+svg.lc{width:100%;height:auto;max-height:240px}
+table.heat td.h{background:transparent}table.heat td.c{text-align:center;font-size:.78rem;min-width:2.6rem}
+tr.click{cursor:pointer}tr.click:hover{background:var(--hover)}tr.on{background:var(--sel)}
+td.n,th.n{text-align:right}
 select,input[type=number]{background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:.25rem .4rem;font-size:.85rem}
 .sources{margin:.3rem 0 .9rem;line-height:1.9}
 .srcchip{display:inline-block;margin:.1rem .3rem;padding:.15rem .5rem;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-size:.85rem;user-select:none}
@@ -102,6 +107,7 @@ vitesses, périodes&hellip; La donnée reste souveraine dans morfPhoto ; ici on 
 <div id="sources" class="sources"><span class="muted">Recherche des postes&hellip;</span></div>
 <div class="tabs" id="tabs">
   <button class="tab on" data-tab="explore">Exploration</button>
+  <button class="tab" id="tablib" data-tab="library" style="display:none">Tri et retouche</button>
   <button class="tab" data-tab="config">Configuration</button>
 </div>
 <div id="app"><p class="muted">Chargement des donn&eacute;es&hellip;</p></div>
@@ -139,7 +145,7 @@ function reloadPractice(){
       : "Rechargé : aucun boîtier enregistré (tous comptent).";
   }).catch(e=>{const el=$("#ownsave"); if(el) el.textContent="Relecture impossible : "+e;});
 }
-let TAB="explore";   // onglet courant : "explore" | "config"
+let TAB="explore";   // onglet courant : "explore" | "library" | "config"
 
 // --- Vues enregistrées : un jeu de filtres nommé, réappliquable d'un clic --------
 // Cas type : « ma pratique réelle » qui exclut smartphones et boîtiers jamais possédés
@@ -154,6 +160,7 @@ function serializeFilters(){
     camExcl:[...S.camExcl], camOwned:[...S.camOwned],
     cam:names("cam"), lens:names("lens"), type:names("type"), folder:names("folder"),
     ctx:names("ctx"), subj:names("subj"),
+    rate:names("rate"), rej:names("rej"), pick:names("pick"), edit:names("edit"), src:names("src"), lbl:names("lbl"), kw:names("kw"),
     year:[...S.year], month:[...S.month],
     focal:S.focal.slice(), aperture:S.aperture.slice(), iso:S.iso.slice(), shutter:S.shutter.slice(),
     period:{from:S.period.from,to:S.period.to}
@@ -167,6 +174,14 @@ function labelToKey(d,label){
   if(d==="folder"){for(const k in D.folders)if(D.folders[k]===label)return isNaN(+k)?k:+k;return -1;}
   if(d==="ctx")  return D.dict.context?D.dict.context.indexOf(label):-1;
   if(d==="subj") return D.dict.subject?D.dict.subject.indexOf(label):-1;
+  // Bibliothèque : les libellés sont ceux affichés, on retrouve la clé du dataset courant.
+  if(d==="rate"){const m=/^(\d+) ★$/.exec(label);return m?+m[1]:-1;}
+  if(d==="rej") return label==="rejetée"?1:(label==="non rejetée"?0:-1);
+  if(d==="edit")return label==="retouchée"?1:(label==="non retouchée"?0:-1);
+  if(d==="pick")return label==="retenue"?1:(label==="non retenue"?0:-1);
+  if(d==="src"){const a=D.dict.source||[];for(let k=0;k<a.length;k++)if(a[k]===label||SRC_FR[a[k]]===label)return k;return -1;}
+  if(d==="lbl"){const a=D.dict.color_label||[];for(let k=0;k<a.length;k++)if(a[k]===label||LABEL_FR[a[k]]===label)return k;return -1;}
+  if(d==="kw")  return D.dict.keyword?D.dict.keyword.indexOf(label):-1;
   return -1;
 }
 // Persiste les exclusions LOCALES (hors périmètre imposé par la config) comme périmètre
@@ -181,7 +196,7 @@ function applyView(v){
   S.camOwned=new Set(v.camOwned||[]);
   saveOwned(S.camOwned,false);
   persistExcl();
-  ["cam","lens","type","folder","ctx","subj"].forEach(d=>(v[d]||[]).forEach(lab=>{
+  ["cam","lens","type","folder","ctx","subj","rate","rej","pick","edit","src","lbl","kw"].forEach(d=>(v[d]||[]).forEach(lab=>{
     const k=labelToKey(d,lab); if(k!==-1&&k!==null&&k!==undefined)S[d].add(k);
   }));
   (v.year||[]).forEach(y=>S.year.add(y));
@@ -211,6 +226,7 @@ function fmtF(v,d){return (v===null||v===undefined)?"-":v.toFixed(d===undefined?
 // period = fenêtre continue d'années (from..to) sur taken_at. camExcl = périmètre.
 function emptyFilters(){return {cam:new Set(),lens:new Set(),type:new Set(),folder:new Set(),
   ctx:new Set(),subj:new Set(),
+  rate:new Set(),rej:new Set(),pick:new Set(),edit:new Set(),src:new Set(),lbl:new Set(),kw:new Set(),place:new Set(),
   year:new Set(),month:new Set(),focal:[],aperture:[],iso:[],shutter:[],
   period:{from:null,to:null},camExcl:new Set(),camOwned:new Set()};}
 const S=emptyFilters();
@@ -230,6 +246,18 @@ function buildDims(){
     subj:  {label:"Sujet",    kind:"cat", col:"subject", key:i=>(D.cols.subject?D.cols.subject[i]:null), lab:k=>((D.dict.subject&&D.dict.subject[k])||("#"+k))},
     year:  {label:"Année",    kind:"cat", key:i=>D.years[i],  lab:k=>String(k)},
     month: {label:"Mois",     kind:"cat", key:i=>D.months[i], lab:k=>MONTHS[k]||("#"+k)},
+    // Bibliothèque (morfphoto-library/1) : null = inconnu, jamais une valeur par défaut.
+    // `edit` s'appuie sur edited_any (une des versions retouchée) pour ne pas compter les copies.
+    rate:  {label:"Note",     kind:"cat", key:i=>libVal("rating",i),   lab:k=>k+" ★"},
+    rej:   {label:"Rejet",    kind:"cat", key:i=>libBool("rejected",i), lab:k=>k?"rejetée":"non rejetée"},
+    // Retenue : drapeau posé dans Lightcraft (« pick »). Inconnu si aucun sidecar n'en parle.
+    pick:  {label:"Sélection", kind:"cat", key:i=>libBool("picked",i), lab:k=>k?"retenue":"non retenue"},
+    edit:  {label:"Retouche", kind:"cat", key:i=>libBool("edited_any",i), lab:k=>k?"retouchée":"non retouchée"},
+    src:   {label:"Logiciel", kind:"cat", key:i=>libVal("source",i),   lab:k=>{const n=(D.dict.source||[])[k];return SRC_FR[n]||n||("#"+k);}},
+    lbl:   {label:"Étiquette",kind:"cat", multi:true, keys:i=>libVal("color_labels",i), lab:k=>{const n=(D.dict.color_label||[])[k];return LABEL_FR[n]||n||("#"+k);}},
+    kw:    {label:"Mot-clé",  kind:"cat", multi:true, keys:i=>libVal("keywords",i),     lab:k=>(D.dict.keyword&&D.dict.keyword[k])??("#"+k)},
+    // Lieu : case de la grille géographique (taille réglable), null si la photo n'a pas de position.
+    place: {label:"Lieu",     kind:"cat", key:i=>D.placeKeys?D.placeKeys[i]:null, lab:placeLab},
     focal: {label:"Focale",   kind:"range", col:"focal_length", ranges:()=>(D.buckets||[]).map(b=>[b.min,b.max,b.label])},
     aperture:{label:"Ouverture",kind:"range", col:"aperture", ranges:()=>APERTURE_RANGES},
     iso:   {label:"ISO",      kind:"range", col:"iso", ranges:()=>ISO_RANGES},
@@ -237,6 +265,13 @@ function buildDims(){
   };
 }
 const CAT_DIMS=["cam","lens","type","folder","ctx","subj","year","month"];
+const LIB_DIMS=["rate","rej","pick","edit","src","lbl","kw"];
+const FDIMS=CAT_DIMS.concat(LIB_DIMS,["place"]);   // toutes les dimensions catégorielles filtrables
+const LABEL_FR={red:"rouge",yellow:"jaune",green:"vert",blue:"bleu",purple:"violet"};
+const SRC_FR={darktable:"darktable",xmp:"XMP générique",dxo:"DxO PhotoLab",lightcraft:"Lightcraft",file:"XMP embarqué"};
+// Lecture d'une colonne de la bibliothèque : null si ce morfPhoto ne la fournit pas.
+function libVal(col,i){const c=D.cols[col];if(!c)return null;const v=c[i];return v===undefined?null:v;}
+function libBool(col,i){const v=libVal(col,i);return v===null?null:(v?1:0);}
 const RANGE_DIMS=["focal","aperture","iso","shutter"];
 
 // ---- Sélecteur de postes (multi-sources) -------------------------------------
@@ -365,7 +400,11 @@ function init(snap){
     updateSrcInfo(snap||{});
     return;
   }
-  D=decode(snap); buildDims();
+  D=decode(snap); computePlaces(); buildDims();
+  // L'onglet « Tri et retouche » n'existe que si au moins un morfPhoto fournit la
+  // bibliotheque ; sinon un filtre ou un onglet vide laisserait croire a « aucune note ».
+  $("#tablib").style.display=D.lib?"":"none";
+  if(!D.lib&&TAB==="library")setTab("explore");
   const fromService=(D.ownedCameras||[]);
   S.camOwned=new Set(fromService.length?fromService:loadOwned());
   if(fromService.length) saveOwned(S.camOwned,false);
@@ -384,7 +423,7 @@ function decode(snap){
     if(typeof t==="string"&&t.length>=7){years[i]=+t.slice(0,4);months[i]=+t.slice(5,7);}
     else{years[i]=null;months[i]=null;}
   }
-  return {n,cols,dict,years,months,
+  return {n,cols,dict,years,months,lib:Array.isArray(cols.rating),gps:Array.isArray(cols.latitude),
           buckets:snap.focal_buckets||[], folders:ds.folders||{},
           configExcl:snap.exclude_cameras||[],
           ownedCameras:snap.owned_cameras||[],
@@ -399,8 +438,10 @@ function rangeOn(ranges,k){return ranges.some(x=>x[0]===k[0]&&x[1]===k[1]&&x[2]=
 function rmRange(arr,r){const i=arr.findIndex(x=>x[0]===r[0]&&x[1]===r[1]&&x[2]===r[2]);if(i>=0)arr.splice(i,1);}
 // Un fichier passe-t-il un jeu de filtres F ? (OR interne, AND entre dimensions)
 function matchesWith(i,F){
-  for(const d of CAT_DIMS){
-    if(F[d].size){const k=DIMS[d].key(i); if(k===null||k===undefined||!F[d].has(k))return false;}
+  for(const d of FDIMS){
+    if(!F[d].size)continue;
+    if(DIMS[d].multi){const a=DIMS[d].keys(i); if(!a||!a.some(k=>F[d].has(k)))return false;}   // l'un des mots-clés / étiquettes
+    else{const k=DIMS[d].key(i); if(k===null||k===undefined||!F[d].has(k))return false;}
   }
   if(F.camExcl.size){const k=D.cols.camera[i]; if(k!==null&&F.camExcl.has(D.dict.camera[k]))return false;}
   // Boîtiers possédés (liste blanche) : si définie, un boîtier CONNU hors liste est écarté.
@@ -422,7 +463,11 @@ function filtered(){return filteredWith(S);}
 // ---- Agrégations -------------------------------------------------------------
 function countCat(idx,dim){
   const D_=DIMS[dim]; const m=new Map(); let known=0;
-  for(const i of idx){const k=D_.key(i); if(k===null||k===undefined)continue; known++; m.set(k,(m.get(k)||0)+1);}
+  for(const i of idx){
+    if(D_.multi){   // une photo compte une fois par valeur ; liste vide = connue, sans valeur
+      const a=D_.keys(i); if(a===null||a===undefined)continue; known++;
+      for(const k of a)m.set(k,(m.get(k)||0)+1); continue;}
+    const k=D_.key(i); if(k===null||k===undefined)continue; known++; m.set(k,(m.get(k)||0)+1);}
   const rows=[...m.entries()].map(([k,count])=>({key:k,label:D_.lab(k),count}));
   rows.sort((a,b)=>b.count-a.count||String(a.label).localeCompare(String(b.label)));
   return {rows,known};
@@ -543,7 +588,7 @@ function filtersPanel(){
   // Filtres analytiques, groupés par dimension.
   const lines=[];
   const pad=m=>String(m).padStart(2,"0");
-  for(const d of CAT_DIMS){
+  for(const d of FDIMS){
     if(!S[d].size)continue;
     let vals=[...S[d]];
     if(d==="year"||d==="month")vals.sort((a,b)=>a-b);
@@ -614,8 +659,9 @@ function cameraTimeline(idx){
 
 // ---- Matrice analytique (croisement libre X × Y × mesure) --------------------
 const MEASURES={count:"Nombre de photos",medfocal:"Focale médiane (mm)",medaperture:"Ouverture médiane",
-  mediso:"ISO médian",medshutter:"Vitesse médiane"};
-const MX_DIMS=["cam","lens","type","folder","ctx","subj","year","month","focal","aperture","iso","shutter"];
+  mediso:"ISO médian",medshutter:"Vitesse médiane",avgrate:"Note moyenne",edrate:"Taux de retouche"};
+const MX_DIMS=["cam","lens","type","folder","ctx","subj","year","month","focal","aperture","iso","shutter","rate","rej","pick","edit","src"];
+const LIB_MX=["rate","rej","pick","edit","src"], LIB_MEASURES=["avgrate","edrate"];
 // Étiquette de bucket d'une photo pour une dimension (null si non classable).
 function bucketLabel(dim,i){
   const D_=DIMS[dim];
@@ -637,11 +683,14 @@ function measureVal(idx,measure){
   if(measure==="medaperture"){const m=median(values(idx,"aperture"));return m===null?"-":"f/"+fmtF(m,1);}
   if(measure==="mediso"){const m=median(values(idx,"iso"));return m===null?"-":fr(Math.round(m));}
   if(measure==="medshutter"){const m=median(values(idx,"shutter_speed_s"));return fmtShutter(m);}
+  if(measure==="avgrate"){const r=values(idx,"rating");return r.length?(r.reduce((a,b)=>a+b,0)/r.length).toFixed(1)+" ★":"-";}
+  if(measure==="edrate"){const e=values(idx,"edited_any");return e.length?Math.round(e.filter(x=>x).length*100/e.length)+" %":"-";}
   return "";
 }
 function matrixBlock(){
-  const opts=(cur)=>MX_DIMS.map(d=>'<option value="'+d+'"'+(cur===d?" selected":"")+'>'+DIMS[d].label+'</option>').join("");
-  const mopts=Object.keys(MEASURES).filter(k=>MEASURES[k]).map(k=>'<option value="'+k+'"'+(MX.measure===k?" selected":"")+'>'+MEASURES[k]+'</option>').join("");
+  const mxd=MX_DIMS.filter(d=>D.lib||!LIB_MX.includes(d));
+  const opts=(cur)=>mxd.map(d=>'<option value="'+d+'"'+(cur===d?" selected":"")+'>'+DIMS[d].label+'</option>').join("");
+  const mopts=Object.keys(MEASURES).filter(k=>MEASURES[k]&&(D.lib||!LIB_MEASURES.includes(k))).map(k=>'<option value="'+k+'"'+(MX.measure===k?" selected":"")+'>'+MEASURES[k]+'</option>').join("");
   let h='<div class="controls"><label class="muted">Lignes</label><select id="mxrow">'+opts(MX.row)+'</select>'+
     '<label class="muted">Colonnes</label><select id="mxcol">'+opts(MX.col)+'</select>'+
     '<label class="muted">Mesure</label><select id="mxmea">'+mopts+'</select></div>';
@@ -674,11 +723,12 @@ function matrixBlock(){
 // ---- Comparaison par groupes de filtres --------------------------------------
 function snapFilters(){return {cam:new Set(S.cam),lens:new Set(S.lens),type:new Set(S.type),folder:new Set(S.folder),
   ctx:new Set(S.ctx),subj:new Set(S.subj),
+  rate:new Set(S.rate),rej:new Set(S.rej),pick:new Set(S.pick),edit:new Set(S.edit),src:new Set(S.src),lbl:new Set(S.lbl),kw:new Set(S.kw),place:new Set(S.place),
   year:new Set(S.year),month:new Set(S.month),focal:S.focal.map(r=>r.slice()),aperture:S.aperture.map(r=>r.slice()),
   iso:S.iso.map(r=>r.slice()),shutter:S.shutter.map(r=>r.slice()),period:{...S.period},camExcl:new Set(S.camExcl),camOwned:new Set(S.camOwned)};}
 function describeFilters(F){
   const parts=[];
-  for(const d of CAT_DIMS)if(F[d].size)parts.push(DIMS[d].label+": "+[...F[d]].map(k=>DIMS[d].lab(k)).join("/"));
+  for(const d of FDIMS)if(F[d].size)parts.push(DIMS[d].label+": "+[...F[d]].map(k=>DIMS[d].lab(k)).join("/"));
   for(const d of RANGE_DIMS)if(F[d].length)parts.push(DIMS[d].label+": "+F[d].map(r=>r[2]).join("/"));
   if(F.period.from!==null||F.period.to!==null)parts.push("Période: "+(F.period.from??"…")+"–"+(F.period.to??"…"));
   return parts.length?parts.join(" · "):"tout le périmètre";
@@ -691,6 +741,25 @@ function groupMetrics(F){
     mi:s.length?fr(Math.round(median(s))):"-", ms:sh.length?fmtShutter(median(sh)):"-",
     tf:topFocals(idx,3).map(x=>x.label).join(", ")||"-", tl:topLenses(idx,3)};
 }
+// Lignes « bibliothèque » d'un tableau A/B (comparaison rapide ET groupes de filtres) : même
+// calcul, mêmes dénominateurs. Une valeur inconnue n'entre jamais dans un taux ni dans une
+// moyenne ; le nombre de photos connues est affiché à côté de chaque chiffre.
+function libCompareRows(iA,iB){
+  if(!D.lib) return "";
+  const a=libStats(iA), b=libStats(iB);
+  const r=(l,x,y)=>'<tr><td class="muted">'+l+'</td><td>'+x+'</td><td>'+y+'</td></tr>';
+  const avg=s=>s.avg===null?"-":s.avg.toFixed(1).replace(".",",")+" ★ ("+fr(s.rated)+" notées)";
+  const rate=(n,k)=>pctOf(n,k)+(k?" ("+fr(k)+" conn.)":"");
+  const top=(idx,dim)=>countCat(idx,dim).rows.slice(0,3).map(x=>x.label+" ("+fr(x.count)+")").join(", ")||"-";
+  return r("Note moyenne",avg(a),avg(b))+
+    r("Retouchées",rate(a.ed,a.edK),rate(b.ed,b.edK))+
+    r("Rejetées",rate(a.rej,a.rejK),rate(b.rej,b.rejK))+
+    r("Retenues",rate(a.pick,a.pickK),rate(b.pick,b.pickK))+
+    r("Avec mot-clé",rate(a.kwN,a.kwK),rate(b.kwN,b.kwK))+
+    r("Étiquettes les plus fréquentes",top(iA,"lbl"),top(iB,"lbl"))+
+    r("Mots-clés les plus utilisés",top(iA,"kw"),top(iB,"kw"))+
+    r("Logiciels",top(iA,"src"),top(iB,"src"));
+}
 function groupsBlock(){
   let h='<div class="controls"><button class="btn" id="capA">capturer les filtres → Groupe A</button>'+
     '<button class="btn" id="capB">→ Groupe B</button><button class="btn" id="capClr">vider</button></div>';
@@ -702,14 +771,17 @@ function groupsBlock(){
     h+='<table><tr><th></th><th class="A">Groupe A</th><th class="B">Groupe B</th></tr>'+
       r("Photos",fr(A.n),fr(B.n))+r("Focale médiane",A.mf,B.mf)+r("Ouverture médiane",A.ma,B.ma)+
       r("ISO médian",A.mi,B.mi)+r("Vitesse médiane",A.ms,B.ms)+r("Top focales",A.tf,B.tf)+
-      r("Objectifs les plus utilisés",A.tl,B.tl)+'</table>';
+      r("Objectifs les plus utilisés",A.tl,B.tl)+libCompareRows(filteredWith(GRP.a),filteredWith(GRP.b))+'</table>';
   } else h+='<p class="note">Construisez un sous-ensemble avec les filtres, capturez-le comme Groupe A, changez les filtres, capturez le Groupe B.</p>';
   return h;
 }
 
 // ---- Comparaison rapide (une dimension, A vs B) ------------------------------
 function quickCompare(idx){
-  const dims=[["year","année"],["cam","boîtier"],["lens","objectif"]];
+  // Années, matériel, contexte et sujet photographiques ; avec la bibliothèque, aussi le logiciel,
+  // l'état de retouche et la note (« mes photos à 5 étoiles contre celles à 3 »).
+  const dims=[["year","année"],["cam","boîtier"],["lens","objectif"],["ctx","contexte"],["subj","sujet"]]
+    .concat(D.lib?[["src","logiciel"],["edit","retouche"],["rate","note"]]:[]);
   const valuesFor=dim=>{const set=new Map();
     for(const i of idx){let v=null,lab=null;
       if(dim==="year"){v=D.years[i];lab=v;}else{v=DIMS[dim].key(i);lab=v===null?null:DIMS[dim].lab(v);}
@@ -732,7 +804,7 @@ function quickCompare(idx){
     const mA=met(A),mB=met(B),r=(l,x,y)=>'<tr><td class="muted">'+l+'</td><td>'+x+'</td><td>'+y+'</td></tr>';
     h+='<table><tr><th></th><th class="A">'+esc(labOf(QC.a))+'</th><th class="B">'+esc(labOf(QC.b))+'</th></tr>'+
       r("Photos",fr(mA.n),fr(mB.n))+r("Focale médiane",mA.mf,mB.mf)+r("Ouverture médiane",mA.ma,mB.ma)+
-      r("ISO médian",mA.mi,mB.mi)+r("Vitesse médiane",mA.ms,mB.ms)+r("Top focales",mA.tf,mB.tf)+'</table>';
+      r("ISO médian",mA.mi,mB.mi)+r("Vitesse médiane",mA.ms,mB.ms)+r("Top focales",mA.tf,mB.tf)+libCompareRows(A,B)+'</table>';
   }
   return h;
 }
@@ -842,6 +914,7 @@ function render(){
   // Mémoriser l'état des sections encore présentes avant de reconstruire #app.
   document.querySelectorAll("#app details.sec").forEach(d=>{SEC_OPEN[d.getAttribute("data-sec")]=d.open;});
   if(TAB==="config"){ $("#app").innerHTML=configPanel(); wireConfig(); return; }
+  if(TAB==="library"&&D.lib){ $("#app").innerHTML=libraryPanel(); wire(); return; }
   const idx=filtered();
   let h="";
   h+=filtersPanel();
@@ -871,6 +944,8 @@ function render(){
         (S.lens.size?'<p class="note">Boîtiers associés&nbsp;: '+esc(countCat(idx,"cam").rows.map(r=>r.label+" ("+r.count+")").join(", ")||"-")+'</p>':''))+'</div></div>'+
       '<h3>Boîtiers - chronologie</h3><div class="card">'+cameraTimeline(idx)+'</div>', true);
 
+  if(D.gps)h+=sec("Où - lieux",mapPanel(),false);
+
   h+=sec("Réglages - focales, ISO, ouvertures, vitesses",
       '<div class="cols"><div><h3>Focales usuelles</h3>'+rangeCard("focal")+'</div>'+
       '<div><h3>Focales - détail (top)</h3><div class="card">'+
@@ -893,6 +968,244 @@ function render(){
 
   $("#app").innerHTML=h;
   wire();
+}
+
+// ---- Lieux : carte de chaleur sans fond de carte -------------------------------
+// La position vient de morfPhoto (EXIF du fichier, à défaut un sidecar). On regroupe les photos
+// en cases d'une grille géographique ; une case est un filtre comme les autres (dimension
+// « Lieu »), donc un clic sur la carte filtre TOUTE la page. Aucun fond de carte n'est chargé :
+// la page ne contacte aucun serveur extérieur, les positions de la photothèque restent ici.
+let PLACE_STEP=0.1;
+function placeDigits(){return PLACE_STEP>=1?0:(PLACE_STEP>=0.1?1:2);}
+function fmtDeg(v,pos,neg){return Math.abs(v).toFixed(placeDigits()).replace(".",",")+"° "+(v>=0?pos:neg);}
+function placeLab(k){const p=String(k).split(",");return fmtDeg(+p[0]*PLACE_STEP,"N","S")+" · "+fmtDeg(+p[1]*PLACE_STEP,"E","O");}   // coin sud-ouest de la case
+function computePlaces(){
+  const la=D.cols.latitude, lo=D.cols.longitude; D.placeKeys=null;
+  if(!la||!lo)return;
+  const out=new Array(D.n);
+  for(let i=0;i<D.n;i++){const a=la[i],b=lo[i];
+    out[i]=(a===null||a===undefined||b===null||b===undefined)?null:(Math.floor(a/PLACE_STEP)+","+Math.floor(b/PLACE_STEP));}
+  D.placeKeys=out;
+}
+// Photos du périmètre SANS le filtre de lieu : les autres cases restent visibles pour en choisir plusieurs.
+function mapIdx(){const F=snapFilters();F.place=new Set();return filteredWith(F);}
+function mapCells(idx){const m=new Map();for(const i of idx){const k=D.placeKeys?D.placeKeys[i]:null;if(k===null||k===undefined)continue;m.set(k,(m.get(k)||0)+1);}return m;}
+let MAPST=null;
+function mapPanel(){
+  const idx=mapIdx(), cells=mapCells(idx); let located=0; cells.forEach(v=>{located+=v;});
+  const steps=[[1,"1° (≈ 110 km)"],[0.1,"0,1° (≈ 11 km)"],[0.01,"0,01° (≈ 1 km)"]];
+  const sel=steps.map(s=>'<option value="'+s[0]+'"'+(s[0]===PLACE_STEP?" selected":"")+'>'+s[1]+'</option>').join("");
+  const top=countCat(idx,"place");
+  return '<div class="controls"><label class="muted">Taille des cases</label><select id="mapstep">'+sel+'</select>'+
+    (S.place.size?'<button class="btn" id="mapclr">effacer le lieu</button>':'')+'</div>'+
+    denom(located,idx.length)+
+    (cells.size?'<canvas id="map" width="900" height="380"></canvas>':'<p class="muted">aucune photo géolocalisée dans ce périmètre</p>')+
+    '<div class="note" id="mapinfo">Un clic sur une case filtre toute la page sur ce lieu ; plusieurs cases se cumulent.</div>'+
+    '<h3>Lieux les plus photographiés</h3><div class="card">'+bars(top.rows.slice(0,12),{filterKey:"place",isOn:r=>S.place.has(r.key)})+'</div>'+
+    '<p class="note">Carte de chaleur sans fond de carte : aucune image n\'est chargée depuis l\'extérieur. '+
+    'La position vient du fichier (EXIF) ou, à défaut, d\'un sidecar. Une case est désignée par son coin sud-ouest.</p>';
+}
+function drawMap(){
+  const cv=document.getElementById("map"); if(!cv||!D.placeKeys)return;
+  const cells=mapCells(mapIdx()); if(!cells.size)return;
+  const cs=getComputedStyle(document.body), col=(n,f)=>(cs.getPropertyValue(n).trim()||f);
+  const ctx=cv.getContext("2d"), W=cv.width, H=cv.height; ctx.clearRect(0,0,W,H);
+  let a0=1e9,a1=-1e9,b0=1e9,b1=-1e9,max=0;
+  for(const [k,n] of cells){const p=k.split(",").map(Number);a0=Math.min(a0,p[0]);a1=Math.max(a1,p[0]);b0=Math.min(b0,p[1]);b1=Math.max(b1,p[1]);max=Math.max(max,n);}
+  const lat0=(a0-1)*PLACE_STEP, lat1=(a1+2)*PLACE_STEP, lon0=(b0-1)*PLACE_STEP, lon1=(b1+2)*PLACE_STEP;
+  const kx=Math.max(0.2,Math.cos(((lat0+lat1)/2)*Math.PI/180));
+  const wDeg=(lon1-lon0)*kx, hDeg=lat1-lat0, pad=34;
+  const sc=Math.min((W-2*pad)/wDeg,(H-2*pad)/hDeg), ox=(W-wDeg*sc)/2, oy=(H-hDeg*sc)/2;
+  const X=lon=>ox+(lon-lon0)*kx*sc, Y=lat=>oy+(lat1-lat)*sc;
+  MAPST={cells,lat1,lon0,kx,sc,ox,oy};
+  // graduations : le pas le plus fin qui laisse au moins 70 px entre deux traits
+  const nice=[0.01,0.02,0.05,0.1,0.2,0.5,1,2,5,10,20,30]; let gs=nice[nice.length-1];
+  for(const g of nice)if(g*sc>=70&&g*sc*kx>=70){gs=g;break;}
+  ctx.font="11px sans-serif"; ctx.fillStyle=col("--muted","#888"); ctx.strokeStyle=col("--line","#444"); ctx.lineWidth=1;
+  for(let la=Math.ceil(lat0/gs)*gs;la<=lat1;la+=gs){ctx.beginPath();ctx.moveTo(pad,Y(la));ctx.lineTo(W-pad,Y(la));ctx.stroke();ctx.fillText(la.toFixed(gs<0.1?2:(gs<1?1:0))+"°",2,Y(la)+4);}
+  for(let lo=Math.ceil(lon0/gs)*gs;lo<=lon1;lo+=gs){ctx.beginPath();ctx.moveTo(X(lo),pad);ctx.lineTo(X(lo),H-pad);ctx.stroke();ctx.fillText(lo.toFixed(gs<0.1?2:(gs<1?1:0))+"°",X(lo)-10,H-10);}
+  for(const [k,n] of cells){
+    const p=k.split(",").map(Number), x=X(p[1]*PLACE_STEP), y=Y((p[0]+1)*PLACE_STEP);
+    const w=Math.max(3,PLACE_STEP*kx*sc), h=Math.max(3,PLACE_STEP*sc), t=Math.log(1+n)/Math.log(1+max);
+    ctx.fillStyle="rgba(90,155,255,"+(0.25+0.75*t).toFixed(2)+")"; ctx.fillRect(x,y,w,h);
+    if(S.place.has(k)){ctx.strokeStyle="#e0a030";ctx.lineWidth=2;ctx.strokeRect(x,y,w,h);ctx.lineWidth=1;}
+  }
+}
+function mapCellAt(ev){
+  const cv=document.getElementById("map"); if(!cv||!MAPST)return null;
+  const r=cv.getBoundingClientRect(), px=(ev.clientX-r.left)*cv.width/r.width, py=(ev.clientY-r.top)*cv.height/r.height;
+  const lon=MAPST.lon0+((px-MAPST.ox)/MAPST.sc)/MAPST.kx, lat=MAPST.lat1-(py-MAPST.oy)/MAPST.sc;
+  const k=Math.floor(lat/PLACE_STEP)+","+Math.floor(lon/PLACE_STEP);
+  return MAPST.cells.has(k)?k:null;
+}
+function wireMap(){
+  const cv=document.getElementById("map");
+  if(cv){
+    drawMap();
+    cv.addEventListener("mousemove",ev=>{const k=mapCellAt(ev),i=document.getElementById("mapinfo");
+      if(i)i.textContent=k?(placeLab(k)+" : "+fr(MAPST.cells.get(k))+" photo(s)"):"Un clic sur une case filtre toute la page sur ce lieu ; plusieurs cases se cumulent.";});
+    cv.addEventListener("click",ev=>{const k=mapCellAt(ev); if(k===null)return; if(S.place.has(k))S.place.delete(k);else S.place.add(k); render();});
+  }
+  on("mapstep","change",e=>{PLACE_STEP=+e.target.value;S.place.clear();computePlaces();render();});
+  on("mapclr","click",()=>{S.place.clear();render();});
+}
+
+// ---- Dérive sur le temps long (par année) -------------------------------------
+function yearStats(idx){
+  const c=D.cols, ra=c.rating||[], ea=c.edited_any||[], rj=c.rejected||[], m=new Map();
+  for(const i of idx){const y=D.years[i]; if(y===null||y===undefined)continue;
+    let e=m.get(y); if(!e){e={y,n:0,rt:0,rs:0,edK:0,ed:0,rjK:0,rj:0};m.set(y,e);}
+    e.n++;
+    const r=ra[i]; if(r!==null&&r!==undefined){e.rt++;e.rs+=r;}
+    const x=ea[i]; if(x!==null&&x!==undefined){e.edK++;if(x)e.ed++;}
+    const j=rj[i]; if(j!==null&&j!==undefined){e.rjK++;if(j)e.rj++;}}
+  return [...m.values()].sort((a,b)=>a.y-b.y);
+}
+// Courbe par année. Un point creux = moins de 5 photos connues cette année-là : la valeur est fragile.
+function lineChart(title,rows,series,opts){
+  const W=640,H=210,L=44,R=14,T=14,B=30, ys=rows.map(r=>r.y), x0=Math.min(...ys), x1=Math.max(...ys);
+  const X=y=>L+(x1===x0?(W-L-R)/2:(y-x0)*(W-L-R)/(x1-x0)), Y=v=>T+(1-v/opts.max)*(H-T-B);
+  let s='<svg viewBox="0 0 '+W+' '+H+'" class="lc" role="img" aria-label="'+esc(title)+'">';
+  for(let k=0;k<=4;k++){const v=opts.max*k/4;
+    s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(v)+'" y2="'+Y(v)+'" stroke="var(--line)"/><text x="'+(L-6)+'" y="'+(Y(v)+4)+'" text-anchor="end" font-size="10" fill="var(--muted)">'+opts.fmt(v)+'</text>';}
+  ys.forEach(y=>{s+='<text x="'+X(y)+'" y="'+(H-10)+'" text-anchor="middle" font-size="10" fill="var(--muted)">'+y+'</text>';});
+  for(const se of series){
+    const pts=rows.filter(r=>se.val(r)!==null);
+    if(pts.length>1)s+='<polyline fill="none" stroke="'+se.color+'" stroke-width="2" points="'+pts.map(r=>X(r.y)+','+Y(se.val(r))).join(" ")+'"/>';
+    for(const r of pts){const k=se.known(r), weak=k<5;
+      s+='<circle cx="'+X(r.y)+'" cy="'+Y(se.val(r))+'" r="4" fill="'+(weak?"var(--card)":se.color)+'" stroke="'+se.color+'" stroke-width="2"><title>'+
+        esc(se.name+" "+r.y+" : "+opts.fmt(se.val(r))+" ("+fr(k)+" photos connues)")+'</title></circle>';}
+  }
+  const legend=series.map(se=>'<span style="color:'+se.color+'">&#9632;</span> '+esc(se.name)).join(" &nbsp; ");
+  return s+'</svg><div class="note">'+legend+' &middot; point creux&nbsp;: moins de 5 photos connues cette année-là (valeur fragile)</div>';
+}
+// Mots-clés par année : part des photos DE CETTE ANNÉE (qui ont une liste de mots-clés connue) portant le mot-clé.
+function keywordDrift(idx,years){
+  const kw=D.cols.keywords||[], tot=new Map(), per=new Map(), known=new Map();
+  for(const i of idx){const y=D.years[i], a=kw[i]; if(y===null||y===undefined||a===null||a===undefined)continue;
+    known.set(y,(known.get(y)||0)+1);
+    for(const k of a){tot.set(k,(tot.get(k)||0)+1); const key=k+"|"+y; per.set(key,(per.get(key)||0)+1);}}
+  const top=[...tot.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10).map(e=>e[0]);
+  if(!top.length)return '<p class="muted">aucun mot-clé connu dans ce périmètre</p>';
+  let h='<table class="heat"><tr><th>Mot-clé</th>'+years.map(y=>'<th class="n">'+y+'</th>').join("")+'</tr>';
+  for(const k of top){
+    h+='<tr><td class="h">'+esc(DIMS.kw.lab(k))+'</td>';
+    for(const y of years){const kn=known.get(y)||0, n=per.get(k+"|"+y)||0, p=kn?n/kn:null;
+      h+='<td class="c" style="'+(p===null?"":"background:rgba(90,155,255,"+(0.08+0.8*p).toFixed(2)+")")+'" title="'+esc(DIMS.kw.lab(k)+" "+y+" : "+n+" / "+kn+" photos avec une liste connue")+'">'+(p===null?"·":Math.round(p*100)+"%")+'</td>';}
+    h+='</tr>';}
+  return h+'</table><p class="note">Part des photos de l\'année portant le mot-clé, parmi celles dont les mots-clés sont connus.</p>';
+}
+function driftPanel(idx){
+  const rows=yearStats(idx);
+  if(rows.length<2)return '<p class="muted">Au moins deux années datées sont nécessaires pour une dérive.</p>';
+  const avg=r=>r.rt?r.rs/r.rt:null, pc=(a,b)=>b?a*100/b:null, B="#5a9bff", O="#e0a030", G="#4cc38a";
+  const fmtStar=v=>v.toFixed(1).replace(".",",")+" ★", fmtPct=v=>Math.round(v)+" %";
+  return '<p class="note">Ce que les sidecars disent, année après année. Chaque point est calculé sur les photos de l\'année dont la valeur est connue.</p>'+
+    '<div class="cols"><div><h3>Note moyenne</h3><div class="card">'+
+      lineChart("Note moyenne par année",rows,[{name:"note moyenne",color:B,val:avg,known:r=>r.rt}],{max:5,fmt:fmtStar})+'</div></div>'+
+    '<div><h3>Part retouchée et part rejetée</h3><div class="card">'+
+      lineChart("Retouche et rejet par année",rows,[
+        {name:"retouchées",color:O,val:r=>pc(r.ed,r.edK),known:r=>r.edK},
+        {name:"rejetées",color:G,val:r=>pc(r.rj,r.rjK),known:r=>r.rjK}],{max:100,fmt:fmtPct})+'</div></div></div>'+
+    '<h3>Mots-clés par année</h3><div class="card" style="overflow-x:auto">'+keywordDrift(idx,rows.map(r=>r.y))+'</div>';
+}
+
+// ---- Onglet « Tri et retouche » (bibliothèque photo) -------------------------
+// Même moteur, mêmes filtres : un clic sur une note, un logiciel ou un mot-clé filtre TOUTE
+// la page, y compris l'onglet Exploration. Aucune interprétation n'est codée ici : on
+// compte ce que les sidecars disent, avec le dénominateur de ce qui est connu.
+function pctOf(a,b){return b?(Math.round(a*1000/b)/10).toString().replace(".",",")+" %":"-";}
+function libStats(idx){
+  const c=D.cols, ra=c.rating||[], rj=c.rejected||[], ea=c.edited_any||[], ve=c.versions||[], kw=c.keywords||[], pk=c.picked||[];
+  let rated=0,sum=0,rej=0,rejK=0,ed=0,edK=0,lib=0,kwN=0,kwK=0,pick=0,pickK=0;
+  for(const i of idx){
+    const r=ra[i]; if(r!==null&&r!==undefined){rated++;sum+=r;}
+    const j=rj[i]; if(j!==null&&j!==undefined){rejK++; if(j)rej++;}
+    const e=ea[i]; if(e!==null&&e!==undefined){edK++; if(e)ed++;}
+    const q=pk[i]; if(q!==null&&q!==undefined){pickK++; if(q)pick++;}
+    const v=ve[i]; if(v!==null&&v!==undefined&&v>0)lib++;   // 0 version = lue, sans sidecar ni XMP
+    const k=kw[i]; if(k!==null&&k!==undefined){kwK++; if(k.length)kwN++;}
+  }
+  return {n:idx.length,rated,avg:rated?sum/rated:null,rej,rejK,ed,edK,lib,kwN,kwK,pick,pickK};
+}
+function libTiles(idx){
+  const s=libStats(idx);
+  const t=(num,lab,sub)=>'<div class="tile"><div class="number mono">'+num+'</div><div class="sub">'+lab+(sub?' &middot; '+sub:'')+'</div></div>';
+  return '<div class="grid">'+
+    t(fr(s.n),"Photos (périmètre courant)")+
+    t(pctOf(s.lib,s.n),"Avec sidecar ou XMP",fr(s.lib)+" / "+fr(s.n))+
+    t(s.avg===null?"-":s.avg.toFixed(1).replace(".",",")+" ★","Note moyenne",fr(s.rated)+" notées")+
+    t(pctOf(s.rej,s.rejK),"Rejetées",fr(s.rejK)+" conn.")+
+    t(pctOf(s.pick,s.pickK),"Retenues",fr(s.pickK)+" conn.")+
+    t(pctOf(s.ed,s.edK),"Retouchées",fr(s.edK)+" conn.")+
+    t(pctOf(s.kwN,s.kwK),"Avec mot-clé",fr(s.kwK)+" conn.")+'</div>'+
+    '<p class="note">Une valeur absente d\'un sidecar reste inconnue : elle n\'entre ni dans le taux ni dans la moyenne '+
+    '(une photo sans note n\'est pas « 0 étoile »). Les copies d\'une même photo ne sont pas comptées à part.</p>';
+}
+// Une ligne par valeur d'une dimension : photos, part retouchée, note moyenne. Les lignes
+// sont cliquables : elles posent le même filtre que les barres de l'onglet Exploration.
+function libTable(idx,dim,title,opts){
+  opts=opts||{};
+  const D_=DIMS[dim], c=D.cols, ea=c.edited_any||[], ra=c.rating||[], m=new Map();
+  for(const i of idx){
+    let keys;
+    if(D_.multi){keys=D_.keys(i); if(!keys||!keys.length)continue;}
+    else{const k=D_.key(i); if(k===null||k===undefined)continue; keys=[k];}
+    for(const k of keys){
+      let e=m.get(k); if(!e){e={n:0,ed:0,edK:0,rt:0,rs:0,rj:0,rjK:0};m.set(k,e);}
+      e.n++;
+      const x=ea[i]; if(x!==null&&x!==undefined){e.edK++; if(x)e.ed++;}
+      const j=(c.rejected||[])[i]; if(j!==null&&j!==undefined){e.rjK++; if(j)e.rj++;}
+      const r=ra[i]; if(r!==null&&r!==undefined){e.rt++; e.rs+=r;}
+    }
+  }
+  let rows=[...m.entries()];
+  if(opts.byKey)rows.sort((a,b)=>(+a[0])-(+b[0]));
+  else rows.sort((a,b)=>b[1].n-a[1].n||String(D_.lab(a[0])).localeCompare(String(D_.lab(b[0]))));
+  const more=rows.length>(opts.limit||15); rows=rows.slice(0,opts.limit||15);
+  if(!rows.length)return '<p class="muted">aucune donn&eacute;e</p>';
+  const body=rows.map(([k,e])=>'<tr class="click'+(S[dim].has(k)?" on":"")+'" data-f="'+dim+'" data-k="'+esc(JSON.stringify(k))+'">'+
+    '<td>'+esc(D_.lab(k))+'</td><td class="n mono">'+fr(e.n)+'</td><td class="n mono">'+pctOf(e.ed,e.edK)+
+    '</td><td class="n mono">'+pctOf(e.rj,e.rjK)+'</td><td class="n mono">'+(e.rt?(e.rs/e.rt).toFixed(1).replace(".",",")+" ★":"-")+'</td></tr>').join("");
+  return '<table><tr><th>'+esc(title)+'</th><th class="n">Photos</th><th class="n">Retouchées</th><th class="n">Rejetées</th><th class="n">Note moy.</th></tr>'+body+'</table>'+
+    (more?'<p class="note">Les '+(opts.limit||15)+' plus fréquents ; affinez les filtres pour en voir d\'autres.</p>':'');
+}
+function libraryPanel(){
+  document.querySelectorAll("#app details.sec").forEach(d=>{SEC_OPEN[d.getAttribute("data-sec")]=d.open;});
+  const idx=filtered();
+  let h=filtersPanel();
+  h+=sec("Vue d'ensemble",libTiles(idx),true);
+  h+=sec("Notes, rejets, étiquettes",
+    '<div class="cols"><div><h3>Notes</h3>'+catCard("rate")+'</div><div><h3>Rejet</h3>'+catCard("rej")+'</div></div>'+
+    '<div class="cols"><div><h3>Sélection (drapeau « retenue »)</h3>'+catCard("pick")+'</div><div></div></div>'+
+    '<div class="cols"><div><h3>Étiquettes de couleur</h3>'+catCard("lbl")+'</div><div><h3>Logiciel</h3>'+catCard("src")+'</div></div>',true);
+  h+=sec("Retouche et notes, par année et par matériel",
+    '<div class="cols"><div><h3>Par année</h3><div class="card">'+libTable(idx,"year","Année",{byKey:true,limit:40})+'</div></div>'+
+    '<div><h3>Par boîtier</h3><div class="card">'+libTable(idx,"cam","Boîtier")+'</div></div></div>'+
+    '<div class="cols"><div><h3>Par objectif</h3><div class="card">'+libTable(idx,"lens","Objectif")+'</div></div>'+
+    '<div><h3>Par contexte</h3><div class="card">'+libTable(idx,"ctx","Contexte")+'</div></div></div>',true);
+  h+=sec("Contexte et sujet photographiques",
+    '<p class="note">Ce que l\'on fait des photos selon la séance (contexte) et ce que l\'on photographie (sujet) : '+
+    'part retouchée, rejetée et note moyenne. Les photos d\'un dossier non qualifié n\'y figurent pas '+
+    '(les qualifier se fait dans PhotoHub).</p>'+
+    '<div class="cols"><div><h3>Par contexte</h3><div class="card">'+libTable(idx,"ctx","Contexte",{limit:20})+'</div></div>'+
+    '<div><h3>Par sujet</h3><div class="card">'+libTable(idx,"subj","Sujet",{limit:20})+'</div></div></div>',true);
+  h+=sec("Comparer deux ensembles",
+    '<p class="note">Deux années, deux logiciels, deux niveaux de note, deux contextes : mêmes mesures de part et d\'autre, '+
+    'avec le nombre de photos connues. Pour comparer deux périodes de notation, filtrer sur des années '+
+    '(clic dans « Par année » ou champ « Période » de l\'onglet Exploration), capturer le groupe A, puis le groupe B.</p>'+
+    '<h3>Comparaison rapide (une dimension)</h3><div class="card cmp">'+quickCompare(idx)+'</div>'+
+    '<h3>Comparaison de groupes de filtres</h3><div class="card cmp">'+groupsBlock()+'</div>',false);
+  h+=sec("Dérive sur le temps long",driftPanel(idx),true);
+  h+=sec("Mots-clés",'<div class="card">'+libTable(idx,"kw","Mot-clé",{limit:30})+
+    '<p class="note">Les mots-clés hiérarchiques sont comptés avec leur chemin complet (« Lieux | France »). '+
+    'Un clic filtre sur ce mot-clé.</p></div>',false);
+  h+=sec("Croiser avec le matériel et les réglages",
+    '<p class="note">La matrice de l\'onglet Exploration accepte la note, la retouche, le rejet et le logiciel comme lignes ou colonnes, '+
+    'et « note moyenne » ou « taux de retouche » comme mesure.</p>',false);
+  h+='<div class="card"><button class="btn" id="reload">recharger les données</button>'+
+     '<div class="denom">'+(D.fetched?('actualisé '+esc(D.fetched)):'')+'<br>source&nbsp;: '+esc(D.source||"")+'</div></div>';
+  return h;
 }
 
 // ---- Interactions ------------------------------------------------------------
@@ -941,6 +1254,7 @@ function wire(){
   on("capA","click",()=>{GRP.a=snapFilters();render();});
   on("capB","click",()=>{GRP.b=snapFilters();render();});
   on("capClr","click",()=>{GRP.a=GRP.b=null;render();});
+  wireMap();
 }
 
 // Badge de version : lit /status (comme la page MeteoHub) pour afficher la version

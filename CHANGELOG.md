@@ -3,6 +3,47 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.84.0] - 2026-11-27
+
+### Added
+
+- "Sélection" dimension (the "picked" flag set in Lightcraft, morfPhoto 0.23.0): a filter like the others (picked / not picked, unknown when no sidecar says), a card in the "Tri et retouche" tab, a "Retenues" tile, a "Retenues" row in both comparisons, the matrix rows and columns, and saved views. The multi-source merge carries the `picked` column. "Lightcraft" is named in the program card and the filters.
+
+## [0.83.1] - 2026-11-27
+
+### Changed
+
+- The `dxo` program of morfPhoto 0.22.0 is shown as "DxO PhotoLab" in the program card, the filters, the matrix and the comparisons.
+
+## [0.83.0] - 2026-11-27
+
+### Added
+
+- "Où - lieux" section on `/photo` (Exploration tab): a heat map of the geolocated photos drawn on a canvas, with no map background, so the page contacts no outside server and the positions stay on the fleet. The grid cell (1, 0.1 or 0.01 degree, chosen in the section) is a filter dimension like the others: a click on the map or on a row of "Lieux les plus photographiés" filters the whole page, several cells add up, and the chips and the comparison of groups describe the place. The map is computed without the place filter itself so the other cells stay visible. The cell is named by its south-west corner; changing the cell size clears the place filter. A place is not kept in a saved view (its label depends on the cell size).
+- "Dérive sur le temps long" section in the "Tri et retouche" tab: mean rating per year, share edited and share rejected per year (line charts; a hollow point means fewer than 5 known photos that year), and a table of the share of each year's photos carrying each of the ten most used keywords. Each value is computed on the photos of the year whose value is known.
+- The dataset is requested with `?with=library,gps` and the multi-source merge carries `latitude`, `longitude` and `gps_source` (re-indexed dictionary), with nulls for a morfPhoto that does not provide them. The section does not exist without positions.
+
+## [0.82.0] - 2026-11-27
+
+### Added
+
+- Comparisons extended to the photo library. The quick comparison (one dimension, A against B) now takes the photographic context and subject, and with the library the program, the edit state and the rating; the comparison of groups of filters is unchanged in use. Both tables add the same rows on each side: mean rating (and how many photos are rated), share edited, share rejected, share with a keyword, most frequent labels, keywords and programs, each with its count of known photos. A value that no sidecar gives stays out of every rate and shows "-" when nothing is known.
+- In the "Tri et retouche" tab: a "Contexte et sujet photographiques" section crossing the context and the subject with edit rate, reject rate and mean rating, and a "Comparer deux ensembles" section holding both comparisons (two years, two programs, two rating levels, two contexts, two rating periods through two groups of years). The per-value tables gain a "Rejetées" column.
+
+## [0.81.0] - 2026-11-27
+
+### Added
+
+- "Tri et retouche" tab on `/photo`, fed by the photo library of morfPhoto 0.19.0 (`morfphoto-library/1`). It shows the rating distribution, the reject rate, the colour labels, the program behind each sidecar, the share of edited photos and the mean rating by year, camera body, lens and photographic context, and the most used keywords, with the denominator of known values on every card. It exists only when at least one selected morfPhoto provides the library.
+- One filter system: rating, reject state, edit state, program, colour label and keyword are filter dimensions like the others, so a click anywhere filters the whole page, saved views keep them, and the comparison of groups describes them. Colour labels and keywords are multi-valued (a photo counts once per value, a known empty list stays distinct from unknown). The matrix gains rating, edit, reject and program as rows or columns and "mean rating" and "edit rate" as measures.
+- The dataset is now requested with `?with=library` (single source, handoff and multi-source). The merge re-indexes the keyword, program and label dictionaries of each morfPhoto into global ones and writes nulls for the rows of a morfPhoto without the library; a morfPhoto without the option is unchanged.
+
+## [0.80.0] - 2026-11-27
+
+### Added
+
+- API key for a morfPhoto that requires one (morfPhoto 0.18.0, `api_key`). The `photo` module takes `api_key` (every station) and `api_keys` (one per station, by host or `host:port`, the most precise wins) and sends `Authorization: Bearer` on every request: the periodic pull, the dataset of a station chosen with `?source=` and the consistency checks. A `401` is now reported as "morfPhoto requires / refuses the API key" instead of a bare network error. The keys are read from the configuration only and never appear in `/status` or `/modules`. With no key set nothing changes.
+
 ## [0.79.1] - 2026-11-26
 
 ### Fixed

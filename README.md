@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.79.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.84.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -111,7 +111,32 @@ be recalled and edited later. Each analysed station is listed once, by hostname
 when known (IP only as a fallback). Configure the source through
 the `photo` module of the configuration (`source_url`, e.g.
 `http://127.0.0.1:8793`); if morfPhoto is unreachable or the module is missing,
-the page says so explicitly.
+the page says so explicitly. A morfPhoto protected by an API key (0.18.0, `api_key`)
+needs the same key here: `api_key` in the `photo` module for every station, or
+`api_keys` to give one per station (`{"pi4fred": "..."}`, host or `host:port`). A
+missing or refused key is reported as such, not as a network failure.
+
+When morfPhoto reads the photo library (0.19.0 and later, `sidecars.providers`), a
+**Tri et retouche** tab appears on `/photo`: rating distribution, reject rate, colour labels,
+the program that wrote each sidecar, the share of edited photos and the mean rating by year,
+camera body, lens and photographic context, and the most used keywords. It uses the same single
+filter system as the Exploration tab: a click on a rating, a label or a keyword filters the
+whole page, and a saved view keeps these filters. The matrix also takes rating, edit state,
+reject state and program as rows or columns, with mean rating and edit rate as measures. A value
+missing from a sidecar stays unknown and out of every rate and mean (a photo without a rating is
+not "0 star"), and each card shows how many photos it is computed on. Without the library the
+tab does not exist.
+
+The comparisons (quick one-dimension and groups of filters) take year, camera body, lens, photographic
+context and subject, and with the library the program, the edit state and the rating. Every table adds
+the same library rows on both sides (mean rating, share edited, share rejected, share with a keyword, most
+frequent labels, keywords and programs), each with the number of photos it is computed on. The tab also
+crosses context and subject with edit rate, reject rate and mean rating, and draws the drift over the years:
+mean rating, share edited and rejected, and the share of photos carrying each of the ten most used keywords.
+
+When morfPhoto provides positions (0.21.0 and later), an "Où - lieux" section draws a heat map of the photos
+(no map background: nothing is loaded from outside, the positions stay on the fleet). A cell of the grid
+(1, 0.1 or 0.01 degree) is a filter like the others, so a click filters the whole page and several cells add up.
 
 ## Machine history (morfMonitor)
 

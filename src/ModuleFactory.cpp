@@ -77,8 +77,16 @@ IModule* create(const ModuleDef& def, QString* error, QObject* parent) {
         const bool discoveryEnabled = discovery.value("enabled").toBool(true);
         const quint16 discoveryPort =
             static_cast<quint16>(discovery.value("udp_port").toInt(45454));
-        return new PhotoAnalyticsModule(def.id, sourceUrl, refreshMs, buckets, excludeCameras,
-                                        ownedCameras, discoveryPort, discoveryEnabled, parent);
+        auto* photo = new PhotoAnalyticsModule(def.id, sourceUrl, refreshMs, buckets, excludeCameras,
+                                               ownedCameras, discoveryPort, discoveryEnabled, parent);
+        // Cles d'API des morfPhoto proteges : une par defaut, et/ou une par poste.
+        QHash<QString, QString> keysByHost;
+        const QJsonObject apiKeys = def.params.value("api_keys").toObject();
+        for (auto it = apiKeys.constBegin(); it != apiKeys.constEnd(); ++it)
+            if (it.value().isString())
+                keysByHost.insert(it.key(), it.value().toString());
+        photo->setApiKeys(def.params.value("api_key").toString(), keysByHost);
+        return photo;
     }
 
     // Domaine Monitor : historise les métriques d'un ou plusieurs morfMonitor.

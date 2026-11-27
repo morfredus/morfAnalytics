@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.79.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.84.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -135,7 +135,32 @@ source de vérité reste MeteoHub.
   La source se règle
   via le module `photo` de la configuration (`source_url`, p. ex.
   `http://127.0.0.1:8793`) ; si morfPhoto est injoignable ou le module absent, la
-  page l'indique explicitement.
+  page l'indique explicitement. Un morfPhoto protégé par une clé d'API (0.18.0,
+  `api_key`) demande la même clé ici : `api_key` dans le module `photo` pour tous les
+  postes, ou `api_keys` pour en donner une par poste (`{"pi4fred": "..."}`, hôte ou
+  `hôte:port`). Une clé absente ou refusée est signalée comme telle, pas comme une
+  panne réseau.
+  Quand morfPhoto lit la bibliothèque photo (0.19.0 et suivantes, `sidecars.providers`), un onglet
+  **Tri et retouche** apparaît sur `/photo` : répartition des notes, taux de rejet, étiquettes de
+  couleur, logiciel qui a écrit chaque sidecar, part de photos retouchées et note moyenne par année,
+  boîtier, objectif et contexte photographique, mots-clés les plus utilisés. Il partage le système
+  de filtres unique de l'onglet Exploration : un clic sur une note, une étiquette ou un mot-clé
+  filtre toute la page, et une vue enregistrée garde ces filtres. La matrice accepte aussi la note,
+  la retouche, le rejet et le logiciel en lignes ou colonnes, avec la note moyenne et le taux de
+  retouche comme mesures. Une valeur absente d'un sidecar reste inconnue et hors de tout taux et
+  de toute moyenne (une photo sans note n'est pas « 0 étoile »), et chaque carte indique sur
+  combien de photos elle est calculée. Sans la bibliothèque, l'onglet n'existe pas.
+  Les comparaisons (rapide sur une dimension, et par groupes de filtres) acceptent l'année, le boîtier,
+  l'objectif, le contexte et le sujet photographiques, et avec la bibliothèque le logiciel, l'état de
+  retouche et la note. Chaque tableau ajoute des deux côtés les mêmes lignes de bibliothèque (note moyenne,
+  part retouchée, part rejetée, part avec mot-clé, étiquettes, mots-clés et logiciels les plus fréquents),
+  chacune avec le nombre de photos sur lequel elle est calculée. L'onglet croise aussi contexte et sujet
+  avec le taux de retouche, le taux de rejet et la note moyenne, et dessine la dérive année après année :
+note moyenne, part retouchée et part rejetée, part des photos portant chacun des dix mots-clés les plus utilisés.
+  Quand morfPhoto fournit les positions (0.21.0 et suivantes), une section « Où - lieux » dessine une carte de
+chaleur des photos (sans fond de carte : rien n'est chargé depuis l'extérieur, les positions restent dans le
+parc). Une case de la grille (1, 0,1 ou 0,01 degré) est un filtre comme les autres : un clic filtre toute la page
+et plusieurs cases se cumulent.
 - `/monitor` historise les métriques des machines du parc remontées par
   **morfMonitor** (CPU, mémoire, température, charge, services actifs) et les
   représente **dans le temps** : vue d'ensemble, séries CPU / RAM / température /

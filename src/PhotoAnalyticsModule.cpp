@@ -44,11 +44,49 @@ const Endpoint kEndpoints[] = {
     {"/api/v1/photos/focals",  "focals"},
     // Export compact (colonnaire + dictionnaires) de toutes les photos presentes :
     // c'est LUI qui alimente l'interface d'exploration cote page (agregation en JS).
-    {"/api/v1/photos/dataset", "dataset"},
+    {"/api/v1/photos/dataset?with=library,gps", "dataset"},
 };
 
 QString nowIso() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODate); }
+
+// Un 401 est une configuration a corriger, pas une panne : le dire en clair evite de
+// chercher un probleme reseau (« Host requires authentication » ne dit pas quoi faire).
+bool isAuthFailure(const QNetworkReply* reply) {
+    return reply->error() == QNetworkReply::AuthenticationRequiredError
+        || reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401;
+}
+QString authFailureText(bool hadKey) {
+    return hadKey
+        ? QStringLiteral("morfPhoto refuse la cle d'API (photo.api_key ou photo.api_keys dans la configuration)")
+        : QStringLiteral("morfPhoto exige une cle d'API : renseigner photo.api_key ou photo.api_keys dans la configuration");
+}
 } // namespace
+
+void PhotoAnalyticsModule::setApiKeys(QString defaultKey, QHash<QString, QString> byHost) {
+    m_apiKey = defaultKey.trimmed();
+    m_apiKeys.clear();
+    for (auto it = byHost.cbegin(); it != byHost.cend(); ++it)
+        m_apiKeys.insert(it.key().trimmed().toLower(), it.value().trimmed());
+}
+
+QString PhotoAnalyticsModule::apiKeyFor(const QString& url) const {
+    const QUrl u(url);
+    const QString host = u.host().toLower();
+    // Le plus precis d'abord : hote:port, puis hote seul, puis la cle par defaut.
+    if (u.port() > 0) {
+        const QString k = m_apiKeys.value(QStringLiteral("%1:%2").arg(host).arg(u.port()));
+        if (!k.isEmpty())
+            return k;
+    }
+    const QString k = m_apiKeys.value(host);
+    return k.isEmpty() ? m_apiKey : k;
+}
+
+void PhotoAnalyticsModule::applyAuth(QNetworkRequest& req, const QString& url) const {
+    const QString key = apiKeyFor(url);
+    if (!key.isEmpty())
+        req.setRawHeader("Authorization", "Bearer " + key.toUtf8());
+}
 
 PhotoAnalyticsModule::PhotoAnalyticsModule(const QString& id, QString sourceUrl,
                                            int refreshMs, QVector<FocalBucket> buckets,
@@ -289,6 +327,7 @@ void PhotoAnalyticsModule::refresh() {
 void PhotoAnalyticsModule::fetch(const QString& path, const QString& key) {
     QNetworkRequest req{QUrl(m_sourceUrl + path)};
     req.setTransferTimeout(key == QLatin1String("dataset") ? 60000 : 8000);
+    applyAuth(req, m_sourceUrl);
     QNetworkReply* reply = m_net->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, key, reply]() {
         onReply(key, reply);
@@ -299,7 +338,8 @@ void PhotoAnalyticsModule::onReply(const QString& key, QNetworkReply* reply) {
     reply->deleteLater();
     if (reply->error() != QNetworkReply::NoError) {
         if (m_cycleError.isEmpty())
-            m_cycleError = reply->errorString();
+            m_cycleError = isAuthFailure(reply) ? authFailureText(!apiKeyFor(m_sourceUrl).isEmpty())
+                                                : reply->errorString();
     } else {
         const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
         if (doc.isObject())
@@ -423,6 +463,7 @@ QJsonObject PhotoAnalyticsModule::fetchJsonSync(const QString& sourceUrl, const 
     QNetworkRequest req{QUrl(base + path)};
     const int ms = timeoutMs > 0 ? timeoutMs : 8000;
     req.setTransferTimeout(ms);
+    applyAuth(req, base);
     QEventLoop loop;
     QNetworkReply* reply = nam.get(req);
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
@@ -435,7 +476,8 @@ QJsonObject PhotoAnalyticsModule::fetchJsonSync(const QString& sourceUrl, const 
     if (reply->isRunning())
         reply->abort();
     if (reply->error() != QNetworkReply::NoError) {
-        if (error) *error = reply->errorString();
+        if (error) *error = isAuthFailure(reply) ? authFailureText(!apiKeyFor(base).isEmpty())
+                                                 : reply->errorString();
         reply->deleteLater();
         return {};
     }
@@ -449,7 +491,9 @@ QJsonObject PhotoAnalyticsModule::fetchDatasetSync(const QString& sourceUrl, boo
                                                    QString* error) const {
     // Le dataset d'une vraie photothèque dépasse largement 8 s : un timeout trop
     // court tronquait l'export et l'analyse comptait moins de photos que PhotoHub.
-    return fetchJsonSync(sourceUrl, QStringLiteral("/api/v1/photos/dataset"), 60000, ok, error);
+    // `with=library` : colonnes note, rejet, retouche, etiquettes, mots-cles (morfPhoto 0.19.0+
+    // avec la bibliotheque activee). Ignore par un morfPhoto plus ancien.
+    return fetchJsonSync(sourceUrl, QStringLiteral("/api/v1/photos/dataset?with=library,gps"), 60000, ok, error);
 }
 
 QString PhotoAnalyticsModule::stateDir() {
@@ -583,6 +627,15 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
     // a ses propres index, on ré-interne pour un espace d'index commun.
     QJsonArray gCam, gLens, gType, gCtx, gSubj;
     QHash<QString, int> ciCam, ciLens, ciType, ciCtx, ciSubj;
+    // Bibliotheque (morfphoto-library/1) : dictionnaires globaux eux aussi, car chaque
+    // morfPhoto numerote ses mots-cles et ses logiciels a sa facon.
+    QJsonArray gKw, gSrc, gLbl;
+    QHash<QString, int> ciKw, ciSrc, ciLbl;
+    bool anyLibrary = false;
+    // Position (morfPhoto 0.21.0+, `with=gps`) : latitude, longitude et leur provenance.
+    QJsonArray gGps, cLat, cLon, cGps;
+    QHash<QString, int> ciGps;
+    bool anyGps = false;
     auto intern = [](QJsonArray& dict, QHash<QString, int>& idx, const QString& s) -> int {
         auto it = idx.constFind(s);
         if (it != idx.constEnd())
@@ -605,6 +658,7 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
     QJsonObject gFolders;
     QJsonArray cTaken, cCam, cLens, cType, cFocal, cFocal35, cAper, cIso, cShut, cFolder;
     QJsonArray cCtx, cSubj;   // contexte photographique (morfphoto-context/2)
+    QJsonArray cRating, cRejected, cEdited, cEditedAny, cRatingMax, cVersions, cLabels, cSource, cKeywords, cPicked;
     // Empreinte -> rang de la PREMIÈRE source où on l'a vue. Le dédoublonnage est
     // strictement INTER-POSTES : une même empreinte revue depuis un AUTRE poste est un
     // doublon (même fichier indexé sur deux machines) et on l'écarte ; revue dans le
@@ -662,6 +716,29 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
         const QJsonArray ctxCol = cols.value(QStringLiteral("context")).toArray();
         const QJsonArray subjCol = cols.value(QStringLiteral("subject")).toArray();
         const QJsonArray fp = cols.value(QStringLiteral("fingerprint")).toArray();
+        // Colonnes de la bibliotheque : presentes seulement si ce morfPhoto la lit. Sinon
+        // ses lignes recoivent des null (inconnu), jamais une valeur inventee.
+        const bool hasGps = cols.contains(QStringLiteral("latitude"));
+        anyGps = anyGps || hasGps;
+        const QJsonArray gpsLatCol = cols.value(QStringLiteral("latitude")).toArray();
+        const QJsonArray gpsLonCol = cols.value(QStringLiteral("longitude")).toArray();
+        const QJsonArray gpsSrcCol = cols.value(QStringLiteral("gps_source")).toArray();
+        const QJsonArray gpsDictSrc = dict.value(QStringLiteral("gps_source")).toArray();
+        const bool hasLib = cols.contains(QStringLiteral("rating"));
+        anyLibrary = anyLibrary || hasLib;
+        const QJsonArray lRating = cols.value(QStringLiteral("rating")).toArray();
+        const QJsonArray lRejected = cols.value(QStringLiteral("rejected")).toArray();
+        const QJsonArray lPicked = cols.value(QStringLiteral("picked")).toArray();   // drapeau « retenue » (morfPhoto 0.23.0+)
+        const QJsonArray lEdited = cols.value(QStringLiteral("edited")).toArray();
+        const QJsonArray lEditedAny = cols.value(QStringLiteral("edited_any")).toArray();
+        const QJsonArray lRatingMax = cols.value(QStringLiteral("rating_max")).toArray();
+        const QJsonArray lVersions = cols.value(QStringLiteral("versions")).toArray();
+        const QJsonArray lLabels = cols.value(QStringLiteral("color_labels")).toArray();
+        const QJsonArray lSource = cols.value(QStringLiteral("source")).toArray();
+        const QJsonArray lKeywords = cols.value(QStringLiteral("keywords")).toArray();
+        const QJsonArray dKw = dict.value(QStringLiteral("keyword")).toArray();
+        const QJsonArray dSrc = dict.value(QStringLiteral("source")).toArray();
+        const QJsonArray dLbl = dict.value(QStringLiteral("color_label")).toArray();
         const int n = taken.size();
 
         // Libellés de dossiers préfixés du poste (« host · libellé »), id namespacés.
@@ -703,6 +780,33 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
             // préservé, distinct d'INCONNU (valeur du dictionnaire).
             cCtx.append(remap(at(ctxCol, i), dCtx, gCtx, ciCtx));
             cSubj.append(remap(at(subjCol, i), dSubj, gSubj, ciSubj));
+            // Bibliotheque : une liste (etiquettes, mots-cles) est re-internee element par
+            // element ; null (inconnu) est conserve, different de la liste vide (connue, vide).
+            auto remapList = [&](const QJsonValue& v, const QJsonArray& srcDict, QJsonArray& gDict,
+                                 QHash<QString, int>& gIdx) -> QJsonValue {
+                if (!v.isArray())
+                    return QJsonValue::Null;
+                QJsonArray out;
+                for (const QJsonValue& e : v.toArray()) {
+                    const QJsonValue m = remap(e, srcDict, gDict, gIdx);
+                    if (!m.isNull())
+                        out.append(m);
+                }
+                return out;
+            };
+            cLat.append(at(gpsLatCol, i));
+            cLon.append(at(gpsLonCol, i));
+            cGps.append(remap(at(gpsSrcCol, i), gpsDictSrc, gGps, ciGps));
+            cRating.append(at(lRating, i));
+            cRejected.append(at(lRejected, i));
+            cPicked.append(at(lPicked, i));
+            cEdited.append(at(lEdited, i));
+            cEditedAny.append(at(lEditedAny, i));
+            cRatingMax.append(at(lRatingMax, i));
+            cVersions.append(at(lVersions, i));
+            cLabels.append(remapList(at(lLabels, i), dLbl, gLbl, ciLbl));
+            cSource.append(remap(at(lSource, i), dSrc, gSrc, ciSrc));
+            cKeywords.append(remapList(at(lKeywords, i), dKw, gKw, ciKw));
             ++kept;
             ++total;
         }
@@ -723,6 +827,27 @@ QJsonObject PhotoAnalyticsModule::fetchMerged(const QStringList& sources) const 
     };
     QJsonObject dictionaries{{"camera", gCam}, {"lens", gLens}, {"file_type", gType},
         {"context", gCtx}, {"subject", gSubj}};
+    if (anyGps) {
+        columns.insert(QStringLiteral("latitude"), cLat);
+        columns.insert(QStringLiteral("longitude"), cLon);
+        columns.insert(QStringLiteral("gps_source"), cGps);
+        dictionaries.insert(QStringLiteral("gps_source"), gGps);
+    }
+    if (anyLibrary) {
+        columns.insert(QStringLiteral("rating"), cRating);
+        columns.insert(QStringLiteral("rejected"), cRejected);
+        columns.insert(QStringLiteral("picked"), cPicked);
+        columns.insert(QStringLiteral("edited"), cEdited);
+        columns.insert(QStringLiteral("edited_any"), cEditedAny);
+        columns.insert(QStringLiteral("rating_max"), cRatingMax);
+        columns.insert(QStringLiteral("versions"), cVersions);
+        columns.insert(QStringLiteral("color_labels"), cLabels);
+        columns.insert(QStringLiteral("source"), cSource);
+        columns.insert(QStringLiteral("keywords"), cKeywords);
+        dictionaries.insert(QStringLiteral("keyword"), gKw);
+        dictionaries.insert(QStringLiteral("source"), gSrc);
+        dictionaries.insert(QStringLiteral("color_label"), gLbl);
+    }
     QJsonObject dataset{
         {"count", total}, {"dictionaries", dictionaries}, {"columns", columns},
         {"folders", gFolders},

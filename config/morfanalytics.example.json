@@ -35,6 +35,9 @@
         "enabled": true,
         "udp_port": 45454
       },
+      "_comment_api_key": "Cle d'API des morfPhoto qui en exigent une (morfPhoto >= 0.18.0, champ 'api_key' ou MORFPHOTO_API_KEY). 'api_key' sert a tous les postes ; 'api_keys' associe une cle a un poste, par nom d'hote ou 'hote:port' (le plus precis l'emporte). Vide = aucun en-tete envoye (morfPhoto ouvert). Ces valeurs sont des SECRETS : fichier lisible du seul compte du service, jamais recopie dans /status.",
+      "api_key": "",
+      "api_keys": {},
       "_comment_refresh": "Periode de rafraichissement de l'instantane, en ms.",
       "refresh_ms": 60000,
       "_comment_focal_buckets": "Regles de regroupement des focales BRUTES en focales usuelles : tableau de [min, max, libelle]. Configurable et documente ; si absent, un jeu par defaut est utilise. Les valeurs brutes ne sont jamais remplacees (morfPhoto reste souverain) : c'est une lecture interpretee.",

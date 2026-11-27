@@ -16,6 +16,7 @@
 class QTimer;
 class QNetworkAccessManager;
 class QNetworkReply;
+class QNetworkRequest;
 class QUdpSocket;
 
 namespace morfanalytics {
@@ -61,6 +62,12 @@ public:
 
     QJsonObject snapshot() const { return m_snapshot; }
 
+    // Cles d'API des morfPhoto qui en exigent une (morfPhoto >= 0.18.0, `api_key`).
+    // `defaultKey` sert a tout poste sans cle propre ; `byHost` associe une cle a un
+    // poste (nom d'hote, ou hote:port). Lues dans /etc : ce sont des secrets d'admin,
+    // jamais ecrits par le service ni exposes dans /status.
+    void setApiKeys(QString defaultKey, QHash<QString, QString> byHost);
+
     // Périmètre « boîtiers possédés » (liste blanche). Vit dans l'état du service
     // (/var/lib), pas dans /etc : la page Configuration doit pouvoir le modifier.
     QStringList ownedCameras() const { return m_ownedCameras; }
@@ -99,6 +106,9 @@ private slots:
 private:
     void refresh();
     void fetch(const QString& path, const QString& key);
+    // Cle a presenter a ce morfPhoto (vide = aucune), et pose de l'en-tete Bearer.
+    QString apiKeyFor(const QString& url) const;
+    void applyAuth(QNetworkRequest& req, const QString& url) const;
     void onReply(const QString& key, QNetworkReply* reply);
     void finalize();
     // Rapatrie le `dataset` d'UNE source (synchrone borné). *ok/false + *error sinon.
@@ -117,6 +127,8 @@ private:
     QString hostForUrl(const QString& url) const;
 
     QString              m_sourceUrl;
+    QString              m_apiKey;                    // cle par defaut
+    QHash<QString, QString> m_apiKeys;                // cle par poste (hote ou hote:port)
     int                  m_refreshMs;
     QVector<FocalBucket> m_buckets;
     QStringList          m_excludeCameras;   // boîtiers hors pratique (politique /etc)
